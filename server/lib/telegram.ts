@@ -299,9 +299,7 @@ export async function sendDailyChannelMessage(channelId: string, miniAppUrl?: st
     day: 'numeric' 
   });
   
-  const settings = await storage.getBotSettings();
-  
-  const defaultWisdoms = [
+  const wisdoms = [
     { uz: "Ilm izlash har bir musulmonga farzdir.", ar: "طَلَبُ العِلْمِ فَرِيضَةٌ عَلَى كُلِّ مُسْلِم" },
     { uz: "Sabr - imonning yarmi.", ar: "الصَّبْرُ نِصْفُ الإِيمَان" },
     { uz: "Kim yaxshilikka yo'l ko'rsatsa, uni qilgan kishining ajrini oladi.", ar: "مَنْ دَلَّ عَلَى خَيْرٍ فَلَهُ مِثْلُ أَجْرِ فَاعِلِه" },
@@ -314,13 +312,8 @@ export async function sendDailyChannelMessage(channelId: string, miniAppUrl?: st
     { uz: "Shukr qilsangiz, albatta ko'paytiraman.", ar: "لَئِنْ شَكَرْتُمْ لَأَزِيدَنَّكُم" },
   ];
   
-  let wisdom;
-  if (settings?.dailyWisdomUz && settings?.dailyWisdomAr) {
-    wisdom = { uz: settings.dailyWisdomUz, ar: settings.dailyWisdomAr };
-  } else {
-    const dayOfYear = Math.floor((Date.now() - new Date(new Date().getFullYear(), 0, 0).getTime()) / 86400000);
-    wisdom = defaultWisdoms[dayOfYear % defaultWisdoms.length];
-  }
+  const dayOfYear = Math.floor((Date.now() - new Date(new Date().getFullYear(), 0, 0).getTime()) / 86400000);
+  const wisdom = wisdoms[dayOfYear % wisdoms.length];
   
   const message = `☀️ <b>Ob-havo ma'lumoti | النَّشْرَة الجَوِّيَّة</b> ☀️
 ━━━━━━━━━━━━━━━━━━━━━━━━
