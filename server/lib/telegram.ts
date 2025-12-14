@@ -112,6 +112,19 @@ export async function handleTelegramUpdate(update: TelegramUpdate) {
     
     await sendTelegramMessage(chatId, message);
   }
+  else if (text?.startsWith('/admin')) {
+    const message = `⚙️ <b>Admin Panel</b>\n\nAdmin panelga kirish uchun quyidagi tugmani bosing:`;
+    
+    const appUrl = process.env.REPLIT_DEV_DOMAIN 
+      ? `https://${process.env.REPLIT_DEV_DOMAIN}/admin`
+      : 'https://ob-havo.replit.app/admin';
+    
+    await sendTelegramMessage(chatId, message, 'HTML', {
+      inline_keyboard: [[
+        { text: "🔧 Admin Panel", web_app: { url: appUrl } }
+      ]]
+    });
+  }
 }
 
 export async function setTelegramWebhook(webhookUrl: string) {
