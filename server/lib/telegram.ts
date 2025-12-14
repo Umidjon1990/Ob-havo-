@@ -21,35 +21,37 @@ interface TelegramUpdate {
 
 const BOT_TOKEN = process.env.TELEGRAM_BOT_TOKEN;
 
-export async function sendTelegramMessage(chatId: number, text: string, parseMode: string = 'HTML', replyMarkup?: any) {
+export async function sendTelegramMessage(chatId: number | string, text: string, parseMode: string = 'HTML', replyMarkup?: any) {
   if (!BOT_TOKEN) {
-    console.error("TELEGRAM_BOT_TOKEN not set");
-    return;
+    throw new Error("TELEGRAM_BOT_TOKEN not set");
   }
 
   const url = `https://api.telegram.org/bot${BOT_TOKEN}/sendMessage`;
   
-  try {
-    const body: any = {
-      chat_id: chatId,
-      text,
-      parse_mode: parseMode,
-    };
-    
-    if (replyMarkup) {
-      body.reply_markup = replyMarkup;
-    }
-    
-    const response = await fetch(url, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(body),
-    });
-    
-    return await response.json();
-  } catch (error) {
-    console.error("Error sending Telegram message:", error);
+  const body: any = {
+    chat_id: chatId,
+    text,
+    parse_mode: parseMode,
+  };
+  
+  if (replyMarkup) {
+    body.reply_markup = replyMarkup;
   }
+  
+  const response = await fetch(url, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(body),
+  });
+  
+  const result = await response.json();
+  
+  if (!result.ok) {
+    console.error("Telegram API error:", result);
+    throw new Error(result.description || "Telegram API error");
+  }
+  
+  return result;
 }
 
 export async function handleTelegramUpdate(update: TelegramUpdate) {
@@ -299,7 +301,7 @@ ${weatherLines.join('\n\n')}
 ━━━━━━━━━━━━━━━━━━━━━
 📲 لِلْمَزِيد مِنَ التَّفَاصِيل، اضْغَط عَلَى الزِّر أَدْنَاه`;
 
-  await sendTelegramMessage(Number(channelId), message, 'HTML', {
+  await sendTelegramMessage(channelId, message, 'HTML', {
     inline_keyboard: [[
       { text: "📱 بَتَفْصِيل - Batafsil", url: "https://t.me/Ztobhavobot" }
     ]]
