@@ -160,7 +160,7 @@ export async function updateWeatherCache() {
 
 export function startWeatherUpdateSchedule() {
   updateWeatherCache();
-  setInterval(updateWeatherCache, 30 * 60 * 1000);
+  setInterval(updateWeatherCache, 15 * 60 * 1000); // Every 15 minutes
 }
 
 export { cityCoordinates, getConditionFromCode };
