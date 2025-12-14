@@ -1,15 +1,42 @@
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from "@/components/ui/dialog";
-import { Cloud, Sun, Wind, Droplets, Thermometer, Calendar } from "lucide-react";
+import { Cloud, Sun, Wind, Droplets, Thermometer, Calendar, CloudRain, CloudSnow, CloudSun } from "lucide-react";
 import { motion } from "framer-motion";
 import { Region } from "@/data/regions";
 import { useState, useEffect } from "react";
 import { fetchWeatherAdvice } from "@/lib/api";
+import { useQuery } from "@tanstack/react-query";
 
 interface WeatherModalProps {
   isOpen: boolean;
   onClose: () => void;
   region: Region;
   lang: 'ar' | 'uz';
+}
+
+interface DailyForecast {
+  date: string;
+  max: number;
+  min: number;
+  code: number;
+}
+
+function getWeatherIconForCode(code: number) {
+  if (code === 0) return Sun;
+  if (code >= 1 && code <= 3) return CloudSun;
+  if (code >= 45 && code <= 48) return Cloud;
+  if (code >= 51 && code <= 67) return CloudRain;
+  if (code >= 71 && code <= 77) return CloudSnow;
+  if (code >= 80 && code <= 82) return CloudRain;
+  if (code >= 85 && code <= 86) return CloudSnow;
+  return Cloud;
+}
+
+function formatDate(dateStr: string, lang: 'ar' | 'uz'): string {
+  const date = new Date(dateStr);
+  const days = lang === 'ar' 
+    ? ['الأحد', 'الإثنين', 'الثلاثاء', 'الأربعاء', 'الخميس', 'الجمعة', 'السبت']
+    : ['Yak', 'Dush', 'Sesh', 'Chor', 'Pay', 'Jum', 'Shan'];
+  return days[date.getDay()];
 }
 
 const translations = {
@@ -20,7 +47,10 @@ const translations = {
     speed: "كم/س",
     day: "الْيَوْم",
     weekday: "الثُّلَاثَاء",
-    quote: "طَقْس رَائِع لِلْمَشْي الْيَوْم!"
+    quote: "طَقْس رَائِع لِلْمَشْي الْيَوْم!",
+    forecast: "٣ كُون",
+    max: "أعلى",
+    min: "أدنى"
   },
   uz: {
     wind: "Shamol",
@@ -29,13 +59,35 @@ const translations = {
     speed: "km/s",
     day: "Hafta kuni",
     weekday: "Seshanba",
-    quote: "Bugun sayr qilish uchun ajoyib ob-havo!"
+    quote: "Bugun sayr qilish uchun ajoyib ob-havo!",
+    forecast: "3 kunlik",
+    max: "Max",
+    min: "Min"
   }
 };
 
 export default function WeatherModal({ isOpen, onClose, region, lang }: WeatherModalProps) {
   const [aiAdvice, setAiAdvice] = useState("");
   const [loading, setLoading] = useState(false);
+
+  const { data: weatherData } = useQuery({
+    queryKey: ['weather', region?.id],
+    queryFn: async () => {
+      const res = await fetch(`/api/weather/${region?.id}`);
+      if (!res.ok) return null;
+      return res.json();
+    },
+    enabled: isOpen && !!region?.id,
+  });
+
+  const dailyForecast: DailyForecast[] = (() => {
+    try {
+      const parsed = JSON.parse(weatherData?.forecastData || '{}');
+      return (parsed.daily || []).slice(0, 3);
+    } catch {
+      return [];
+    }
+  })();
 
   useEffect(() => {
     if (isOpen && region) {
@@ -116,6 +168,33 @@ export default function WeatherModal({ isOpen, onClose, region, lang }: WeatherM
             <span className="font-bold">{t.weekday}</span>
           </motion.div>
         </div>
+
+        {dailyForecast.length > 0 && (
+          <div className="mt-4">
+            <h4 className="text-xs font-bold text-center text-muted-foreground mb-3 uppercase tracking-wider">{t.forecast}</h4>
+            <div className="grid grid-cols-3 gap-2">
+              {dailyForecast.map((day, idx) => {
+                const DayIcon = getWeatherIconForCode(day.code);
+                return (
+                  <motion.div
+                    key={day.date}
+                    initial={{ opacity: 0, y: 10 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    transition={{ delay: 0.1 * idx }}
+                    className="bg-gradient-to-b from-primary/10 to-primary/5 p-3 rounded-xl flex flex-col items-center gap-1"
+                  >
+                    <span className="text-xs font-medium text-muted-foreground">{formatDate(day.date, lang)}</span>
+                    <DayIcon className="w-5 h-5 text-primary" />
+                    <div className="flex gap-1 text-xs">
+                      <span className="font-bold text-foreground">{day.max}°</span>
+                      <span className="text-muted-foreground">{day.min}°</span>
+                    </div>
+                  </motion.div>
+                );
+              })}
+            </div>
+          </div>
+        )}
 
         <div className="mt-4 p-4 bg-muted/50 rounded-2xl text-center">
             <p className="text-sm text-muted-foreground italic" dir={isRtl ? "rtl" : "ltr"}>
