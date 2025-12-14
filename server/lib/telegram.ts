@@ -181,7 +181,7 @@ export async function sendDailyChannelMessage(channelId: string, miniAppUrl?: st
       ? `https://${process.env.REPLIT_DEV_DOMAIN}?region=${region.id}`
       : `https://ob-havo.replit.app?region=${region.id}`;
     inlineKeyboard.push([
-      { text: `📍 ${region.name_ar} - التفاصيل`, web_app: { url: appUrl } }
+      { text: `📍 ${region.name_ar} - التفاصيل`, url: appUrl }
     ]);
   }
   
