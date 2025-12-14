@@ -1,20 +1,22 @@
 import { useState, useEffect } from "react";
 import { motion, AnimatePresence } from "framer-motion";
-import { Menu, Search, Compass, Calendar, Settings, Cloud, Sun, CloudRain, Wind, MapPin, X } from "lucide-react";
+import { Menu, Search, Compass, Calendar, Settings, Cloud, Sun, CloudRain, Wind, MapPin, X, Info, Quote, Sparkles } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import FlipCard from "@/components/FlipCard";
 import WeatherHero from "@/components/WeatherHero";
 import WeatherModal from "@/components/WeatherModal";
-import { Link, useSearch } from "wouter";
+import { Link, useSearch, useLocation } from "wouter";
 import heroBg from "@assets/generated_images/clean_modern_blue_sky_weather_background_with_soft_clouds.png";
-// import mapImg from "@assets/generated_images/clean_grey_map_of_uzbekistan.png";
 import { regions } from "@/data/regions";
+import { UzbekistanMap } from "@/components/UzbekistanMap";
 
 export default function Home() {
-  const [selectedRegion, setSelectedRegion] = useState<typeof regions[0] | null>(null);
-  const [currentDate, setCurrentDate] = useState("");
+  const [activeRegion, setActiveRegion] = useState(regions[0]);
+  const [modalOpen, setModalOpen] = useState(false);
+  const [, setLocation] = useLocation();
   const search = useSearch();
+  const [currentDate, setCurrentDate] = useState("");
 
   useEffect(() => {
     const date = new Date();
@@ -31,178 +33,147 @@ export default function Home() {
     if (targetRegionId) {
       const region = regions.find(r => r.id === targetRegionId.toLowerCase());
       if (region) {
-        setSelectedRegion(region);
+        setActiveRegion(region);
       }
     }
   }, [search]);
 
-  const handleRegionClick = (region: typeof regions[0]) => {
-    if (selectedRegion?.id === region.id) {
-        setSelectedRegion(null); // Deselect if clicked again
-    } else {
-        setSelectedRegion(region);
+  const handleRegionClick = (regionId: string) => {
+    const region = regions.find(r => r.id === regionId);
+    if (region) {
+      setActiveRegion(region);
     }
   };
 
   return (
-    <div className="min-h-screen w-full relative overflow-hidden bg-background font-sans select-none">
-      <div 
-        className="absolute inset-0 z-0 opacity-100"
-        style={{
-          backgroundImage: `url(${heroBg})`,
-          backgroundSize: 'cover',
-          backgroundPosition: 'center',
-        }}
-      />
-      <div className="absolute inset-0 z-0 bg-gradient-to-b from-white/40 via-white/60 to-white/95 dark:from-black/20 dark:via-black/40 dark:to-background backdrop-blur-[2px]" />
+    <div className="h-screen w-full relative overflow-hidden bg-background text-foreground flex flex-col font-sans select-none">
+      {/* Background Image with Overlay */}
+      <div className="absolute inset-0 z-0">
+        <img 
+          src={heroBg} 
+          alt="Weather Background" 
+          className="w-full h-full object-cover opacity-80"
+        />
+        <div className="absolute inset-0 bg-gradient-to-b from-white/30 via-white/10 to-white/60 backdrop-blur-[2px]" />
+      </div>
 
-      <div className="relative z-10 container mx-auto px-4 py-6 max-w-md h-screen flex flex-col">
+      {/* Main Content Container */}
+      <div className="relative z-10 flex flex-col h-full max-w-md mx-auto w-full shadow-2xl bg-white/30 backdrop-blur-sm border-x border-white/40">
         
-        <header className="flex justify-between items-center mb-6">
-          <div className="flex flex-col">
-            <h1 className="text-xl font-display font-bold text-foreground">Ob-Havo</h1>
-            <span className="text-xs text-muted-foreground flex items-center gap-1">
-              <Calendar className="w-3 h-3" /> {currentDate}
-            </span>
-          </div>
-          <div className="flex gap-2">
-            <Link href="/forecast">
-                <Button variant="outline" size="sm" className="bg-white/50 backdrop-blur-sm border-white/40 text-xs font-bold">
-                    Haftalik
-                </Button>
-            </Link>
-            <Link href="/admin">
-                <Button variant="ghost" size="icon" className="rounded-full hover:bg-black/5">
-                    <Settings className="w-5 h-5 text-foreground/70" />
-                </Button>
-            </Link>
-          </div>
+        {/* Header */}
+        <header className="p-6 flex justify-between items-center bg-white/40 backdrop-blur-md border-b border-white/30 sticky top-0 z-20">
+           <div>
+             <h1 className="text-2xl font-bold bg-clip-text text-transparent bg-gradient-to-r from-primary to-blue-600 font-display">
+               Ob-Havo
+             </h1>
+             <p className="text-xs text-muted-foreground font-medium flex items-center gap-1 capitalize">
+               <Calendar className="w-3 h-3" /> {currentDate}
+             </p>
+           </div>
+           <div className="flex gap-2">
+             <button onClick={() => setLocation('/forecast')} className="p-2 rounded-full hover:bg-white/50 transition-colors text-primary bg-white/30 backdrop-blur-sm border border-white/40 text-xs font-bold px-3">
+                Haftalik
+             </button>
+             <Link href="/admin">
+                <button className="p-2 rounded-full hover:bg-white/50 transition-colors text-muted-foreground bg-white/30 backdrop-blur-sm border border-white/40">
+                  <Settings className="w-5 h-5" />
+                </button>
+             </Link>
+           </div>
         </header>
 
         <div className="flex-1 overflow-y-auto no-scrollbar pb-6 flex flex-col">
             
             {/* Interactive Map Section */}
-            <div className="relative w-full aspect-[1.53] glass-card rounded-3xl overflow-hidden shadow-2xl border border-white/60 p-4 mb-6 group bg-white/40">
-               <div className="absolute top-3 left-4 z-10 bg-white/60 backdrop-blur-md px-3 py-1 rounded-full text-xs font-bold text-primary shadow-sm flex items-center gap-2">
+            <div className="relative w-full aspect-[1.53] glass-card rounded-3xl overflow-hidden shadow-2xl border border-white/60 p-2 mb-6 group bg-white/40 mx-4 mt-4 w-[calc(100%-2rem)]">
+               <div className="absolute top-3 left-4 z-10 bg-white/60 backdrop-blur-md px-3 py-1 rounded-full text-xs font-bold text-primary shadow-sm flex items-center gap-2 pointer-events-none">
                  <Compass className="w-3 h-3" /> O'zbekiston
                </div>
                
-               <img 
-                 src="/map.svg" 
-                 alt="O'zbekiston Xaritasi" 
-                 className="w-full h-full object-contain relative z-10"
+               <UzbekistanMap 
+                 onRegionSelect={handleRegionClick}
+                 selectedRegion={activeRegion.id}
                />
+            </div>
 
-               {/* Map Markers */}
-               {regions.map((region) => (
-                 <div
-                   key={region.id}
-                   className="absolute flex items-center justify-center transition-all duration-300"
-                   style={{ 
-                     left: `${region.x}%`, 
-                     top: `${region.y}%`,
-                     transform: 'translate(-50%, -50%)',
-                     zIndex: selectedRegion?.id === region.id ? 60 : 20
-                   }}
-                 >
-                    {/* Colored Glow/Area Effect */}
-                   <div className={`
-                        absolute w-24 h-24 -z-10 rounded-full blur-2xl opacity-40 transition-all duration-500 pointer-events-none
-                        ${region.color}
-                        ${selectedRegion?.id === region.id ? 'opacity-70 scale-125' : 'opacity-30 scale-75'}
-                   `} />
-
-                    {/* The Dot Marker */}
-                   <motion.button
-                     whileHover={{ scale: 1.2 }}
-                     whileTap={{ scale: 0.9 }}
-                     onClick={() => handleRegionClick(region)}
+            {/* Region Selection Grid */}
+            <div className="px-4 mb-8">
+               <h3 className="text-lg font-bold mb-4 flex items-center gap-2 text-primary/80">
+                 <MapPin className="w-5 h-5" /> Hududni tanlang
+               </h3>
+               <div className="grid grid-cols-3 gap-3">
+                 {regions.map((region) => (
+                   <button
+                     key={region.id}
+                     onClick={() => setActiveRegion(region)}
                      className={`
-                       w-5 h-5 rounded-full shadow-lg border-2 border-white transition-all duration-300 relative z-20
-                       ${region.color}
-                       ${selectedRegion?.id === region.id ? 'scale-125 ring-4 ring-white/40' : 'opacity-90 hover:opacity-100'}
+                       relative p-3 rounded-2xl border transition-all duration-300 flex flex-col items-center justify-center gap-1 group
+                       ${activeRegion.id === region.id 
+                         ? 'bg-white shadow-lg border-primary/50 scale-105 z-10' 
+                         : 'bg-white/40 hover:bg-white/70 border-white/40 hover:scale-105'
+                       }
                      `}
-                   />
-
-                   {/* Detail Pop-up Card (Only visible when selected) */}
-                   <AnimatePresence>
-                   {selectedRegion?.id === region.id && (
-                     <motion.div 
-                        initial={{ opacity: 0, scale: 0.8, y: 10 }}
-                        animate={{ opacity: 1, scale: 1, y: 0 }}
-                        exit={{ opacity: 0, scale: 0.8, y: 10 }}
-                        className="absolute bottom-full mb-3 p-3 rounded-2xl glass-panel border border-white/50 shadow-xl min-w-[140px] z-50 backdrop-blur-xl bg-white/80"
-                        style={{
-                            left: '50%',
-                            translateX: '-50%'
-                        }}
-                     >
-                        <div className="flex items-center justify-between mb-2">
-                            <span className="font-bold text-sm text-foreground">{region.name}</span>
-                            <region.icon className="w-4 h-4 text-primary" />
-                        </div>
-                        <div className="flex items-end gap-2">
-                            <span className="text-2xl font-bold text-foreground leading-none">{region.temp}°</span>
-                            <span className="text-[10px] text-muted-foreground font-medium mb-1">{region.condition}</span>
-                        </div>
-                        
-                        {/* Little triangle arrow at bottom */}
-                        <div className="absolute -bottom-2 left-1/2 -translate-x-1/2 w-4 h-4 bg-white/80 rotate-45 border-r border-b border-white/50 clip-path-triangle"></div>
-                     </motion.div>
-                   )}
-                   </AnimatePresence>
-                 </div>
-               ))}
+                   >
+                     {/* Color indicator bar */}
+                     <div className={`absolute left-0 top-3 bottom-3 w-1 rounded-r-full ${region.color} opacity-80`} />
+                     
+                     <span className={`text-xs font-medium ${activeRegion.id === region.id ? 'text-primary font-bold' : 'text-muted-foreground'}`}>
+                       {region.name}
+                     </span>
+                     
+                     {activeRegion.id === region.id && (
+                       <span className="text-[10px] font-bold text-gold animate-in fade-in zoom-in">
+                         {region.temp}°
+                       </span>
+                     )}
+                   </button>
+                 ))}
+               </div>
             </div>
 
-            {/* Region Color Legend Grid */}
-            <div className="mb-8">
-                <h3 className="font-display font-semibold text-lg mb-3 flex items-center gap-2">
-                    <Compass className="w-4 h-4 text-primary" /> Hududni tanlang
-                </h3>
-                <div className="grid grid-cols-3 gap-3">
-                    {regions.map((region) => (
-                        <motion.button
-                            key={region.id}
-                            whileHover={{ scale: 1.02 }}
-                            whileTap={{ scale: 0.98 }}
-                            onClick={() => handleRegionClick(region)}
-                            className={`
-                                relative overflow-hidden rounded-xl p-3 flex flex-col items-start gap-1 transition-all duration-300 border
-                                ${selectedRegion?.id === region.id 
-                                    ? 'bg-white shadow-lg border-primary/20 ring-2 ring-primary/10' 
-                                    : 'bg-white/40 hover:bg-white/60 border-white/40'}
-                            `}
-                        >
-                            {/* Color Indicator Strip */}
-                            <div className={`absolute top-0 left-0 bottom-0 w-1.5 ${region.color}`} />
-                            
-                            <div className="pl-2 w-full">
-                                <span className="text-xs font-bold text-foreground/80 block truncate">{region.name}</span>
-                                {selectedRegion?.id === region.id && (
-                                    <motion.span 
-                                        initial={{ opacity: 0 }} 
-                                        animate={{ opacity: 1 }} 
-                                        className="text-[10px] text-primary font-medium"
-                                    >
-                                        {region.temp}°
-                                    </motion.span>
-                                )}
-                            </div>
-                        </motion.button>
-                    ))}
-                </div>
+            {/* Weather Hero Card (Active Region) */}
+            <div className="px-4 mb-8" onClick={() => setModalOpen(true)}>
+              <WeatherHero region={activeRegion} />
             </div>
 
-            <div className="mt-auto">
-              <FlipCard 
-                  arabicWord="سَلَام"
-                  uzbekWord="Salom"
-                  pronunciation="Salaam"
-                  context="Tinchlik va omonlik. Salomlashish odobi - insoniylikning go'zal belgisidir."
-              />
+            {/* Daily Word Flip Card */}
+            <div className="px-4 mb-20">
+               <div className="flex items-center justify-between mb-3 px-1">
+                 <h3 className="text-xs font-bold tracking-widest text-primary/60 uppercase">KUN SO'ZI</h3>
+                 <Info className="w-4 h-4 text-primary/40" />
+               </div>
+               <FlipCard 
+                 frontContent={
+                   <div className="text-center p-6 flex flex-col items-center justify-center h-full bg-gradient-to-br from-white/60 to-white/30">
+                     <Quote className="w-8 h-8 text-primary/40 mb-3" />
+                     <p className="text-lg font-display font-medium text-foreground/80 italic">
+                       "Har bir kun - yangi imkoniyat."
+                     </p>
+                   </div>
+                 }
+                 backContent={
+                   <div className="text-center p-6 flex flex-col items-center justify-center h-full bg-gradient-to-br from-primary/10 to-primary/5">
+                     <Sparkles className="w-8 h-8 text-primary mb-3" />
+                     <p className="text-sm font-medium text-foreground/70 leading-relaxed">
+                       Bugungi ob-havo qanday bo'lishidan qat'iy nazar, kayfiyatingizni a'lo darajada saqlang!
+                     </p>
+                   </div>
+                 }
+               />
             </div>
         </div>
+
+        {/* Modal */}
+        <AnimatePresence>
+          {modalOpen && (
+            <WeatherModal 
+              isOpen={modalOpen} 
+              onClose={() => setModalOpen(false)} 
+              region={activeRegion} 
+            />
+          )}
+        </AnimatePresence>
+
       </div>
     </div>
   );

@@ -135,3 +135,49 @@
     transform: rotateY(180deg);
   }
 }
+
+/* Map Styles */
+.uzbekistan-map-container svg {
+  width: 100%;
+  height: 100%;
+  filter: drop-shadow(0 4px 6px rgba(0, 0, 0, 0.1));
+}
+
+.uzbekistan-map-container path {
+  fill: rgba(255, 255, 255, 0.4);
+  stroke: rgba(255, 255, 255, 0.8);
+  stroke-width: 1px;
+  transition: all 0.3s ease;
+  cursor: pointer;
+}
+
+.uzbekistan-map-container path:hover {
+  fill: rgba(255, 255, 255, 0.7);
+  transform: translateY(-1px);
+  filter: drop-shadow(0 4px 8px rgba(0, 0, 0, 0.15));
+}
+
+/* Specific region colors when active or simply to make it colorful as requested */
+.uzbekistan-map-container path[id="UZQR"] { fill: rgba(99, 102, 241, 0.4); } /* Indigo */
+.uzbekistan-map-container path[id="UZXO"] { fill: rgba(59, 130, 246, 0.4); } /* Blue */
+.uzbekistan-map-container path[id="UZNW"] { fill: rgba(6, 182, 212, 0.4); } /* Cyan */
+.uzbekistan-map-container path[id="UZBU"] { fill: rgba(20, 184, 166, 0.4); } /* Teal */
+.uzbekistan-map-container path[id="UZSA"] { fill: rgba(16, 185, 129, 0.4); } /* Emerald */
+.uzbekistan-map-container path[id="UZQA"] { fill: rgba(132, 204, 22, 0.4); } /* Lime */
+.uzbekistan-map-container path[id="UZSU"] { fill: rgba(234, 179, 8, 0.4); } /* Yellow */
+.uzbekistan-map-container path[id="UZJI"] { fill: rgba(249, 115, 22, 0.4); } /* Orange */
+.uzbekistan-map-container path[id="UZSI"] { fill: rgba(239, 68, 68, 0.4); } /* Red */
+.uzbekistan-map-container path[id="UZTO"] { fill: rgba(236, 72, 153, 0.4); } /* Pink */
+.uzbekistan-map-container path[id="UZTK"] { fill: rgba(236, 72, 153, 0.6); } /* Pink Darker */
+.uzbekistan-map-container path[id="UZNG"] { fill: rgba(168, 85, 247, 0.4); } /* Purple */
+.uzbekistan-map-container path[id="UZAN"] { fill: rgba(139, 92, 246, 0.4); } /* Violet */
+.uzbekistan-map-container path[id="UZFA"] { fill: rgba(217, 70, 239, 0.4); } /* Fuchsia */
+
+.uzbekistan-map-container path:hover {
+  filter: brightness(1.2);
+}
+
+.uzbekistan-map-container g[id="label_points"],
+.uzbekistan-map-container g[id="points"] {
+  display: none; /* Hide default SVG points to clean up */
+}
