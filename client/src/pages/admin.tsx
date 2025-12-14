@@ -1,5 +1,5 @@
 import { useState, useEffect } from "react";
-import { ArrowLeft, Save, RefreshCw, Send, Radio } from "lucide-react";
+import { ArrowLeft, Save, RefreshCw, Send, Radio, Plus, Trash2, Users } from "lucide-react";
 import { Link } from "wouter";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -7,7 +7,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { useToast } from "@/hooks/use-toast";
 import { Switch } from "@/components/ui/switch";
-import { setupTelegramWebhook, getBotSettings, updateBotSettings, testChannelMessage } from "@/lib/api";
+import { setupTelegramWebhook, getBotSettings, updateBotSettings, testChannelMessage, getChannels, addChannel, removeChannel, toggleChannel, broadcastToAllChannels, type Channel } from "@/lib/api";
 import { regions } from "@/data/regions";
 
 export default function Admin() {
@@ -27,6 +27,12 @@ export default function Admin() {
   const [dailyTime, setDailyTime] = useState("08:00");
   const [dailyRegion, setDailyRegion] = useState("tashkent");
   const [testingChannel, setTestingChannel] = useState(false);
+  
+  const [channels, setChannels] = useState<Channel[]>([]);
+  const [newChannelId, setNewChannelId] = useState("");
+  const [newChannelTitle, setNewChannelTitle] = useState("");
+  const [newChannelType, setNewChannelType] = useState<"channel" | "group">("channel");
+  const [broadcasting, setBroadcasting] = useState(false);
 
   useEffect(() => {
     getBotSettings().then(settings => {
@@ -37,7 +43,53 @@ export default function Admin() {
         setDailyRegion(settings.dailyRegion || "tashkent");
       }
     });
+    loadChannels();
   }, []);
+
+  const loadChannels = async () => {
+    const list = await getChannels();
+    setChannels(list);
+  };
+
+  const handleAddChannel = async () => {
+    if (!newChannelId) {
+      toast({ title: "Xatolik", description: "Kanal/Guruh ID kiriting", variant: "destructive" });
+      return;
+    }
+    const channel = await addChannel(newChannelId, newChannelTitle || newChannelId, newChannelType);
+    if (channel) {
+      toast({ title: "Qo'shildi!", description: `${newChannelType === 'channel' ? 'Kanal' : 'Guruh'} qo'shildi` });
+      setNewChannelId("");
+      setNewChannelTitle("");
+      loadChannels();
+    } else {
+      toast({ title: "Xatolik", description: "Qo'shishda muammo", variant: "destructive" });
+    }
+  };
+
+  const handleRemoveChannel = async (chatId: string) => {
+    const success = await removeChannel(chatId);
+    if (success) {
+      toast({ title: "O'chirildi!" });
+      loadChannels();
+    }
+  };
+
+  const handleToggleChannel = async (chatId: string, enabled: boolean) => {
+    await toggleChannel(chatId, enabled);
+    loadChannels();
+  };
+
+  const handleBroadcast = async () => {
+    setBroadcasting(true);
+    const result = await broadcastToAllChannels();
+    if (result?.ok) {
+      toast({ title: "Yuborildi!", description: `${result.sent} ta kanal/guruhga yuborildi` });
+    } else {
+      toast({ title: "Xatolik", description: "Xabar yuborishda muammo", variant: "destructive" });
+    }
+    setBroadcasting(false);
+  };
 
   const handleSetupWebhook = async () => {
     setLoadingWebhook(true);
@@ -277,6 +329,93 @@ export default function Admin() {
                     </div>
                 </div>
             </CardContent>
+        </Card>
+
+        <Card className="glass-panel border-white/20">
+          <CardHeader className="flex flex-row items-center justify-between">
+            <CardTitle className="flex items-center gap-2">
+              <Users className="w-5 h-5" /> Kanal/Guruhlar Boshqaruvi
+            </CardTitle>
+            <Button 
+              onClick={handleBroadcast} 
+              disabled={broadcasting || channels.length === 0}
+              size="sm"
+              className="gap-2"
+            >
+              <Send className="w-4 h-4" />
+              {broadcasting ? "Yuborilmoqda..." : "Hammaga yuborish"}
+            </Button>
+          </CardHeader>
+          <CardContent className="space-y-4">
+            <div className="space-y-3">
+              <div className="flex gap-2">
+                <select 
+                  value={newChannelType}
+                  onChange={(e) => setNewChannelType(e.target.value as "channel" | "group")}
+                  className="h-10 rounded-md border border-input bg-background px-3 py-2 text-sm"
+                >
+                  <option value="channel">Kanal</option>
+                  <option value="group">Guruh</option>
+                </select>
+                <Input 
+                  value={newChannelId}
+                  onChange={(e) => setNewChannelId(e.target.value)}
+                  placeholder="-1001234567890"
+                  className="flex-1"
+                />
+              </div>
+              <div className="flex gap-2">
+                <Input 
+                  value={newChannelTitle}
+                  onChange={(e) => setNewChannelTitle(e.target.value)}
+                  placeholder="Kanal/guruh nomi (ixtiyoriy)"
+                  className="flex-1"
+                />
+                <Button onClick={handleAddChannel} className="gap-2">
+                  <Plus className="w-4 h-4" /> Qo'shish
+                </Button>
+              </div>
+              <p className="text-xs text-muted-foreground">
+                Botni kanal/guruhga admin qilib qo'shing, keyin ID ni kiriting
+              </p>
+            </div>
+
+            {channels.length > 0 && (
+              <div className="border-t pt-4 space-y-2">
+                <h4 className="text-sm font-medium">Qo'shilgan kanallar ({channels.length})</h4>
+                {channels.map((ch) => (
+                  <div key={ch.id} className="flex items-center justify-between p-3 bg-muted rounded-lg">
+                    <div className="flex items-center gap-3">
+                      <Switch 
+                        checked={ch.enabled ?? true}
+                        onCheckedChange={(enabled) => handleToggleChannel(ch.chatId, enabled)}
+                      />
+                      <div>
+                        <p className="text-sm font-medium">{ch.title || ch.chatId}</p>
+                        <p className="text-xs text-muted-foreground">
+                          {ch.type === 'group' ? 'Guruh' : 'Kanal'} • {ch.chatId}
+                        </p>
+                      </div>
+                    </div>
+                    <Button 
+                      variant="ghost" 
+                      size="icon"
+                      onClick={() => handleRemoveChannel(ch.chatId)}
+                    >
+                      <Trash2 className="w-4 h-4 text-destructive" />
+                    </Button>
+                  </div>
+                ))}
+              </div>
+            )}
+
+            {channels.length === 0 && (
+              <div className="text-center py-6 text-muted-foreground">
+                <Users className="w-10 h-10 mx-auto mb-2 opacity-50" />
+                <p className="text-sm">Hali kanal/guruh qo'shilmagan</p>
+              </div>
+            )}
+          </CardContent>
         </Card>
       </div>
     </div>

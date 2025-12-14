@@ -94,3 +94,74 @@ export async function testChannelMessage(channelId: string) {
     return null;
   }
 }
+
+export interface Channel {
+  id: string;
+  chatId: string;
+  title: string | null;
+  type: string | null;
+  enabled: boolean | null;
+  createdAt: string | null;
+}
+
+export async function getChannels(): Promise<Channel[]> {
+  try {
+    const response = await fetch('/api/channels');
+    return await response.json();
+  } catch (error) {
+    console.error('Error fetching channels:', error);
+    return [];
+  }
+}
+
+export async function addChannel(chatId: string, title: string, type: string = 'channel'): Promise<Channel | null> {
+  try {
+    const response = await fetch('/api/channels', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ chatId, title, type }),
+    });
+    return await response.json();
+  } catch (error) {
+    console.error('Error adding channel:', error);
+    return null;
+  }
+}
+
+export async function removeChannel(chatId: string): Promise<boolean> {
+  try {
+    const response = await fetch(`/api/channels/${encodeURIComponent(chatId)}`, {
+      method: 'DELETE',
+    });
+    return response.ok;
+  } catch (error) {
+    console.error('Error removing channel:', error);
+    return false;
+  }
+}
+
+export async function toggleChannel(chatId: string, enabled: boolean): Promise<Channel | null> {
+  try {
+    const response = await fetch(`/api/channels/${encodeURIComponent(chatId)}`, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ enabled }),
+    });
+    return await response.json();
+  } catch (error) {
+    console.error('Error toggling channel:', error);
+    return null;
+  }
+}
+
+export async function broadcastToAllChannels(): Promise<{ ok: boolean; sent: number } | null> {
+  try {
+    const response = await fetch('/api/telegram/broadcast', {
+      method: 'POST',
+    });
+    return await response.json();
+  } catch (error) {
+    console.error('Error broadcasting:', error);
+    return null;
+  }
+}

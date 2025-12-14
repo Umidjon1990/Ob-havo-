@@ -180,5 +180,62 @@ export async function registerRoutes(
     }
   });
 
+  // Channels API
+  app.get("/api/channels", async (req, res) => {
+    try {
+      const channelsList = await storage.getChannels();
+      res.json(channelsList);
+    } catch (error) {
+      res.status(500).json({ error: "Failed to fetch channels" });
+    }
+  });
+
+  app.post("/api/channels", async (req, res) => {
+    try {
+      const { chatId, title, type } = req.body;
+      const channel = await storage.addChannel({ chatId, title, type, enabled: true });
+      res.json(channel);
+    } catch (error: any) {
+      res.status(500).json({ error: error.message || "Failed to add channel" });
+    }
+  });
+
+  app.delete("/api/channels/:chatId", async (req, res) => {
+    try {
+      const { chatId } = req.params;
+      await storage.removeChannel(chatId);
+      res.json({ ok: true });
+    } catch (error) {
+      res.status(500).json({ error: "Failed to remove channel" });
+    }
+  });
+
+  app.patch("/api/channels/:chatId", async (req, res) => {
+    try {
+      const { chatId } = req.params;
+      const { enabled } = req.body;
+      const channel = await storage.toggleChannel(chatId, enabled);
+      res.json(channel);
+    } catch (error) {
+      res.status(500).json({ error: "Failed to toggle channel" });
+    }
+  });
+
+  // Send to all enabled channels
+  app.post("/api/telegram/broadcast", async (req, res) => {
+    try {
+      const { sendDailyChannelMessage } = await import("./lib/telegram");
+      const enabledChannels = await storage.getEnabledChannels();
+      
+      for (const channel of enabledChannels) {
+        await sendDailyChannelMessage(channel.chatId);
+      }
+      
+      res.json({ ok: true, sent: enabledChannels.length });
+    } catch (error: any) {
+      res.status(500).json({ error: error.message });
+    }
+  });
+
   return httpServer;
 }
