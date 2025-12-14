@@ -182,7 +182,7 @@ export async function sendDailyChannelMessage(channelId: string, miniAppUrl?: st
     weatherLines.push(`🏙 <b>${region.name_ar}</b>: ${temp}°C، ${condition_ar}`);
     
     inlineKeyboard.push([
-      { text: `📍 ${region.name_ar} - التفاصيل`, web_app: { url: `${appBaseUrl}?region=${region.id}` } }
+      { text: `📍 ${region.name_ar} - التفاصيل`, url: `${appBaseUrl}?region=${region.id}` }
     ]);
   }
   
