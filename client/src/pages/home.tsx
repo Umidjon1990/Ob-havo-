@@ -105,15 +105,22 @@ export default function Home() {
                      zIndex: selectedRegion?.id === region.id ? 60 : 20
                    }}
                  >
+                    {/* Colored Glow/Area Effect */}
+                   <div className={`
+                        absolute w-24 h-24 -z-10 rounded-full blur-2xl opacity-40 transition-all duration-500 pointer-events-none
+                        ${region.color}
+                        ${selectedRegion?.id === region.id ? 'opacity-70 scale-125' : 'opacity-30 scale-75'}
+                   `} />
+
                     {/* The Dot Marker */}
                    <motion.button
                      whileHover={{ scale: 1.2 }}
                      whileTap={{ scale: 0.9 }}
                      onClick={() => handleRegionClick(region)}
                      className={`
-                       w-4 h-4 rounded-full shadow-lg border-2 border-white transition-all duration-300
+                       w-5 h-5 rounded-full shadow-lg border-2 border-white transition-all duration-300 relative z-20
                        ${region.color}
-                       ${selectedRegion?.id === region.id ? 'scale-125 ring-4 ring-white/30' : 'opacity-80 hover:opacity-100'}
+                       ${selectedRegion?.id === region.id ? 'scale-125 ring-4 ring-white/40' : 'opacity-90 hover:opacity-100'}
                      `}
                    />
 
