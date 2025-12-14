@@ -177,8 +177,11 @@ export async function sendDailyChannelMessage(channelId: string, miniAppUrl?: st
     
     weatherLines.push(`🏙 <b>${region.name_ar}</b>: ${temp}°C، ${condition_ar}`);
     
+    const appUrl = process.env.REPLIT_DEV_DOMAIN 
+      ? `https://${process.env.REPLIT_DEV_DOMAIN}?region=${region.id}`
+      : `https://ob-havo.replit.app?region=${region.id}`;
     inlineKeyboard.push([
-      { text: `📍 ${region.name_ar} - التفاصيل`, url: `https://t.me/Ztobhavobot/app?startapp=${region.id}` }
+      { text: `📍 ${region.name_ar} - التفاصيل`, url: appUrl }
     ]);
   }
   
