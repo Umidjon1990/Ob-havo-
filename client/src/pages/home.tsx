@@ -6,6 +6,13 @@ import { ScrollArea } from "@/components/ui/scroll-area";
 import FlipCard from "@/components/FlipCard";
 import WeatherHero from "@/components/WeatherHero";
 import WeatherModal from "@/components/WeatherModal";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 import { Link, useSearch } from "wouter";
 import heroBg from "@assets/generated_images/clean_modern_blue_sky_weather_background_with_soft_clouds.png";
 import mapImg from "@assets/generated_images/minimalist_3d_isometric_glass_map_of_uzbekistan,_high_tech,_clean_white_and_blue.png";
@@ -144,6 +151,28 @@ export default function Home() {
                    </div>
                  </motion.button>
                ))}
+            </div>
+
+            {/* Region Dropdown Selection */}
+            <div className="mb-8 px-4">
+              <Select
+                value={selectedRegion.id}
+                onValueChange={(value) => {
+                  const region = regions.find((r) => r.id === value);
+                  if (region) handleRegionClick(region);
+                }}
+              >
+                <SelectTrigger className="w-full glass-card border-white/40 h-12 text-lg font-medium">
+                  <SelectValue placeholder="Viloyatni tanlang" />
+                </SelectTrigger>
+                <SelectContent className="glass-panel border-white/20 max-h-[300px]">
+                  {regions.map((region) => (
+                    <SelectItem key={region.id} value={region.id} className="text-base cursor-pointer">
+                      {region.name}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
             </div>
 
             {/* Quick Select List */}
