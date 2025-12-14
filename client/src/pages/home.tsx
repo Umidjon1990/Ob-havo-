@@ -10,6 +10,7 @@ import { Link, useSearch, useLocation } from "wouter";
 import heroBg from "@assets/generated_images/clean_modern_blue_sky_weather_background_with_soft_clouds.png";
 import { regions } from "@/data/regions";
 import { UzbekistanMap } from "@/components/UzbekistanMap";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 
 export default function Home() {
   const [activeRegion, setActiveRegion] = useState(regions[0]);
@@ -85,50 +86,37 @@ export default function Home() {
         <div className="flex-1 overflow-y-auto no-scrollbar pb-6 flex flex-col">
             
             {/* Interactive Map Section */}
-           <div className="relative w-full aspect-[1.53] glass-card rounded-3xl overflow-hidden shadow-2xl border border-white/60 mb-6 group bg-white/40 mx-auto w-[96%] mt-4">
-              <div className="absolute top-3 left-4 z-10 bg-white/60 backdrop-blur-md px-3 py-1 rounded-full text-xs font-bold text-primary shadow-sm flex items-center gap-2 pointer-events-none">
-                <Compass className="w-3 h-3" /> O'zbekiston
-              </div>
-              
-              <UzbekistanMap 
-                onRegionSelect={handleRegionClick}
-                selectedRegion={activeRegion.id}
-                className="p-1"
-              />
-           </div>
+            <div className="relative w-full aspect-[1.53] glass-card rounded-3xl overflow-hidden shadow-2xl border border-white/60 mb-6 group bg-white/40 mx-4 mt-4 w-[calc(100%-2rem)]">
+               <div className="absolute top-3 left-4 z-10 bg-white/60 backdrop-blur-md px-3 py-1 rounded-full text-xs font-bold text-primary shadow-sm flex items-center gap-2 pointer-events-none">
+                 <Compass className="w-3 h-3" /> O'zbekiston
+               </div>
+               
+               <UzbekistanMap 
+                 onRegionSelect={handleRegionClick}
+                 selectedRegion={activeRegion.id}
+                 className="p-1"
+               />
 
-            {/* Region Selection Grid */}
-            <div className="px-4 mb-8">
-               <h3 className="text-lg font-bold mb-4 flex items-center gap-2 text-primary/80">
-                 <MapPin className="w-5 h-5" /> Hududni tanlang
-               </h3>
-               <div className="grid grid-cols-3 gap-3">
-                 {regions.map((region) => (
-                   <button
-                     key={region.id}
-                     onClick={() => setActiveRegion(region)}
-                     className={`
-                       relative p-3 rounded-2xl border transition-all duration-300 flex flex-col items-center justify-center gap-1 group
-                       ${activeRegion.id === region.id 
-                         ? 'bg-white shadow-lg border-primary/50 scale-105 z-10' 
-                         : 'bg-white/40 hover:bg-white/70 border-white/40 hover:scale-105'
-                       }
-                     `}
-                   >
-                     {/* Color indicator bar */}
-                     <div className={`absolute left-0 top-3 bottom-3 w-1 rounded-r-full ${region.color} opacity-80`} />
-                     
-                     <span className={`text-xs font-medium ${activeRegion.id === region.id ? 'text-primary font-bold' : 'text-muted-foreground'}`}>
-                       {region.name}
-                     </span>
-                     
-                     {activeRegion.id === region.id && (
-                       <span className="text-[10px] font-bold text-gold animate-in fade-in zoom-in">
-                         {region.temp}°
-                       </span>
-                     )}
-                   </button>
-                 ))}
+               {/* Dropdown Selection Overlay on Map */}
+               <div className="absolute top-3 right-4 z-10 w-40">
+                 <Select 
+                   value={activeRegion.id} 
+                   onValueChange={(val) => {
+                     const region = regions.find(r => r.id === val);
+                     if (region) setActiveRegion(region);
+                   }}
+                 >
+                   <SelectTrigger className="w-full h-8 text-xs bg-white/80 backdrop-blur-md border-white/50 shadow-sm rounded-full px-3">
+                     <SelectValue placeholder="Hududni tanlang" />
+                   </SelectTrigger>
+                   <SelectContent>
+                     {regions.map((region) => (
+                       <SelectItem key={region.id} value={region.id} className="text-xs">
+                         {region.name}
+                       </SelectItem>
+                     ))}
+                   </SelectContent>
+                 </Select>
                </div>
             </div>
 
