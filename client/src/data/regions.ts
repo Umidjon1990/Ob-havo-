@@ -117,7 +117,7 @@ export const regions: Region[] = [
     condition_ar: "صَافِي", 
     condition_uz: "Ochiq", 
     icon: Sun, 
-    color: "bg-yellow-500", 
+    color: "bg-emerald-700", 
     humidity: 50, 
     wind: 8,
     pressure: 745,
