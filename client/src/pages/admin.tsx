@@ -271,14 +271,14 @@ export default function Admin() {
                     </h3>
                     
                     <div className="space-y-2">
-                      <label className="text-sm font-medium">Kanal ID</label>
+                      <label className="text-sm font-medium">Kanal username yoki ID</label>
                       <Input 
                         value={channelId}
                         onChange={(e) => setChannelId(e.target.value)}
-                        placeholder="-1001234567890 yoki @kanalusername"
+                        placeholder="@zamonaviymedia"
                       />
                       <p className="text-xs text-muted-foreground">
-                        Botni kanalga admin qilib qo'shing, keyin kanal ID sini kiriting
+                        Masalan: @zamonaviymedia (@ belgisi bilan)
                       </p>
                     </div>
 
