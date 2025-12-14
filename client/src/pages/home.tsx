@@ -1,10 +1,12 @@
 import { useState, useEffect } from "react";
 import { motion } from "framer-motion";
-import { Menu, Search, Compass, Calendar } from "lucide-react";
+import { Menu, Search, Compass, Calendar, Settings } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import FlipCard from "@/components/FlipCard";
 import WeatherHero from "@/components/WeatherHero";
+import PrayerTimes from "@/components/PrayerTimes";
+import { Link } from "wouter";
 import heroBg from "@assets/generated_images/vertical_background_with_subtle_islamic_geometric_patterns_over_a_soft_blue_sky_gradient.png";
 
 // Mock Data
@@ -52,65 +54,79 @@ export default function Home() {
               <Calendar className="w-3 h-3" /> {currentDate}
             </span>
           </div>
-          <Button variant="ghost" size="icon" className="rounded-full hover:bg-black/5">
-            <Menu className="w-6 h-6 text-foreground" />
-          </Button>
+          <div className="flex gap-2">
+            <Link href="/admin">
+                <Button variant="ghost" size="icon" className="rounded-full hover:bg-black/5">
+                    <Settings className="w-5 h-5 text-foreground/70" />
+                </Button>
+            </Link>
+            <Button variant="ghost" size="icon" className="rounded-full hover:bg-black/5">
+                <Menu className="w-6 h-6 text-foreground" />
+            </Button>
+          </div>
         </header>
 
-        {/* Weather Hero */}
-        <div className="mb-8">
-          <WeatherHero 
-            weather={{
-              temp: selectedRegion.temp,
-              condition: selectedRegion.condition,
-              city: selectedRegion.name,
-              humidity: 45,
-              wind: 12
-            }}
-          />
-        </div>
-
-        {/* Regions "Map" / Grid */}
-        <div className="mb-8">
-          <div className="flex items-center justify-between mb-4">
-            <h3 className="font-display font-semibold text-lg flex items-center gap-2">
-              <Compass className="w-4 h-4 text-primary" /> Viloyatlar
-            </h3>
-          </div>
-          
-          <ScrollArea className="w-full whitespace-nowrap pb-2">
-            <div className="flex gap-3 px-1">
-              {regions.map((region) => (
-                <motion.button
-                  key={region.id}
-                  whileTap={{ scale: 0.95 }}
-                  onClick={() => setSelectedRegion(region)}
-                  className={`
-                    relative flex flex-col items-center justify-center p-4 rounded-2xl min-w-[100px] border transition-all duration-300
-                    ${selectedRegion.id === region.id 
-                      ? 'bg-primary text-primary-foreground border-primary shadow-lg shadow-primary/20' 
-                      : 'glass-card border-white/40 hover:border-primary/50'}
-                  `}
-                >
-                  <span className="text-sm font-medium mb-1">{region.name}</span>
-                  <span className="text-xl font-bold">{region.temp}°</span>
-                </motion.button>
-              ))}
+        {/* Scrollable Content */}
+        <div className="flex-1 overflow-y-auto no-scrollbar pb-6">
+            
+            {/* Weather Hero */}
+            <div className="mb-8">
+            <WeatherHero 
+                weather={{
+                temp: selectedRegion.temp,
+                condition: selectedRegion.condition,
+                city: selectedRegion.name,
+                humidity: 45,
+                wind: 12
+                }}
+            />
             </div>
-          </ScrollArea>
-        </div>
 
-        {/* Flip Card - Word of the Day */}
-        <div className="mt-auto mb-6">
-          <div className="flex items-center justify-between mb-4 px-1">
-            <h3 className="font-display font-semibold text-lg text-foreground/80">Kun Hikmati</h3>
-          </div>
-          <FlipCard 
-            arabicWord="شُكْر"
-            uzbekWord="Shukr"
-            pronunciation="Shukr"
-            context="Ne'matlarga minnatdor bo'lish. Alloh taolo aytadi: «Agar shukr qilsangiz, albatta, (ne'matimni) ziyoda qilurman» (Ibrohim surasi, 7-oyat)."
-          />
+            {/* Prayer Times - NEW */}
+            <PrayerTimes />
+
+            {/* Regions "Map" / Grid */}
+            <div className="mb-8">
+            <div className="flex items-center justify-between mb-4">
+                <h3 className="font-display font-semibold text-lg flex items-center gap-2">
+                <Compass className="w-4 h-4 text-primary" /> Viloyatlar
+                </h3>
+            </div>
+            
+            <ScrollArea className="w-full whitespace-nowrap pb-2">
+                <div className="flex gap-3 px-1">
+                {regions.map((region) => (
+                    <motion.button
+                    key={region.id}
+                    whileTap={{ scale: 0.95 }}
+                    onClick={() => setSelectedRegion(region)}
+                    className={`
+                        relative flex flex-col items-center justify-center p-4 rounded-2xl min-w-[100px] border transition-all duration-300
+                        ${selectedRegion.id === region.id 
+                        ? 'bg-primary text-primary-foreground border-primary shadow-lg shadow-primary/20' 
+                        : 'glass-card border-white/40 hover:border-primary/50'}
+                    `}
+                    >
+                    <span className="text-sm font-medium mb-1">{region.name}</span>
+                    <span className="text-xl font-bold">{region.temp}°</span>
+                    </motion.button>
+                ))}
+                </div>
+            </ScrollArea>
+            </div>
+
+            {/* Flip Card - Word of the Day */}
+            <div className="mb-6">
+            <div className="flex items-center justify-between mb-4 px-1">
+                <h3 className="font-display font-semibold text-lg text-foreground/80">Kun Hikmati</h3>
+            </div>
+            <FlipCard 
+                arabicWord="شُكْر"
+                uzbekWord="Shukr"
+                pronunciation="Shukr"
+                context="Ne'matlarga minnatdor bo'lish. Alloh taolo aytadi: «Agar shukr qilsangiz, albatta, (ne'matimni) ziyoda qilurman» (Ibrohim surasi, 7-oyat)."
+            />
+            </div>
         </div>
 
       </div>
