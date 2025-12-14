@@ -16,21 +16,31 @@ async function migrate() {
   
   await client.query(`
     CREATE TABLE IF NOT EXISTS users (
-      id SERIAL PRIMARY KEY,
-      telegram_id VARCHAR(50) UNIQUE NOT NULL,
-      username VARCHAR(100),
-      preferred_lang VARCHAR(10) DEFAULT 'uz',
-      preferred_region VARCHAR(50) DEFAULT 'toshkent',
+      id VARCHAR(255) PRIMARY KEY DEFAULT gen_random_uuid()::text,
+      telegram_id TEXT UNIQUE,
+      username TEXT,
+      preferred_lang VARCHAR(2) DEFAULT 'ar',
+      preferred_region TEXT DEFAULT 'tashkent',
       created_at TIMESTAMP DEFAULT NOW()
     );
   `);
   
   await client.query(`
+    CREATE TABLE IF NOT EXISTS user_progress (
+      id VARCHAR(255) PRIMARY KEY DEFAULT gen_random_uuid()::text,
+      user_id VARCHAR(255) NOT NULL REFERENCES users(id),
+      vocabulary_id TEXT NOT NULL,
+      learned BOOLEAN DEFAULT false,
+      last_practiced TIMESTAMP DEFAULT NOW()
+    );
+  `);
+  
+  await client.query(`
     CREATE TABLE IF NOT EXISTS weather_cache (
-      id SERIAL PRIMARY KEY,
-      region_id VARCHAR(50) UNIQUE NOT NULL,
+      id VARCHAR(255) PRIMARY KEY DEFAULT gen_random_uuid()::text,
+      region_id TEXT NOT NULL UNIQUE,
       temperature INTEGER,
-      condition VARCHAR(100),
+      condition TEXT,
       humidity INTEGER,
       wind_speed INTEGER,
       pressure INTEGER,
@@ -41,31 +51,39 @@ async function migrate() {
   
   await client.query(`
     CREATE TABLE IF NOT EXISTS bot_settings (
-      id SERIAL PRIMARY KEY,
-      channel_id VARCHAR(100),
+      id VARCHAR(255) PRIMARY KEY DEFAULT gen_random_uuid()::text,
+      channel_id TEXT,
       daily_message_enabled BOOLEAN DEFAULT false,
-      daily_message_time VARCHAR(10) DEFAULT '08:00',
-      daily_region VARCHAR(50) DEFAULT 'toshkent',
-      last_daily_message_sent TIMESTAMP
+      daily_message_time TEXT DEFAULT '08:00',
+      daily_region TEXT DEFAULT 'tashkent',
+      last_daily_message_sent TIMESTAMP,
+      updated_at TIMESTAMP DEFAULT NOW()
     );
   `);
   
   await client.query(`
     CREATE TABLE IF NOT EXISTS channels (
-      id SERIAL PRIMARY KEY,
-      chat_id VARCHAR(100) UNIQUE NOT NULL,
-      title VARCHAR(200),
-      type VARCHAR(20) DEFAULT 'channel',
+      id VARCHAR(255) PRIMARY KEY DEFAULT gen_random_uuid()::text,
+      chat_id TEXT NOT NULL UNIQUE,
+      title TEXT,
+      type TEXT DEFAULT 'channel',
       enabled BOOLEAN DEFAULT true,
       created_at TIMESTAMP DEFAULT NOW()
     );
   `);
   
+  // Add updated_at column to bot_settings if it doesn't exist (for existing tables)
   await client.query(`
-    INSERT INTO bot_settings (id, daily_message_enabled) 
-    VALUES (1, false) 
-    ON CONFLICT (id) DO NOTHING;
+    ALTER TABLE bot_settings ADD COLUMN IF NOT EXISTS updated_at TIMESTAMP DEFAULT NOW();
   `);
+  
+  // Insert default bot settings if not exists
+  const result = await client.query(`SELECT COUNT(*) FROM bot_settings`);
+  if (parseInt(result.rows[0].count) === 0) {
+    await client.query(`
+      INSERT INTO bot_settings (daily_message_enabled) VALUES (false);
+    `);
+  }
   
   console.log("Database tables created successfully!");
   await client.end();
