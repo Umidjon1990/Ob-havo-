@@ -163,10 +163,6 @@ export async function sendDailyChannelMessage(channelId: string, miniAppUrl?: st
   const weatherLines: string[] = [];
   const inlineKeyboard: any[][] = [];
   
-  const appBaseUrl = miniAppUrl || (process.env.REPLIT_DEV_DOMAIN 
-    ? `https://${process.env.REPLIT_DEV_DOMAIN}`
-    : 'https://ob-havo.replit.app');
-  
   for (const region of ALL_REGIONS) {
     const weatherData = await storage.getWeatherCache(region.id);
     const temp = weatherData?.temperature ?? "--";
@@ -182,7 +178,7 @@ export async function sendDailyChannelMessage(channelId: string, miniAppUrl?: st
     weatherLines.push(`🏙 <b>${region.name_ar}</b>: ${temp}°C، ${condition_ar}`);
     
     inlineKeyboard.push([
-      { text: `📍 ${region.name_ar} - التفاصيل`, url: `${appBaseUrl}?region=${region.id}` }
+      { text: `📍 ${region.name_ar} - التفاصيل`, url: `https://t.me/Ztobhavobot/app?startapp=${region.id}` }
     ]);
   }
   
