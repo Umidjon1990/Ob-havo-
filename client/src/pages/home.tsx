@@ -9,7 +9,6 @@ import WeatherModal from "@/components/WeatherModal";
 import { Link, useSearch, useLocation } from "wouter";
 import heroBg from "@assets/generated_images/clean_modern_blue_sky_weather_background_with_soft_clouds.png";
 import { regions } from "@/data/regions";
-import { UzbekistanMap } from "@/components/UzbekistanMap";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 
 export default function Home() {
@@ -21,7 +20,7 @@ export default function Home() {
 
   useEffect(() => {
     const date = new Date();
-    setCurrentDate(date.toLocaleDateString('uz-UZ', { weekday: 'long', day: 'numeric', month: 'long' }));
+    setCurrentDate(date.toLocaleDateString('ar-EG', { weekday: 'long', day: 'numeric', month: 'long' }));
 
     const params = new URLSearchParams(search);
     const startParam = params.get("startapp") || params.get("region");
@@ -61,11 +60,11 @@ export default function Home() {
       {/* Main Content Container */}
       <div className="relative z-10 flex flex-col h-full max-w-md mx-auto w-full shadow-2xl bg-white/30 backdrop-blur-sm border-x border-white/40">
         
-        {/* Header */}
-        <header className="p-6 flex justify-between items-center bg-white/40 backdrop-blur-md border-b border-white/30 sticky top-0 z-20">
+          {/* Header */}
+        <header className="p-6 flex justify-between items-center bg-white/40 backdrop-blur-md border-b border-white/30 sticky top-0 z-20" dir="rtl">
            <div>
              <h1 className="text-2xl font-bold bg-clip-text text-transparent bg-gradient-to-r from-primary to-blue-600 font-display">
-               Ob-Havo
+               الطقس
              </h1>
              <p className="text-xs text-muted-foreground font-medium flex items-center gap-1 capitalize">
                <Calendar className="w-3 h-3" /> {currentDate}
@@ -73,7 +72,7 @@ export default function Home() {
            </div>
            <div className="flex gap-2">
              <button onClick={() => setLocation('/forecast')} className="p-2 rounded-full hover:bg-white/50 transition-colors text-primary bg-white/30 backdrop-blur-sm border border-white/40 text-xs font-bold px-3">
-                Haftalik
+                أسبوعي
              </button>
              <Link href="/admin">
                 <button className="p-2 rounded-full hover:bg-white/50 transition-colors text-muted-foreground bg-white/30 backdrop-blur-sm border border-white/40">
@@ -85,39 +84,33 @@ export default function Home() {
 
         <div className="flex-1 overflow-y-auto no-scrollbar pb-6 flex flex-col">
             
-            {/* Interactive Map Section */}
-            <div className="relative w-full min-h-[300px] aspect-[1.53] glass-card rounded-3xl overflow-hidden shadow-2xl border border-white/60 mb-6 group bg-white/40 mx-4 mt-4 w-[calc(100%-2rem)] flex items-center justify-center">
-               <div className="absolute top-3 left-4 z-10 bg-white/60 backdrop-blur-md px-3 py-1 rounded-full text-xs font-bold text-primary shadow-sm flex items-center gap-2 pointer-events-none">
-                 <Compass className="w-3 h-3" /> O'zbekiston
-               </div>
-               
-               <UzbekistanMap 
-                 onRegionSelect={handleRegionClick}
-                 selectedRegion={activeRegion.id}
-                 className="w-full h-full"
-               />
-
-               {/* Dropdown Selection Overlay on Map */}
-               <div className="absolute top-3 right-4 z-10 w-40">
-                 <Select 
-                   value={activeRegion.id} 
-                   onValueChange={(val) => {
-                     const region = regions.find(r => r.id === val);
-                     if (region) setActiveRegion(region);
-                   }}
-                 >
-                   <SelectTrigger className="w-full h-8 text-xs bg-white/80 backdrop-blur-md border-white/50 shadow-sm rounded-full px-3">
-                     <SelectValue placeholder="Hududni tanlang" />
-                   </SelectTrigger>
-                   <SelectContent>
-                     {regions.map((region) => (
-                       <SelectItem key={region.id} value={region.id} className="text-xs">
-                         {region.name}
-                       </SelectItem>
-                     ))}
-                   </SelectContent>
-                 </Select>
-               </div>
+            {/* Regions Grid Section */}
+            <div className="px-4 mb-6">
+              <div className="flex items-center gap-2 mb-3 px-1">
+                <Compass className="w-4 h-4 text-primary" />
+                <h3 className="text-xs font-bold tracking-widest text-primary/80 uppercase">المناطق</h3>
+              </div>
+              <div className="grid grid-cols-2 gap-3">
+                {regions.map((region) => (
+                  <motion.div
+                    key={region.id}
+                    whileHover={{ scale: 1.02 }}
+                    whileTap={{ scale: 0.98 }}
+                    onClick={() => {
+                      setActiveRegion(region);
+                      setModalOpen(true);
+                    }}
+                    className={`cursor-pointer rounded-2xl p-4 flex flex-col items-center justify-center gap-2 relative overflow-hidden glass-card border-white/40 shadow-sm ${activeRegion.id === region.id ? 'ring-2 ring-primary ring-offset-2 ring-offset-white/50' : ''}`}
+                  >
+                    <div className={`absolute inset-0 opacity-10 ${region.color}`} />
+                    <span className="font-display font-bold text-lg text-center z-10">{region.name}</span>
+                    <div className="flex items-center gap-1 text-xs font-medium text-muted-foreground z-10">
+                       <region.icon className="w-3 h-3" />
+                       <span>{region.temp}°</span>
+                    </div>
+                  </motion.div>
+                ))}
+              </div>
             </div>
 
             {/* Weather Hero Card (Active Region) */}
@@ -127,24 +120,24 @@ export default function Home() {
 
             {/* Daily Word Flip Card */}
             <div className="px-4 mb-20">
-               <div className="flex items-center justify-between mb-3 px-1">
-                 <h3 className="text-xs font-bold tracking-widest text-primary/60 uppercase">KUN SO'ZI</h3>
+               <div className="flex items-center justify-between mb-3 px-1" dir="rtl">
+                 <h3 className="text-xs font-bold tracking-widest text-primary/60 uppercase">حكمة اليوم</h3>
                  <Info className="w-4 h-4 text-primary/40" />
                </div>
                <FlipCard 
                  frontContent={
                    <div className="text-center p-6 flex flex-col items-center justify-center h-full bg-gradient-to-br from-white/60 to-white/30">
                      <Quote className="w-8 h-8 text-primary/40 mb-3" />
-                     <p className="text-lg font-display font-medium text-foreground/80 italic">
-                       "Har bir kun - yangi imkoniyat."
+                     <p className="text-lg font-display font-medium text-foreground/80 italic" dir="rtl">
+                       "كل يوم هو فرصة جديدة."
                      </p>
                    </div>
                  }
                  backContent={
                    <div className="text-center p-6 flex flex-col items-center justify-center h-full bg-gradient-to-br from-primary/10 to-primary/5">
                      <Sparkles className="w-8 h-8 text-primary mb-3" />
-                     <p className="text-sm font-medium text-foreground/70 leading-relaxed">
-                       Bugungi ob-havo qanday bo'lishidan qat'iy nazar, kayfiyatingizni a'lo darajada saqlang!
+                     <p className="text-sm font-medium text-foreground/70 leading-relaxed" dir="rtl">
+                       مهما كان الطقس اليوم، حافظ على مزاجك رائعاً!
                      </p>
                    </div>
                  }

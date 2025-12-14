@@ -35,21 +35,21 @@ export default function WeatherHero({ region }: WeatherHeroProps) {
           </div>
         </div>
 
-        <p className="text-xl font-medium text-muted-foreground mb-2">{region.condition}</p>
+        <p className="text-xl font-medium text-muted-foreground mb-2" dir="rtl">{region.condition}</p>
         
         {/* Simple Motivational Phrase (Secular) */}
-        <p className="text-sm text-primary/80 font-medium mt-2">
-          Bugun ajoyib kun bo'ladi!
+        <p className="text-sm text-primary/80 font-medium mt-2" dir="rtl">
+          سيكون يوماً رائعاً!
         </p>
 
-        <div className="grid grid-cols-2 gap-4 mt-8 w-full max-w-xs">
+        <div className="grid grid-cols-2 gap-4 mt-8 w-full max-w-xs" dir="rtl">
           <div className="glass-card rounded-xl p-3 flex items-center gap-3">
             <div className="p-2 bg-blue-500/10 rounded-lg text-blue-500">
               <Wind className="w-5 h-5" />
             </div>
             <div className="flex flex-col">
-              <span className="text-xs text-muted-foreground">Shamol</span>
-              <span className="font-bold text-sm">{region.wind} km/s</span>
+              <span className="text-xs text-muted-foreground">الرياح</span>
+              <span className="font-bold text-sm">{region.wind} كم/س</span>
             </div>
           </div>
           <div className="glass-card rounded-xl p-3 flex items-center gap-3">
@@ -57,7 +57,7 @@ export default function WeatherHero({ region }: WeatherHeroProps) {
               <Droplets className="w-5 h-5" />
             </div>
             <div className="flex flex-col">
-              <span className="text-xs text-muted-foreground">Namlik</span>
+              <span className="text-xs text-muted-foreground">الرطوبة</span>
               <span className="font-bold text-sm">{region.humidity}%</span>
             </div>
           </div>
