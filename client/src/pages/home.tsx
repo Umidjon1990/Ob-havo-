@@ -1,11 +1,12 @@
 import { useState, useEffect } from "react";
 import { motion, AnimatePresence } from "framer-motion";
-import { Menu, Search, Compass, Calendar, Settings, Cloud, Sun, CloudRain, Wind, MapPin, X, Info, Quote, Sparkles, Globe } from "lucide-react";
+import { Menu, Search, Compass, Calendar, Settings, Cloud, Sun, CloudRain, Wind, MapPin, X, Info, Quote, Sparkles, Globe, BookOpen } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import FlipCard from "@/components/FlipCard";
 import WeatherHero from "@/components/WeatherHero";
 import WeatherModal from "@/components/WeatherModal";
+import VocabularyModal from "@/components/VocabularyModal";
 import { Link, useSearch, useLocation } from "wouter";
 import heroBg from "@assets/generated_images/clean_modern_blue_sky_weather_background_with_soft_clouds.png";
 import { regions } from "@/data/regions";
@@ -14,6 +15,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 export default function Home() {
   const [activeRegion, setActiveRegion] = useState(regions[0]);
   const [modalOpen, setModalOpen] = useState(false);
+  const [vocabOpen, setVocabOpen] = useState(false);
   const [, setLocation] = useLocation();
   const search = useSearch();
   const [currentDate, setCurrentDate] = useState("");
@@ -32,7 +34,8 @@ export default function Home() {
       quote: "كُلّ يَوْم هُوَ فُرْصَة جَدِيدَة.",
       advice: "مَهْمَا كَان الطَّقْس الْيَوْم، حَافِظ عَلَى مِزَاجِك رَائِعاً!",
       select: "اخْتَر مَنْطِقَة",
-      yandex: "بَيَانَات مِنْ ياندكس"
+      yandex: "بَيَانَات مِنْ ياندكس",
+      vocab: "الْقَامُوس"
     },
     uz: {
       title: "Ob-Havo",
@@ -42,7 +45,8 @@ export default function Home() {
       quote: "Har bir kun - yangi imkoniyat.",
       advice: "Bugungi ob-havo qanday bo'lishidan qat'iy nazar, kayfiyatingizni a'lo darajada saqlang!",
       select: "Hududni tanlang",
-      yandex: "Ma'lumotlar Yandex dan"
+      yandex: "Ma'lumotlar Yandex dan",
+      vocab: "Lug'at"
     }
   };
 
@@ -107,8 +111,9 @@ export default function Home() {
                 <Globe className="w-4 h-4" />
                 {lang === 'ar' ? 'UZ' : 'AR'}
              </button>
-             <button onClick={() => setLocation('/forecast')} className="p-2 rounded-full hover:bg-white/50 transition-colors text-primary bg-white/30 backdrop-blur-sm border border-white/40 text-xs font-bold px-3">
-                {t.weekly}
+             <button onClick={() => setVocabOpen(true)} className="p-2 rounded-full hover:bg-white/50 transition-colors text-primary bg-white/30 backdrop-blur-sm border border-white/40 text-xs font-bold px-3 flex items-center gap-2">
+                <BookOpen className="w-4 h-4" />
+                <span className="hidden sm:inline">{t.vocab}</span>
              </button>
              <Link href="/admin">
                 <button className="p-2 rounded-full hover:bg-white/50 transition-colors text-muted-foreground bg-white/30 backdrop-blur-sm border border-white/40">
@@ -191,6 +196,13 @@ export default function Home() {
               isOpen={modalOpen} 
               onClose={() => setModalOpen(false)} 
               region={activeRegion}
+              lang={lang}
+            />
+          )}
+          {vocabOpen && (
+            <VocabularyModal
+              isOpen={vocabOpen}
+              onClose={() => setVocabOpen(false)}
               lang={lang}
             />
           )}
