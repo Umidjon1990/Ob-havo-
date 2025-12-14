@@ -188,25 +188,28 @@ export default function Home() {
                 <span className="text-[10px] text-muted-foreground/60">{t.source}</span>
               </div>
               <div className="grid grid-cols-2 gap-3" dir={isRtl ? "rtl" : "ltr"}>
-                {regions.map((region) => (
-                  <motion.div
-                    key={region.id}
-                    whileHover={{ scale: 1.02 }}
-                    whileTap={{ scale: 0.98 }}
-                    onClick={() => {
-                      setActiveRegionId(region.id);
-                      setModalOpen(true);
-                    }}
-                    className={`cursor-pointer rounded-2xl p-4 flex flex-col items-center justify-center gap-2 relative overflow-hidden glass-card border-white/40 shadow-sm ${activeRegion.id === region.id ? 'ring-2 ring-primary ring-offset-2 ring-offset-white/50' : ''}`}
-                  >
-                    <div className={`absolute inset-0 opacity-10 ${region.color}`} />
-                    <span className="font-display font-bold text-lg text-center z-10">{lang === 'ar' ? region.name_ar : region.name_uz}</span>
-                    <div className="flex items-center gap-1 text-xs font-medium text-muted-foreground z-10">
-                       <region.icon className="w-3 h-3" />
-                       <span>{region.temp}°</span>
-                    </div>
-                  </motion.div>
-                ))}
+                {regions.map((region) => {
+                  const RegionIcon = region.icon;
+                  return (
+                    <motion.div
+                      key={region.id}
+                      whileHover={{ scale: 1.02 }}
+                      whileTap={{ scale: 0.98 }}
+                      onClick={() => {
+                        setActiveRegionId(region.id);
+                        setModalOpen(true);
+                      }}
+                      className={`cursor-pointer rounded-2xl p-4 flex flex-col items-center justify-center gap-2 relative overflow-hidden glass-card border-white/40 shadow-sm ${activeRegion.id === region.id ? 'ring-2 ring-primary ring-offset-2 ring-offset-white/50' : ''}`}
+                    >
+                      <div className={`absolute inset-0 opacity-15 ${region.color}`} />
+                      <span className="font-display font-bold text-lg text-center z-10 text-slate-800">{lang === 'ar' ? region.name_ar : region.name_uz}</span>
+                      <div className="flex items-center gap-1 text-xs font-medium text-slate-600 z-10">
+                         <RegionIcon className="w-4 h-4" />
+                         <span className="font-bold">{region.temp}°</span>
+                      </div>
+                    </motion.div>
+                  );
+                })}
               </div>
             </div>
 
