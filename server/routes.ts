@@ -12,6 +12,11 @@ export async function registerRoutes(
   app: Express
 ): Promise<Server> {
   
+  // Health check endpoint for keep-alive pings
+  app.get("/api/health", (req, res) => {
+    res.json({ status: "ok", timestamp: new Date().toISOString() });
+  });
+
   // Weather API - Get all weather data
   app.get("/api/weather", async (req, res) => {
     try {
