@@ -134,6 +134,42 @@ export default function Home() {
     }
   }, [search, lang]);
 
+  if (isLoading) {
+    return (
+      <div className="h-screen w-full relative overflow-hidden bg-gradient-to-b from-blue-100 to-white flex flex-col items-center justify-center font-sans">
+        <motion.div 
+          initial={{ opacity: 0, scale: 0.8 }}
+          animate={{ opacity: 1, scale: 1 }}
+          transition={{ duration: 0.5 }}
+          className="text-center"
+        >
+          <div className="relative mb-6">
+            <motion.div
+              animate={{ rotate: 360 }}
+              transition={{ duration: 3, repeat: Infinity, ease: "linear" }}
+            >
+              <Sun className="w-16 h-16 text-yellow-500" />
+            </motion.div>
+            <motion.div
+              animate={{ x: [-10, 10, -10] }}
+              transition={{ duration: 2, repeat: Infinity }}
+              className="absolute -top-2 -right-4"
+            >
+              <Cloud className="w-10 h-10 text-blue-400" />
+            </motion.div>
+          </div>
+          <h2 className="text-2xl font-bold text-primary font-display mb-2">Ob-Havo</h2>
+          <p className="text-sm text-muted-foreground">Ma'lumotlar yuklanmoqda...</p>
+          <div className="mt-4 flex gap-1 justify-center">
+            <motion.div animate={{ opacity: [0.3, 1, 0.3] }} transition={{ duration: 1, repeat: Infinity, delay: 0 }} className="w-2 h-2 bg-primary rounded-full" />
+            <motion.div animate={{ opacity: [0.3, 1, 0.3] }} transition={{ duration: 1, repeat: Infinity, delay: 0.2 }} className="w-2 h-2 bg-primary rounded-full" />
+            <motion.div animate={{ opacity: [0.3, 1, 0.3] }} transition={{ duration: 1, repeat: Infinity, delay: 0.4 }} className="w-2 h-2 bg-primary rounded-full" />
+          </div>
+        </motion.div>
+      </div>
+    );
+  }
+
   return (
     <div className="h-screen w-full relative overflow-hidden bg-background text-foreground flex flex-col font-sans select-none">
       {/* Background Image with Overlay */}
