@@ -85,31 +85,31 @@ export async function handleTelegramUpdate(update: TelegramUpdate) {
     
     const keyboard = [
       [
-        { text: "🏙 طَشْقَنْد", web_app: { url: `${appBaseUrl}?region=toshkent` } },
-        { text: "🏙 سَمَرْقَنْد", web_app: { url: `${appBaseUrl}?region=samarqand` } }
+        { text: "🏙 Toshkent | طَشْقَنْد", web_app: { url: `${appBaseUrl}?region=toshkent` } },
+        { text: "🏙 Samarqand | سَمَرْقَنْد", web_app: { url: `${appBaseUrl}?region=samarqand` } }
       ],
       [
-        { text: "🏙 بُخَارَى", web_app: { url: `${appBaseUrl}?region=buxoro` } },
-        { text: "🏙 أَنْدِيجَان", web_app: { url: `${appBaseUrl}?region=andijon` } }
+        { text: "🏙 Buxoro | بُخَارَى", web_app: { url: `${appBaseUrl}?region=buxoro` } },
+        { text: "🏙 Andijon | أَنْدِيجَان", web_app: { url: `${appBaseUrl}?region=andijon` } }
       ],
       [
-        { text: "🏙 نَمَنْغَان", web_app: { url: `${appBaseUrl}?region=namangan` } },
-        { text: "🏙 فَرْغَانَة", web_app: { url: `${appBaseUrl}?region=fargona` } }
+        { text: "🏙 Namangan | نَمَنْغَان", web_app: { url: `${appBaseUrl}?region=namangan` } },
+        { text: "🏙 Farg'ona | فَرْغَانَة", web_app: { url: `${appBaseUrl}?region=fargona` } }
       ],
       [
-        { text: "🏙 نُوكُوس", web_app: { url: `${appBaseUrl}?region=nukus` } },
-        { text: "🏙 قَرْشِي", web_app: { url: `${appBaseUrl}?region=qarshi` } }
+        { text: "🏙 Nukus | نُوكُوس", web_app: { url: `${appBaseUrl}?region=nukus` } },
+        { text: "🏙 Qarshi | قَرْشِي", web_app: { url: `${appBaseUrl}?region=qarshi` } }
       ],
       [
-        { text: "🏙 أُورْجِينْتْش", web_app: { url: `${appBaseUrl}?region=urganch` } },
-        { text: "🏙 جِيزَاك", web_app: { url: `${appBaseUrl}?region=jizzax` } }
+        { text: "🏙 Urganch | أُورْجِينْتْش", web_app: { url: `${appBaseUrl}?region=urganch` } },
+        { text: "🏙 Jizzax | جِيزَاك", web_app: { url: `${appBaseUrl}?region=jizzax` } }
       ],
       [
-        { text: "🏙 نَوَاوِي", web_app: { url: `${appBaseUrl}?region=navoiy` } },
-        { text: "🏙 جُولِيسْتَان", web_app: { url: `${appBaseUrl}?region=guliston` } }
+        { text: "🏙 Navoiy | نَوَاوِي", web_app: { url: `${appBaseUrl}?region=navoiy` } },
+        { text: "🏙 Guliston | جُولِيسْتَان", web_app: { url: `${appBaseUrl}?region=guliston` } }
       ],
       [
-        { text: "🏙 تِرْمِذ", web_app: { url: `${appBaseUrl}?region=termiz` } }
+        { text: "🏙 Termiz | تِرْمِذ", web_app: { url: `${appBaseUrl}?region=termiz` } }
       ],
       [
         { text: langButtonText }
@@ -139,31 +139,31 @@ export async function handleTelegramUpdate(update: TelegramUpdate) {
     
     const keyboard = [
       [
-        { text: "🏙 طَشْقَنْد", web_app: { url: `${appBaseUrl}?region=toshkent` } },
-        { text: "🏙 سَمَرْقَنْد", web_app: { url: `${appBaseUrl}?region=samarqand` } }
+        { text: "🏙 Toshkent | طَشْقَنْد", web_app: { url: `${appBaseUrl}?region=toshkent` } },
+        { text: "🏙 Samarqand | سَمَرْقَنْد", web_app: { url: `${appBaseUrl}?region=samarqand` } }
       ],
       [
-        { text: "🏙 بُخَارَى", web_app: { url: `${appBaseUrl}?region=buxoro` } },
-        { text: "🏙 أَنْدِيجَان", web_app: { url: `${appBaseUrl}?region=andijon` } }
+        { text: "🏙 Buxoro | بُخَارَى", web_app: { url: `${appBaseUrl}?region=buxoro` } },
+        { text: "🏙 Andijon | أَنْدِيجَان", web_app: { url: `${appBaseUrl}?region=andijon` } }
       ],
       [
-        { text: "🏙 نَمَنْغَان", web_app: { url: `${appBaseUrl}?region=namangan` } },
-        { text: "🏙 فَرْغَانَة", web_app: { url: `${appBaseUrl}?region=fargona` } }
+        { text: "🏙 Namangan | نَمَنْغَان", web_app: { url: `${appBaseUrl}?region=namangan` } },
+        { text: "🏙 Farg'ona | فَرْغَانَة", web_app: { url: `${appBaseUrl}?region=fargona` } }
       ],
       [
-        { text: "🏙 نُوكُوس", web_app: { url: `${appBaseUrl}?region=nukus` } },
-        { text: "🏙 قَرْشِي", web_app: { url: `${appBaseUrl}?region=qarshi` } }
+        { text: "🏙 Nukus | نُوكُوس", web_app: { url: `${appBaseUrl}?region=nukus` } },
+        { text: "🏙 Qarshi | قَرْشِي", web_app: { url: `${appBaseUrl}?region=qarshi` } }
       ],
       [
-        { text: "🏙 أُورْجِينْتْش", web_app: { url: `${appBaseUrl}?region=urganch` } },
-        { text: "🏙 جِيزَاك", web_app: { url: `${appBaseUrl}?region=jizzax` } }
+        { text: "🏙 Urganch | أُورْجِينْتْش", web_app: { url: `${appBaseUrl}?region=urganch` } },
+        { text: "🏙 Jizzax | جِيزَاك", web_app: { url: `${appBaseUrl}?region=jizzax` } }
       ],
       [
-        { text: "🏙 نَوَاوِي", web_app: { url: `${appBaseUrl}?region=navoiy` } },
-        { text: "🏙 جُولِيسْتَان", web_app: { url: `${appBaseUrl}?region=guliston` } }
+        { text: "🏙 Navoiy | نَوَاوِي", web_app: { url: `${appBaseUrl}?region=navoiy` } },
+        { text: "🏙 Guliston | جُولِيسْتَان", web_app: { url: `${appBaseUrl}?region=guliston` } }
       ],
       [
-        { text: "🏙 تِرْمِذ", web_app: { url: `${appBaseUrl}?region=termiz` } }
+        { text: "🏙 Termiz | تِرْمِذ", web_app: { url: `${appBaseUrl}?region=termiz` } }
       ],
       [
         { text: langButtonText }
