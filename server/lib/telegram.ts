@@ -73,10 +73,48 @@ export async function handleTelegramUpdate(update: TelegramUpdate) {
   // Handle commands
   if (text?.startsWith('/start')) {
     const welcomeMessage = user.preferredLang === 'ar'
-      ? `مرحباً ${from.first_name}! 🌤\n\nأنا بوت الطقس الذكي. يمكنني إعطاؤك توقعات الطقس وتعليمك كلمات جديدة.\n\nاستخدم /weather لمعرفة الطقس الحالي.`
-      : `Assalomu alaykum ${from.first_name}! 🌤\n\nMen aqlli ob-havo boti. Sizga ob-havo ma'lumotlarini beraman va yangi so'zlarni o'rgataman.\n\n/weather - joriy ob-havo`;
+      ? `مرحباً ${from.first_name}! 🌤\n\nأنا بوت الطقس الذكي. اختر المنطقة لمعرفة الطقس:`
+      : `Assalomu alaykum ${from.first_name}! 🌤\n\nMen aqlli ob-havo boti. Ob-havo ma'lumotini ko'rish uchun viloyatni tanlang:`;
     
-    await sendTelegramMessage(chatId, welcomeMessage);
+    const appBaseUrl = process.env.REPLIT_DEV_DOMAIN 
+      ? `https://${process.env.REPLIT_DEV_DOMAIN}`
+      : 'https://ob-havo.replit.app';
+    
+    const keyboard = [
+      [
+        { text: "🏙 طَشْقَنْد", web_app: { url: `${appBaseUrl}?region=toshkent` } },
+        { text: "🏙 سَمَرْقَنْد", web_app: { url: `${appBaseUrl}?region=samarqand` } }
+      ],
+      [
+        { text: "🏙 بُخَارَى", web_app: { url: `${appBaseUrl}?region=buxoro` } },
+        { text: "🏙 أَنْدِيجَان", web_app: { url: `${appBaseUrl}?region=andijon` } }
+      ],
+      [
+        { text: "🏙 نَمَنْغَان", web_app: { url: `${appBaseUrl}?region=namangan` } },
+        { text: "🏙 فَرْغَانَة", web_app: { url: `${appBaseUrl}?region=fargona` } }
+      ],
+      [
+        { text: "🏙 نُوكُوس", web_app: { url: `${appBaseUrl}?region=nukus` } },
+        { text: "🏙 قَرْشِي", web_app: { url: `${appBaseUrl}?region=qarshi` } }
+      ],
+      [
+        { text: "🏙 أُورْجِينْتْش", web_app: { url: `${appBaseUrl}?region=urganch` } },
+        { text: "🏙 جِيزَاك", web_app: { url: `${appBaseUrl}?region=jizzax` } }
+      ],
+      [
+        { text: "🏙 نَوَاوِي", web_app: { url: `${appBaseUrl}?region=navoiy` } },
+        { text: "🏙 جُولِيسْتَان", web_app: { url: `${appBaseUrl}?region=guliston` } }
+      ],
+      [
+        { text: "🏙 تِرْمِذ", web_app: { url: `${appBaseUrl}?region=termiz` } }
+      ]
+    ];
+    
+    await sendTelegramMessage(chatId, welcomeMessage, 'HTML', {
+      keyboard,
+      resize_keyboard: true,
+      one_time_keyboard: false
+    });
   } 
   else if (text?.startsWith('/weather')) {
     const region = user.preferredRegion || 'toshkent';
@@ -161,28 +199,29 @@ const ALL_REGIONS = [
 
 export async function sendDailyChannelMessage(channelId: string, miniAppUrl?: string) {
   const weatherLines: string[] = [];
-  const inlineKeyboard: any[][] = [];
   
   for (const region of ALL_REGIONS) {
     const weatherData = await storage.getWeatherCache(region.id);
     const temp = weatherData?.temperature ?? "--";
+    const humidity = weatherData?.humidity ?? "--";
     
     let condition_ar = "—";
+    let windSpeed = "--";
     if (weatherData?.forecastData) {
       try {
         const forecast = JSON.parse(weatherData.forecastData);
         condition_ar = forecast.condition_ar || "—";
+        windSpeed = forecast.windSpeed || "--";
       } catch {}
     }
     
-    weatherLines.push(`🏙 <b>${region.name_ar}</b>: ${temp}°C، ${condition_ar}`);
-    
-    const appUrl = process.env.REPLIT_DEV_DOMAIN 
-      ? `https://${process.env.REPLIT_DEV_DOMAIN}?region=${region.id}`
-      : `https://ob-havo.replit.app?region=${region.id}`;
-    inlineKeyboard.push([
-      { text: `📍 ${region.name_ar} - التفاصيل`, url: appUrl }
-    ]);
+    weatherLines.push(
+      `┌─────────────────────┐\n` +
+      `│ 🏙 <b>${region.name_ar}</b>\n` +
+      `│ 🌡 ${temp}°C  │  💧 ${humidity}%  │  💨 ${windSpeed} km/h\n` +
+      `│ ${condition_ar}\n` +
+      `└─────────────────────┘`
+    );
   }
   
   const today = new Date().toLocaleDateString('ar-SA', { 
@@ -192,15 +231,20 @@ export async function sendDailyChannelMessage(channelId: string, miniAppUrl?: st
     day: 'numeric' 
   });
   
-  const message = `🌤 <b>النَّشْرَة الجَوِّيَّة اليَوْم</b>
+  const message = `☀️ <b>النَّشْرَة الجَوِّيَّة لِأُوزْبَكِسْتَان</b> ☀️
+━━━━━━━━━━━━━━━━━━━━━
 📅 ${today}
+━━━━━━━━━━━━━━━━━━━━━
 
-${weatherLines.join('\n')}
+${weatherLines.join('\n\n')}
 
-📱 اضْغَط عَلَى المَدِينَة لِلتَّفَاصِيل:`;
+━━━━━━━━━━━━━━━━━━━━━
+📲 لِلْمَزِيد مِنَ التَّفَاصِيل، اضْغَط عَلَى الزِّر أَدْنَاه`;
 
   await sendTelegramMessage(Number(channelId), message, 'HTML', {
-    inline_keyboard: inlineKeyboard
+    inline_keyboard: [[
+      { text: "📱 بَتَفْصِيل - Batafsil", url: "https://t.me/Ztobhavobot" }
+    ]]
   });
 }
 
