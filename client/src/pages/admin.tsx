@@ -1,5 +1,5 @@
 import { useState, useEffect } from "react";
-import { ArrowLeft, Save, RefreshCw, Send, Radio, Plus, Trash2, Users } from "lucide-react";
+import { ArrowLeft, Save, RefreshCw, Send, Radio, Plus, Trash2, Users, Cloud } from "lucide-react";
 import { Link } from "wouter";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -7,7 +7,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { useToast } from "@/hooks/use-toast";
 import { Switch } from "@/components/ui/switch";
-import { setupTelegramWebhook, getBotSettings, updateBotSettings, testChannelMessage, getChannels, addChannel, removeChannel, toggleChannel, broadcastToAllChannels, type Channel } from "@/lib/api";
+import { setupTelegramWebhook, getBotSettings, updateBotSettings, testChannelMessage, getChannels, addChannel, removeChannel, toggleChannel, broadcastToAllChannels, refreshWeatherData, type Channel } from "@/lib/api";
 import { regions } from "@/data/regions";
 
 export default function Admin() {
@@ -33,6 +33,7 @@ export default function Admin() {
   const [newChannelTitle, setNewChannelTitle] = useState("");
   const [newChannelType, setNewChannelType] = useState<"channel" | "group">("channel");
   const [broadcasting, setBroadcasting] = useState(false);
+  const [refreshingWeather, setRefreshingWeather] = useState(false);
 
   useEffect(() => {
     getBotSettings().then(settings => {
@@ -89,6 +90,17 @@ export default function Admin() {
       toast({ title: "Xatolik", description: "Xabar yuborishda muammo", variant: "destructive" });
     }
     setBroadcasting(false);
+  };
+
+  const handleRefreshWeather = async () => {
+    setRefreshingWeather(true);
+    const result = await refreshWeatherData();
+    if (result?.success) {
+      toast({ title: "Yangilandi!", description: "Ob-havo ma'lumotlari yangilandi." });
+    } else {
+      toast({ title: "Xatolik", description: "Yangilashda muammo", variant: "destructive" });
+    }
+    setRefreshingWeather(false);
   };
 
   const handleSetupWebhook = async () => {
@@ -318,6 +330,24 @@ export default function Admin() {
                         <div><code className="bg-muted px-2 py-1 rounded">/weather</code> - Joriy ob-havo</div>
                         <div><code className="bg-muted px-2 py-1 rounded">/lang</code> - Tilni o'zgartirish</div>
                     </div>
+                </div>
+
+                <div className="border-t pt-4 space-y-3">
+                    <h3 className="text-sm font-semibold flex items-center gap-2">
+                      <Cloud className="w-4 h-4" /> Ob-havo ma'lumotlari
+                    </h3>
+                    <p className="text-xs text-muted-foreground">
+                      Ob-havo har 30 daqiqada avtomatik yangilanadi. Qo'lda yangilash uchun tugmani bosing.
+                    </p>
+                    <Button 
+                      onClick={handleRefreshWeather} 
+                      disabled={refreshingWeather}
+                      className="w-full"
+                      variant="outline"
+                    >
+                      <RefreshCw className={`w-4 h-4 mr-2 ${refreshingWeather ? 'animate-spin' : ''}`} />
+                      {refreshingWeather ? "Yangilanmoqda..." : "Ob-havo ma'lumotlarini yangilash"}
+                    </Button>
                 </div>
 
                 <div className="border-t pt-4">

@@ -165,3 +165,15 @@ export async function broadcastToAllChannels(): Promise<{ ok: boolean; sent: num
     return null;
   }
 }
+
+export async function refreshWeatherData(): Promise<{ success: boolean; message: string } | null> {
+  try {
+    const response = await fetch('/api/weather/refresh', {
+      method: 'POST',
+    });
+    return await response.json();
+  } catch (error) {
+    console.error('Error refreshing weather:', error);
+    return null;
+  }
+}

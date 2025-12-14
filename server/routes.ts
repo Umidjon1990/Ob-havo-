@@ -3,6 +3,7 @@ import { createServer, type Server } from "http";
 import { storage } from "./storage";
 import { handleTelegramUpdate, sendTelegramMessage, setTelegramWebhook } from "./lib/telegram";
 import { generateWeatherAdvice, generateVocabularyExample } from "./lib/openai";
+import { updateWeatherCache } from "./lib/weather";
 import { regions } from "../client/src/data/regions";
 import { vocabulary } from "../client/src/data/vocabulary";
 
@@ -66,6 +67,16 @@ export async function registerRoutes(
       res.json({ advice });
     } catch (error) {
       res.status(500).json({ error: "Failed to generate advice" });
+    }
+  });
+
+  // Manual weather refresh endpoint
+  app.post("/api/weather/refresh", async (req, res) => {
+    try {
+      await updateWeatherCache();
+      res.json({ success: true, message: "Weather data refreshed successfully" });
+    } catch (error) {
+      res.status(500).json({ error: "Failed to refresh weather data" });
     }
   });
 
