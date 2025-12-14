@@ -168,12 +168,12 @@ export async function registerRoutes(
     }
   });
 
-  // Test channel message
+  // Test channel message (sends all regions with "Batafsil" buttons)
   app.post("/api/telegram/test-channel", async (req, res) => {
     try {
-      const { channelId, region } = req.body;
+      const { channelId, miniAppUrl } = req.body;
       const { sendDailyChannelMessage } = await import("./lib/telegram");
-      await sendDailyChannelMessage(channelId, region || 'tashkent');
+      await sendDailyChannelMessage(channelId, miniAppUrl);
       res.json({ ok: true });
     } catch (error: any) {
       res.status(500).json({ error: error.message });

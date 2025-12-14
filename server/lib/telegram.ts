@@ -21,7 +21,7 @@ interface TelegramUpdate {
 
 const BOT_TOKEN = process.env.TELEGRAM_BOT_TOKEN;
 
-export async function sendTelegramMessage(chatId: number, text: string, parseMode: string = 'HTML') {
+export async function sendTelegramMessage(chatId: number, text: string, parseMode: string = 'HTML', replyMarkup?: any) {
   if (!BOT_TOKEN) {
     console.error("TELEGRAM_BOT_TOKEN not set");
     return;
@@ -30,14 +30,20 @@ export async function sendTelegramMessage(chatId: number, text: string, parseMod
   const url = `https://api.telegram.org/bot${BOT_TOKEN}/sendMessage`;
   
   try {
+    const body: any = {
+      chat_id: chatId,
+      text,
+      parse_mode: parseMode,
+    };
+    
+    if (replyMarkup) {
+      body.reply_markup = replyMarkup;
+    }
+    
     const response = await fetch(url, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        chat_id: chatId,
-        text,
-        parse_mode: parseMode,
-      }),
+      body: JSON.stringify(body),
     });
     
     return await response.json();
@@ -124,28 +130,59 @@ export async function setTelegramWebhook(webhookUrl: string) {
   return await response.json();
 }
 
-export async function sendDailyChannelMessage(channelId: string, region: string) {
-  const weatherData = await storage.getWeatherCache(region);
+const ALL_REGIONS = [
+  { id: "toshkent", name: "Toshkent" },
+  { id: "samarqand", name: "Samarqand" },
+  { id: "buxoro", name: "Buxoro" },
+  { id: "andijon", name: "Andijon" },
+  { id: "namangan", name: "Namangan" },
+  { id: "fargona", name: "Farg'ona" },
+  { id: "nukus", name: "Nukus" },
+  { id: "qarshi", name: "Qarshi" },
+  { id: "urganch", name: "Urganch" },
+  { id: "jizzax", name: "Jizzax" },
+  { id: "navoiy", name: "Navoiy" },
+  { id: "guliston", name: "Guliston" },
+  { id: "termiz", name: "Termiz" },
+];
+
+export async function sendDailyChannelMessage(channelId: string, miniAppUrl?: string) {
+  const weatherLines: string[] = [];
+  const inlineKeyboard: any[][] = [];
   
-  const advice = await generateWeatherAdvice(
-    region,
-    weatherData?.temperature || 20,
-    weatherData?.condition || 'Ochiq',
-    'uz'
-  );
+  for (const region of ALL_REGIONS) {
+    const weatherData = await storage.getWeatherCache(region.id);
+    const temp = weatherData?.temperature ?? "--";
+    const condition = weatherData?.condition || "—";
+    
+    weatherLines.push(`🏙 <b>${region.name}</b>: ${temp}°C, ${condition}`);
+    
+    const buttonUrl = miniAppUrl 
+      ? `${miniAppUrl}?region=${region.id}`
+      : `https://t.me/ObHavoUzBot/app?startapp=${region.id}`;
+    
+    inlineKeyboard.push([
+      { text: `📍 ${region.name} - Batafsil`, url: buttonUrl }
+    ]);
+  }
   
-  const message = `🌤 <b>Bugungi Ob-Havo - ${region.charAt(0).toUpperCase() + region.slice(1)}</b>
+  const today = new Date().toLocaleDateString('uz-UZ', { 
+    weekday: 'long', 
+    year: 'numeric', 
+    month: 'long', 
+    day: 'numeric' 
+  });
+  
+  const message = `🌤 <b>Bugungi Ob-Havo</b>
+📅 ${today}
 
-🌡 Harorat: ${weatherData?.temperature || 20}°C
-☁️ Holat: ${weatherData?.condition || 'Ochiq'}
-💧 Namlik: ${weatherData?.humidity || 45}%
-💨 Shamol: ${weatherData?.windSpeed || 10} km/s
+${weatherLines.join('\n')}
 
-💡 <i>${advice}</i>
+📱 Batafsil ma'lumot uchun quyidagi tugmalarni bosing:`;
 
-📱 Mini App: t.me/YOUR_BOT?startapp=${region}`;
-
-  await sendTelegramMessage(Number(channelId), message);
+  await sendTelegramMessage(Number(channelId), message, 'HTML', {
+    inline_keyboard: inlineKeyboard
+  });
 }
 
 export async function startDailyMessageScheduler() {
@@ -162,7 +199,7 @@ export async function startDailyMessageScheduler() {
         const today = new Date().toDateString();
         
         if (!lastSent || new Date(lastSent).toDateString() !== today) {
-          await sendDailyChannelMessage(settings.channelId, settings.dailyRegion || 'tashkent');
+          await sendDailyChannelMessage(settings.channelId);
           await storage.updateBotSettings({ lastDailyMessageSent: new Date() });
           console.log("Daily message sent to channel");
         }
