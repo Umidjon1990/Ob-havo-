@@ -83,9 +83,9 @@ export function UzbekistanMap({ onRegionSelect, className, selectedRegion }: Uzb
                   animate={{ 
                     opacity: 1, 
                     scale: 1,
-                    fill: isSelected ? 'hsl(var(--primary))' : isHovered ? 'hsl(var(--primary) / 0.5)' : 'hsl(var(--foreground) / 0.1)',
-                    stroke: isSelected ? '#ffffff' : 'hsl(var(--foreground) / 0.2)',
-                    strokeWidth: isSelected ? 2 : 1,
+                    fill: isSelected ? 'hsl(var(--primary))' : isHovered ? 'hsl(var(--primary) / 0.5)' : 'hsl(var(--foreground) / 0.2)',
+                    stroke: isSelected ? '#ffffff' : 'hsl(var(--foreground) / 0.3)',
+                    strokeWidth: isSelected ? 2.5 : 1.5,
                     zIndex: isHovered || isSelected ? 10 : 1
                   }}
                   transition={{ duration: 0.3 }}
