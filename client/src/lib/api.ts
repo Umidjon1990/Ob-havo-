@@ -177,3 +177,24 @@ export async function refreshWeatherData(): Promise<{ success: boolean; message:
     return null;
   }
 }
+
+export interface GeneratedWord {
+  ar: string;
+  uz: string;
+  context: string;
+}
+
+export async function generateNewVocabulary(count: number = 5): Promise<GeneratedWord[]> {
+  try {
+    const response = await fetch('/api/vocabulary/generate', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ count }),
+    });
+    const data = await response.json();
+    return data.words || [];
+  } catch (error) {
+    console.error('Error generating vocabulary:', error);
+    return [];
+  }
+}

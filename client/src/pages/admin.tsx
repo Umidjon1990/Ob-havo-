@@ -7,7 +7,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { useToast } from "@/hooks/use-toast";
 import { Switch } from "@/components/ui/switch";
-import { setupTelegramWebhook, getBotSettings, updateBotSettings, testChannelMessage, getChannels, addChannel, removeChannel, toggleChannel, broadcastToAllChannels, refreshWeatherData, type Channel } from "@/lib/api";
+import { setupTelegramWebhook, getBotSettings, updateBotSettings, testChannelMessage, getChannels, addChannel, removeChannel, toggleChannel, broadcastToAllChannels, refreshWeatherData, generateNewVocabulary, type Channel, type GeneratedWord } from "@/lib/api";
 import { regions } from "@/data/regions";
 
 export default function Admin() {
@@ -34,6 +34,8 @@ export default function Admin() {
   const [newChannelType, setNewChannelType] = useState<"channel" | "group">("channel");
   const [broadcasting, setBroadcasting] = useState(false);
   const [refreshingWeather, setRefreshingWeather] = useState(false);
+  const [generatingWords, setGeneratingWords] = useState(false);
+  const [generatedWords, setGeneratedWords] = useState<GeneratedWord[]>([]);
 
   useEffect(() => {
     getBotSettings().then(settings => {
@@ -161,21 +163,37 @@ export default function Admin() {
     });
   };
 
-  const generateAI = () => {
+  const generateAI = async () => {
+    setGeneratingWords(true);
     toast({
       title: "AI Generatsiya",
-      description: "ChatGPT yangi so'z yozmoqda...",
+      description: "ChatGPT yangi so'zlar yozmoqda...",
     });
-    // Mock AI delay
-    setTimeout(() => {
-        setFormData({
-            ...formData,
-            arabicWord: "حَيَاة",
-            uzbekWord: "Hayot",
-            pronunciation: "Hayaat",
-            context: "Hayot - bu eng katta ne'mat. Har bir lahzani qadrlash kerak."
-        })
-    }, 1000);
+    
+    const words = await generateNewVocabulary(5);
+    
+    if (words.length > 0) {
+      setGeneratedWords(words);
+      // Set first word to form
+      setFormData({
+        ...formData,
+        arabicWord: words[0].ar,
+        uzbekWord: words[0].uz,
+        pronunciation: "",
+        context: words[0].context
+      });
+      toast({
+        title: "Tayyor!",
+        description: `${words.length} ta yangi so'z generatsiya qilindi.`,
+      });
+    } else {
+      toast({
+        title: "Xatolik",
+        description: "So'z generatsiya qilib bo'lmadi.",
+        variant: "destructive",
+      });
+    }
+    setGeneratingWords(false);
   };
 
   return (
@@ -193,8 +211,9 @@ export default function Admin() {
         <Card className="glass-panel border-white/20">
           <CardHeader className="flex flex-row items-center justify-between">
             <CardTitle>Kun So'zi Tahriri</CardTitle>
-            <Button variant="outline" size="sm" onClick={generateAI} className="gap-2">
-              <RefreshCw className="w-4 h-4" /> AI Yordam
+            <Button variant="outline" size="sm" onClick={generateAI} disabled={generatingWords} className="gap-2">
+              <RefreshCw className={`w-4 h-4 ${generatingWords ? 'animate-spin' : ''}`} /> 
+              {generatingWords ? "Generatsiya..." : "AI Yordam"}
             </Button>
           </CardHeader>
           <CardContent className="space-y-4">
@@ -236,6 +255,33 @@ export default function Admin() {
             <Button onClick={handleSave} className="w-full bg-primary text-primary-foreground hover:bg-primary/90 mt-4">
               <Save className="w-4 h-4 mr-2" /> Saqlash va E'lon qilish
             </Button>
+
+            {generatedWords.length > 0 && (
+              <div className="border-t pt-4 mt-4">
+                <h4 className="text-sm font-medium mb-3">AI tomonidan generatsiya qilingan so'zlar:</h4>
+                <div className="space-y-2">
+                  {generatedWords.map((word, index) => (
+                    <div 
+                      key={index} 
+                      className="p-3 bg-muted rounded-lg cursor-pointer hover:bg-muted/80 transition-colors"
+                      onClick={() => setFormData({
+                        ...formData,
+                        arabicWord: word.ar,
+                        uzbekWord: word.uz,
+                        pronunciation: "",
+                        context: word.context
+                      })}
+                    >
+                      <div className="flex items-center justify-between">
+                        <span className="font-arabic text-lg">{word.ar}</span>
+                        <span className="text-sm font-medium">{word.uz}</span>
+                      </div>
+                      <p className="text-xs text-muted-foreground mt-1">{word.context}</p>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
           </CardContent>
         </Card>
 

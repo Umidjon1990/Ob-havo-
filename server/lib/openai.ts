@@ -53,4 +53,35 @@ export async function generateVocabularyExample(
   }
 }
 
+export async function generateNewVocabulary(count: number = 5): Promise<Array<{ar: string, uz: string, context: string}>> {
+  const prompt = `Ob-havo mavzusida ${count} ta yangi arabcha so'z va ularning o'zbekcha tarjimasini yozing. 
+Har bir so'z uchun qisqa izoh ham bering.
+
+Javobni JSON formatda bering:
+[
+  {"ar": "arabcha so'z (harakat belgilari bilan)", "uz": "o'zbekcha tarjima", "context": "qisqa izoh"}
+]
+
+Faqat JSON qaytaring, boshqa hech narsa yo'q.`;
+
+  try {
+    const response = await openai.chat.completions.create({
+      model: "gpt-5",
+      messages: [{ role: "user", content: prompt }],
+      max_completion_tokens: 500,
+    });
+    
+    const content = response.choices[0]?.message?.content || "[]";
+    // Extract JSON from response
+    const jsonMatch = content.match(/\[[\s\S]*\]/);
+    if (jsonMatch) {
+      return JSON.parse(jsonMatch[0]);
+    }
+    return [];
+  } catch (error) {
+    console.error("OpenAI API error:", error);
+    return [];
+  }
+}
+
 export { openai };

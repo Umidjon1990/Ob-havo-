@@ -2,7 +2,7 @@ import type { Express } from "express";
 import { createServer, type Server } from "http";
 import { storage } from "./storage";
 import { handleTelegramUpdate, sendTelegramMessage, setTelegramWebhook } from "./lib/telegram";
-import { generateWeatherAdvice, generateVocabularyExample } from "./lib/openai";
+import { generateWeatherAdvice, generateVocabularyExample, generateNewVocabulary } from "./lib/openai";
 import { updateWeatherCache } from "./lib/weather";
 import { regions } from "../client/src/data/regions";
 import { vocabulary } from "../client/src/data/vocabulary";
@@ -98,6 +98,17 @@ export async function registerRoutes(
       res.json({ example });
     } catch (error) {
       res.status(500).json({ error: "Failed to generate example" });
+    }
+  });
+
+  // Generate new vocabulary words using AI
+  app.post("/api/vocabulary/generate", async (req, res) => {
+    try {
+      const { count } = req.body;
+      const words = await generateNewVocabulary(count || 5);
+      res.json({ words });
+    } catch (error) {
+      res.status(500).json({ error: "Failed to generate vocabulary" });
     }
   });
 
