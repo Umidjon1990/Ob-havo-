@@ -72,13 +72,16 @@ export async function handleTelegramUpdate(update: TelegramUpdate) {
 
   // Handle commands
   if (text?.startsWith('/start')) {
+    const currentLang = user.preferredLang === 'ar' ? 'العربية' : "O'zbekcha";
     const welcomeMessage = user.preferredLang === 'ar'
-      ? `مرحباً ${from.first_name}! 🌤\n\nأنا بوت الطقس الذكي. اختر المنطقة لمعرفة الطقس:`
-      : `Assalomu alaykum ${from.first_name}! 🌤\n\nMen aqlli ob-havo boti. Ob-havo ma'lumotini ko'rish uchun viloyatni tanlang:`;
+      ? `🎓 <b>مشروع التعليم الحديث</b>\n\n☀️ مرحباً ${from.first_name}!\n\nاختر المنطقة لمعرفة الطقس:`
+      : `🎓 <b>Zamonaviy ta'lim loyihasi</b>\n\n☀️ Assalomu alaykum ${from.first_name}!\n\nOb-havo ma'lumotini ko'rish uchun viloyatni tanlang:`;
     
     const appBaseUrl = process.env.REPLIT_DEV_DOMAIN 
       ? `https://${process.env.REPLIT_DEV_DOMAIN}`
       : 'https://ob-havo.replit.app';
+    
+    const langButtonText = user.preferredLang === 'ar' ? "🌐 تغيير اللغة → O'zbekcha" : "🌐 Tilni o'zgartirish → العربية";
     
     const keyboard = [
       [
@@ -107,6 +110,9 @@ export async function handleTelegramUpdate(update: TelegramUpdate) {
       ],
       [
         { text: "🏙 تِرْمِذ", web_app: { url: `${appBaseUrl}?region=termiz` } }
+      ],
+      [
+        { text: langButtonText }
       ]
     ];
     
@@ -115,6 +121,17 @@ export async function handleTelegramUpdate(update: TelegramUpdate) {
       resize_keyboard: true,
       one_time_keyboard: false
     });
+  }
+  // Handle language change button
+  else if (text?.includes("Tilni o'zgartirish") || text?.includes("تغيير اللغة")) {
+    const newLang = user.preferredLang === 'ar' ? 'uz' : 'ar';
+    await storage.updateUserPreferences(user.id, newLang);
+    
+    const message = newLang === 'ar'
+      ? 'تم تغيير اللغة إلى العربية ✓\n\nاضغط /start لرؤية القائمة الجديدة'
+      : "Til o'zbekchaga o'zgartirildi ✓\n\nYangi menyuni ko'rish uchun /start bosing";
+    
+    await sendTelegramMessage(chatId, message);
   } 
   else if (text?.startsWith('/weather')) {
     const region = user.preferredRegion || 'toshkent';
