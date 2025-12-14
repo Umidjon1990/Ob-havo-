@@ -38,6 +38,8 @@ export const botSettings = pgTable("bot_settings", {
   dailyMessageEnabled: boolean("daily_message_enabled").default(false),
   dailyMessageTime: text("daily_message_time").default("08:00"),
   dailyRegion: text("daily_region").default("tashkent"),
+  dailyWisdomUz: text("daily_wisdom_uz"),
+  dailyWisdomAr: text("daily_wisdom_ar"),
   lastDailyMessageSent: timestamp("last_daily_message_sent"),
   updatedAt: timestamp("updated_at").defaultNow(),
 });

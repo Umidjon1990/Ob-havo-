@@ -26,6 +26,8 @@ export default function Admin() {
   const [dailyEnabled, setDailyEnabled] = useState(false);
   const [dailyTime, setDailyTime] = useState("08:00");
   const [dailyRegion, setDailyRegion] = useState("tashkent");
+  const [dailyWisdomUz, setDailyWisdomUz] = useState("");
+  const [dailyWisdomAr, setDailyWisdomAr] = useState("");
   const [testingChannel, setTestingChannel] = useState(false);
   
   const [channels, setChannels] = useState<Channel[]>([]);
@@ -44,6 +46,8 @@ export default function Admin() {
         setDailyEnabled(settings.dailyMessageEnabled || false);
         setDailyTime(settings.dailyMessageTime || "08:00");
         setDailyRegion(settings.dailyRegion || "tashkent");
+        setDailyWisdomUz(settings.dailyWisdomUz || "");
+        setDailyWisdomAr(settings.dailyWisdomAr || "");
       }
     });
     loadChannels();
@@ -134,6 +138,8 @@ export default function Admin() {
       dailyMessageEnabled: dailyEnabled,
       dailyMessageTime: dailyTime,
       dailyRegion,
+      dailyWisdomUz: dailyWisdomUz || undefined,
+      dailyWisdomAr: dailyWisdomAr || undefined,
     });
     toast({
       title: "Saqlandi!",
@@ -356,6 +362,27 @@ export default function Admin() {
                             <option key={r.id} value={r.id}>{r.name_uz}</option>
                           ))}
                         </select>
+                      </div>
+                    </div>
+
+                    <div className="border-t pt-3 mt-3 space-y-3">
+                      <h4 className="text-sm font-medium">Kun hikmati (ixtiyoriy)</h4>
+                      <p className="text-xs text-muted-foreground">
+                        Bo'sh qoldirilsa avtomatik hikmat tanlanadi
+                      </p>
+                      <div className="space-y-2">
+                        <Input 
+                          value={dailyWisdomUz}
+                          onChange={(e) => setDailyWisdomUz(e.target.value)}
+                          placeholder="O'zbekcha hikmat..."
+                        />
+                        <Input 
+                          value={dailyWisdomAr}
+                          onChange={(e) => setDailyWisdomAr(e.target.value)}
+                          placeholder="Arabcha hikmat..."
+                          className="font-arabic text-right"
+                          dir="rtl"
+                        />
                       </div>
                     </div>
 
