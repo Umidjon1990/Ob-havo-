@@ -1,0 +1,44 @@
+stage-0
+RUN npm run build
+7s
+npm warn config production Use `--omit=dev` instead.
+> rest-express@1.0.0 build
+> tsx script/build.ts
+building client...
+vite v7.1.12 building for production...
+transforming...
+✓ 2858 modules transformed.
+rendering chunks...
+computing gzip size...
+../dist/public/index.html                                                                         1.69 kB │ gzip:   0.72 kB
+../dist/public/assets/clean_modern_blue_sky_weather_background_with_soft_clouds-BGnDxlwE.png    952.17 kB
+../dist/public/assets/index-BKnkgDuk.css                                                        117.28 kB │ gzip:  18.32 kB
+../dist/public/assets/index-DaQ870r9.js                                                       1,169.21 kB │ gzip: 338.87 kB
+(!) Some chunks are larger than 500 kB after minification. Consider:
+- Using dynamic import() to code-split the application
+- Use build.rollupOptions.output.manualChunks to improve chunking: https://rollupjs.org/configuration-options/#output-manualchunks
+- Adjust chunk size limit for this warning via build.chunkSizeWarningLimit.
+✓ built in 5.67s
+building server...
+✘ [ERROR] Top-level await is currently not supported with the "cjs" output format
+    server/db.ts:14:0:
+      14 │ await client.connect();
+         ╵ ~~~~~
+1 error
+Error: Build failed with 1 error:
+
+server/db.ts:14:0: ERROR: Top-level await is currently not supported with the "cjs" output format
+    at failureErrorWithLog (/app/node_modules/esbuild/lib/main.js:1467:15)
+    at /app/node_modules/esbuild/lib/main.js:926:25
+    at /app/node_modules/esbuild/lib/main.js:878:52
+    at buildResponseToResult (/app/node_modules/esbuild/lib/main.js:924:7)
+    at /app/node_modules/esbuild/lib/main.js:951:16
+    at responseCallbacks.<computed> (/app/node_modules/esbuild/lib/main.js:603:9)
+    at handleIncomingPacket (/app/node_modules/esbuild/lib/main.js:658:12)
+    at Socket.readFromStdout (/app/node_modules/esbuild/lib/main.js:581:7)
+    at Socket.emit (node:events:518:28)
+    at addChunk (node:internal/streams/readable:561:12) {
+  errors: [Getter/Setter],
+  warnings: [Getter/Setter]
+}
+Build Failed: build daemon returned an error < failed to solve: process "/bin/bash -ol pipefail -c npm run build" did not complete successfully: exit code: 1 >
