@@ -77,9 +77,8 @@ export async function handleTelegramUpdate(update: TelegramUpdate) {
       ? `🎓 <b>مشروع التعليم الحديث</b>\n\n☀️ مرحباً ${from.first_name}!\n\nاختر المنطقة لمعرفة الطقس:`
       : `🎓 <b>Zamonaviy ta'lim loyihasi</b>\n\n☀️ Assalomu alaykum ${from.first_name}!\n\nOb-havo ma'lumotini ko'rish uchun viloyatni tanlang:`;
     
-    const appBaseUrl = process.env.REPLIT_DEV_DOMAIN 
-      ? `https://${process.env.REPLIT_DEV_DOMAIN}`
-      : 'https://ob-havo.replit.app';
+    const appBaseUrl = process.env.APP_URL 
+      || (process.env.REPLIT_DEV_DOMAIN ? `https://${process.env.REPLIT_DEV_DOMAIN}` : 'https://ob-havo.replit.app');
     
     const langButtonText = user.preferredLang === 'ar' ? "🌐 تغيير اللغة → O'zbekcha" : "🌐 Tilni o'zgartirish → العربية";
     
@@ -127,9 +126,8 @@ export async function handleTelegramUpdate(update: TelegramUpdate) {
     const newLang = user.preferredLang === 'ar' ? 'uz' : 'ar';
     await storage.updateUserPreferences(user.id, newLang);
     
-    const appBaseUrl = process.env.REPLIT_DEV_DOMAIN 
-      ? `https://${process.env.REPLIT_DEV_DOMAIN}`
-      : 'https://ob-havo.replit.app';
+    const appBaseUrl = process.env.APP_URL 
+      || (process.env.REPLIT_DEV_DOMAIN ? `https://${process.env.REPLIT_DEV_DOMAIN}` : 'https://ob-havo.replit.app');
     
     const langButtonText = newLang === 'ar' ? "🌐 تغيير اللغة → O'zbekcha" : "🌐 Tilni o'zgartirish → العربية";
     
