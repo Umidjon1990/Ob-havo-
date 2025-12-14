@@ -5,7 +5,7 @@ nixPkgs = ["nodejs_20"]
 cmds = ["npm install"]
 
 [phases.build]
-cmds = ["npm run build", "npx tsx server/migrate.ts"]
+cmds = ["npm run build"]
 
 [start]
-cmd = "npm run start"
+cmd = "node dist/migrate.cjs && NODE_ENV=production node dist/index.cjs"

@@ -1,0 +1,113 @@
+Updating weather cache with real data from Open-Meteo...
+2:22:35 PM [express] serving on port 8080
+Failed to update weather cache: error: relation "weather_cache" does not exist
+    at /app/dist/index.cjs:64:13326
+    at process.processTicksAndRejections (node:internal/process/task_queues:95:5)
+    at async tl (/app/dist/index.cjs:136:3968) {
+  length: 113,
+  severity: 'ERROR',
+  code: '42P01',
+  detail: undefined,
+  hint: undefined,
+  position: '128',
+  internalPosition: undefined,
+  internalQuery: undefined,
+  where: undefined,
+  schema: undefined,
+  table: undefined,
+  column: undefined,
+  dataType: undefined,
+  constraint: undefined,
+  file: 'parse_relation.c',
+  line: '1449',
+  routine: 'parserOpenTable'
+}
+  dataType: undefined,
+  constraint: undefined,
+  file: 'parse_relation.c',
+  line: '1449',
+  routine: 'parserOpenTable'
+}
+  code: '42P01',
+  detail: undefined,
+Error in daily message scheduler: error: relation "bot_settings" does not exist
+    at /app/dist/index.cjs:64:13326
+  hint: undefined,
+    at process.processTicksAndRejections (node:internal/process/task_queues:95:5)
+    at async /app/dist/index.cjs:70:37960
+  position: '136',
+    at async Cy.getBotSettings (/app/dist/index.cjs:70:108741)
+    at async Timeout._onTimeout (/app/dist/index.cjs:136:556) {
+  internalPosition: undefined,
+  length: 112,
+  severity: 'ERROR',
+  internalQuery: undefined,
+  where: undefined,
+  schema: undefined,
+  table: undefined,
+  column: undefined,
+Error in daily message scheduler: error: relation "bot_settings" does not exist
+    at /app/dist/index.cjs:64:13326
+    at process.processTicksAndRejections (node:internal/process/task_queues:95:5)
+    at async /app/dist/index.cjs:70:37960
+    at async Cy.getBotSettings (/app/dist/index.cjs:70:108741)
+    at async Timeout._onTimeout (/app/dist/index.cjs:136:556) {
+  length: 112,
+  severity: 'ERROR',
+  code: '42P01',
+  detail: undefined,
+  hint: undefined,
+  position: '136',
+  internalPosition: undefined,
+  internalQuery: undefined,
+  where: undefined,
+  schema: undefined,
+  table: undefined,
+  column: undefined,
+  dataType: undefined,
+  constraint: undefined,
+  file: 'parse_relation.c',
+  line: '1449',
+  routine: 'parserOpenTable'
+}
+    at process.processTicksAndRejections (node:internal/process/task_queues:95:5)
+    at async /app/dist/index.cjs:70:37960
+    at async Cy.getBotSettings (/app/dist/index.cjs:70:108741)
+    at async Timeout._onTimeout (/app/dist/index.cjs:136:556) {
+  length: 112,
+  severity: 'ERROR',
+  code: '42P01',
+  detail: undefined,
+  hint: undefined,
+  position: '136',
+  internalPosition: undefined,
+  internalQuery: undefined,
+  where: undefined,
+  schema: undefined,
+  table: undefined,
+  column: undefined,
+  dataType: undefined,
+  constraint: undefined,
+  file: 'parse_relation.c',
+  line: '1449',
+  routine: 'parserOpenTable'
+}
+Error in daily message scheduler: error: relation "bot_settings" does not exist
+    at /app/dist/index.cjs:64:13326
+Error in daily message scheduler: error: relation "bot_settings" does not exist
+    at /app/dist/index.cjs:64:13326
+  position: '136',
+    at process.processTicksAndRejections (node:internal/process/task_queues:95:5)
+    at async /app/dist/index.cjs:70:37960
+  internalPosition: undefined,
+    at async Cy.getBotSettings (/app/dist/index.cjs:70:108741)
+}
+    at async Timeout._onTimeout (/app/dist/index.cjs:136:556) {
+  internalQuery: undefined,
+  length: 112,
+  where: undefined,
+  severity: 'ERROR',
+  schema: undefined,
+  code: '42P01',
+  table: undefined,
+  detail: undefined,
