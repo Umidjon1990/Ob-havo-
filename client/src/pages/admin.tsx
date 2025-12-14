@@ -81,7 +81,7 @@ export default function Admin() {
       return;
     }
     setTestingChannel(true);
-    const result = await testChannelMessage(channelId, dailyRegion);
+    const result = await testChannelMessage(channelId);
     if (result?.ok) {
       toast({ title: "Yuborildi!", description: "Kanalga test xabar yuborildi." });
     } else {

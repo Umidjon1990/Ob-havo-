@@ -81,12 +81,12 @@ export async function updateBotSettings(settings: any) {
   }
 }
 
-export async function testChannelMessage(channelId: string, region: string) {
+export async function testChannelMessage(channelId: string) {
   try {
     const response = await fetch('/api/telegram/test-channel', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ channelId, region }),
+      body: JSON.stringify({ channelId }),
     });
     return await response.json();
   } catch (error) {
