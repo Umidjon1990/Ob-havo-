@@ -1,27 +1,19 @@
 import { useState, useEffect } from "react";
 import { motion, AnimatePresence } from "framer-motion";
-import { Menu, Search, Compass, Calendar, Settings, Cloud, Sun, CloudRain, Wind, MapPin } from "lucide-react";
+import { Menu, Search, Compass, Calendar, Settings, Cloud, Sun, CloudRain, Wind, MapPin, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import FlipCard from "@/components/FlipCard";
 import WeatherHero from "@/components/WeatherHero";
 import WeatherModal from "@/components/WeatherModal";
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
 import { Link, useSearch } from "wouter";
 import heroBg from "@assets/generated_images/clean_modern_blue_sky_weather_background_with_soft_clouds.png";
 import mapImg from "@assets/generated_images/minimalist_3d_isometric_glass_map_of_uzbekistan,_high_tech,_clean_white_and_blue.png";
 import { regions } from "@/data/regions";
 
 export default function Home() {
-  const [selectedRegion, setSelectedRegion] = useState(regions[9]); // Default Toshkent
+  const [selectedRegion, setSelectedRegion] = useState<typeof regions[0] | null>(null);
   const [currentDate, setCurrentDate] = useState("");
-  const [isModalOpen, setIsModalOpen] = useState(false);
   const search = useSearch();
 
   useEffect(() => {
@@ -40,14 +32,16 @@ export default function Home() {
       const region = regions.find(r => r.id === targetRegionId.toLowerCase());
       if (region) {
         setSelectedRegion(region);
-        setIsModalOpen(true); // Auto-open modal on deep link
       }
     }
   }, [search]);
 
   const handleRegionClick = (region: typeof regions[0]) => {
-    setSelectedRegion(region);
-    setIsModalOpen(true);
+    if (selectedRegion?.id === region.id) {
+        setSelectedRegion(null); // Deselect if clicked again
+    } else {
+        setSelectedRegion(region);
+    }
   };
 
   return (
@@ -72,6 +66,11 @@ export default function Home() {
             </span>
           </div>
           <div className="flex gap-2">
+            <Link href="/forecast">
+                <Button variant="outline" size="sm" className="bg-white/50 backdrop-blur-sm border-white/40 text-xs font-bold">
+                    Haftalik
+                </Button>
+            </Link>
             <Link href="/admin">
                 <Button variant="ghost" size="icon" className="rounded-full hover:bg-black/5">
                     <Settings className="w-5 h-5 text-foreground/70" />
@@ -80,22 +79,10 @@ export default function Home() {
           </div>
         </header>
 
-        <div className="flex-1 overflow-y-auto no-scrollbar pb-6">
+        <div className="flex-1 overflow-y-auto no-scrollbar pb-6 flex flex-col">
             
-            <div className="mb-6">
-              <WeatherHero 
-                  weather={{
-                  temp: selectedRegion.temp,
-                  condition: selectedRegion.condition,
-                  city: selectedRegion.name,
-                  humidity: 45,
-                  wind: 12
-                  }}
-              />
-            </div>
-
-            {/* Interactive 3D Isometric Map */}
-            <div className="mb-8 relative w-full aspect-[4/3] glass-card rounded-3xl overflow-hidden shadow-2xl border border-white/60 p-0 group">
+            {/* Interactive Map Section */}
+            <div className="relative w-full aspect-[4/3] glass-card rounded-3xl overflow-hidden shadow-2xl border border-white/60 p-0 mb-6 group">
                <div className="absolute top-3 left-4 z-10 bg-white/60 backdrop-blur-md px-3 py-1 rounded-full text-xs font-bold text-primary shadow-sm flex items-center gap-2">
                  <Compass className="w-3 h-3" /> O'zbekiston
                </div>
@@ -103,158 +90,104 @@ export default function Home() {
                <img 
                  src={mapImg} 
                  alt="O'zbekiston Xaritasi" 
-                 className="w-full h-full object-contain opacity-90 scale-105 group-hover:scale-110 transition-transform duration-700"
+                 className="w-full h-full object-contain opacity-90 scale-105"
                />
 
+               {/* Map Markers */}
                {regions.map((region) => (
-                 <motion.button
+                 <div
                    key={region.id}
-                   whileHover={{ scale: 1.1, zIndex: 100 }}
-                   whileTap={{ scale: 0.95 }}
-                   onClick={() => handleRegionClick(region)}
-                   className="absolute flex flex-col items-center justify-center transition-all duration-300 group"
+                   className="absolute flex items-center justify-center transition-all duration-300"
                    style={{ 
                      left: `${region.x}%`, 
                      top: `${region.y}%`,
                      transform: 'translate(-50%, -50%)',
-                     zIndex: selectedRegion.id === region.id ? 50 : 10
+                     zIndex: selectedRegion?.id === region.id ? 60 : 20
                    }}
                  >
-                   {/* Animated Pulse Ring */}
-                   {selectedRegion.id === region.id && (
+                    {/* The Dot Marker */}
+                   <motion.button
+                     whileHover={{ scale: 1.2 }}
+                     whileTap={{ scale: 0.9 }}
+                     onClick={() => handleRegionClick(region)}
+                     className={`
+                       w-4 h-4 rounded-full shadow-lg border-2 border-white transition-all duration-300
+                       ${region.color}
+                       ${selectedRegion?.id === region.id ? 'scale-125 ring-4 ring-white/30' : 'opacity-80 hover:opacity-100'}
+                     `}
+                   />
+
+                   {/* Detail Pop-up Card (Only visible when selected) */}
+                   <AnimatePresence>
+                   {selectedRegion?.id === region.id && (
                      <motion.div 
-                       className="absolute w-12 h-12 rounded-full border-2 border-primary/30"
-                       animate={{ scale: [1, 1.5], opacity: [1, 0] }}
-                       transition={{ duration: 1.5, repeat: Infinity }}
-                     />
-                   )}
-
-                   {/* Icon Bubble (The Dot on Map) */}
-                   <div className={`
-                     w-8 h-8 rounded-full shadow-lg flex items-center justify-center mb-1 transition-all duration-300 relative z-10
-                     ${selectedRegion.id === region.id 
-                       ? 'bg-primary text-white ring-4 ring-primary/20 scale-110' 
-                       : 'bg-white/90 text-primary hover:bg-white hover:scale-110'}
-                   `}>
-                     <region.icon className="w-4 h-4" />
-                   </div>
-                   
-                   {/* Callout System */}
-                   <div className="absolute pointer-events-none flex items-center justify-center" style={{ 
-                     top: -40, // Move label up
-                     left: region.x > 50 ? 50 : -50, // Move label left/right
-                     transform: 'translate(-50%, -50%)',
-                     width: 120,
-                     height: 60
-                   }}>
-                      {/* SVG Connector (The Arrow/Line) */}
-                      <svg width="120" height="60" className="absolute top-0 left-0 overflow-visible" style={{
-                        transform: region.x > 50 ? 'scaleX(1)' : 'scaleX(-1)', // Flip for left side
-                        left: region.x > 50 ? -30 : 30
-                      }}>
-                        <defs>
-                          <marker id="arrowhead" markerWidth="10" markerHeight="7" refX="0" refY="3.5" orient="auto">
-                            <polygon points="0 0, 10 3.5, 0 7" fill="hsl(var(--primary))" opacity="0.6" />
-                          </marker>
-                          <filter id="glow">
-                            <feGaussianBlur stdDeviation="2" result="coloredBlur"/>
-                            <feMerge>
-                              <feMergeNode in="coloredBlur"/>
-                              <feMergeNode in="SourceGraphic"/>
-                            </feMerge>
-                          </filter>
-                        </defs>
-                        {/* The Path */}
-                        <path 
-                          d="M 10,25 Q 30,50 55,55" 
-                          fill="none" 
-                          stroke="hsl(var(--primary))" 
-                          strokeWidth="2"
-                          strokeDasharray="4 2"
-                          markerStart="url(#arrowhead)"
-                          filter="url(#glow)"
-                          opacity="0.6"
-                        />
-                      </svg>
-
-                      {/* Label Box */}
-                      <div className={`
-                          absolute top-0
-                          px-3 py-1.5 rounded-xl text-[11px] font-bold backdrop-blur-xl shadow-lg whitespace-nowrap border transition-all text-center z-20
-                          ${selectedRegion.id === region.id
-                            ? 'bg-primary text-white border-white/50 scale-110 shadow-primary/30'
-                            : 'bg-white/80 text-foreground/90 border-white/60'}
-                        `}
+                        initial={{ opacity: 0, scale: 0.8, y: 10 }}
+                        animate={{ opacity: 1, scale: 1, y: 0 }}
+                        exit={{ opacity: 0, scale: 0.8, y: 10 }}
+                        className="absolute bottom-full mb-3 p-3 rounded-2xl glass-panel border border-white/50 shadow-xl min-w-[140px] z-50 backdrop-blur-xl bg-white/80"
                         style={{
-                          left: '50%',
-                          transform: 'translateX(-50%)'
+                            left: '50%',
+                            translateX: '-50%'
                         }}
-                      >
-                        {region.name}
-                      </div>
-                   </div>
-                 </motion.button>
+                     >
+                        <div className="flex items-center justify-between mb-2">
+                            <span className="font-bold text-sm text-foreground">{region.name}</span>
+                            <region.icon className="w-4 h-4 text-primary" />
+                        </div>
+                        <div className="flex items-end gap-2">
+                            <span className="text-2xl font-bold text-foreground leading-none">{region.temp}°</span>
+                            <span className="text-[10px] text-muted-foreground font-medium mb-1">{region.condition}</span>
+                        </div>
+                        
+                        {/* Little triangle arrow at bottom */}
+                        <div className="absolute -bottom-2 left-1/2 -translate-x-1/2 w-4 h-4 bg-white/80 rotate-45 border-r border-b border-white/50 clip-path-triangle"></div>
+                     </motion.div>
+                   )}
+                   </AnimatePresence>
+                 </div>
                ))}
             </div>
 
-            {/* Region Dropdown Selection */}
-            <div className="mb-8 px-4">
-              <Select
-                value={selectedRegion.id}
-                onValueChange={(value) => {
-                  const region = regions.find((r) => r.id === value);
-                  if (region) handleRegionClick(region);
-                }}
-              >
-                <SelectTrigger className="w-full glass-card border-white/40 h-12 text-lg font-medium">
-                  <SelectValue placeholder="Viloyatni tanlang" />
-                </SelectTrigger>
-                <SelectContent className="glass-panel border-white/20 max-h-[300px]">
-                  {regions.map((region) => (
-                    <SelectItem key={region.id} value={region.id} className="text-base cursor-pointer">
-                      {region.name}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
-
-            {/* Quick Select List */}
+            {/* Region Color Legend Grid */}
             <div className="mb-8">
-              <div className="flex items-center justify-between mb-4">
-                  <h3 className="font-display font-semibold text-lg flex items-center gap-2">
-                  <Compass className="w-4 h-4 text-primary" /> Viloyatlar
-                  </h3>
-                  <Link href="/forecast">
-                    <Button variant="ghost" size="sm" className="text-primary text-xs font-bold hover:bg-primary/10">
-                      Haftalik to'liq &rarr;
-                    </Button>
-                  </Link>
-              </div>
-              
-              <ScrollArea className="w-full whitespace-nowrap pb-2">
-                  <div className="flex gap-3 px-1">
-                  {regions.map((region) => (
-                      <motion.button
-                      key={region.id}
-                      whileTap={{ scale: 0.95 }}
-                      onClick={() => handleRegionClick(region)}
-                      className={`
-                          relative flex flex-col items-center justify-center px-4 py-3 rounded-2xl min-w-[90px] border transition-all duration-300
-                          ${selectedRegion.id === region.id 
-                          ? 'bg-primary text-primary-foreground border-primary shadow-lg shadow-primary/20' 
-                          : 'glass-card border-white/40 hover:border-primary/50'}
-                      `}
-                      >
-                      <span className="text-xs font-medium mb-1">{region.name}</span>
-                      <span className="text-lg font-bold">{region.temp}°</span>
-                      </motion.button>
-                  ))}
-                  </div>
-              </ScrollArea>
+                <h3 className="font-display font-semibold text-lg mb-3 flex items-center gap-2">
+                    <Compass className="w-4 h-4 text-primary" /> Hududni tanlang
+                </h3>
+                <div className="grid grid-cols-3 gap-3">
+                    {regions.map((region) => (
+                        <motion.button
+                            key={region.id}
+                            whileHover={{ scale: 1.02 }}
+                            whileTap={{ scale: 0.98 }}
+                            onClick={() => handleRegionClick(region)}
+                            className={`
+                                relative overflow-hidden rounded-xl p-3 flex flex-col items-start gap-1 transition-all duration-300 border
+                                ${selectedRegion?.id === region.id 
+                                    ? 'bg-white shadow-lg border-primary/20 ring-2 ring-primary/10' 
+                                    : 'bg-white/40 hover:bg-white/60 border-white/40'}
+                            `}
+                        >
+                            {/* Color Indicator Strip */}
+                            <div className={`absolute top-0 left-0 bottom-0 w-1.5 ${region.color}`} />
+                            
+                            <div className="pl-2 w-full">
+                                <span className="text-xs font-bold text-foreground/80 block truncate">{region.name}</span>
+                                {selectedRegion?.id === region.id && (
+                                    <motion.span 
+                                        initial={{ opacity: 0 }} 
+                                        animate={{ opacity: 1 }} 
+                                        className="text-[10px] text-primary font-medium"
+                                    >
+                                        {region.temp}°
+                                    </motion.span>
+                                )}
+                            </div>
+                        </motion.button>
+                    ))}
+                </div>
             </div>
 
-            <div className="mb-6">
+            <div className="mt-auto">
               <FlipCard 
                   arabicWord="سَلَام"
                   uzbekWord="Salom"
@@ -264,13 +197,6 @@ export default function Home() {
             </div>
         </div>
       </div>
-      
-      {/* Modal for Details */}
-      <WeatherModal 
-        isOpen={isModalOpen} 
-        onClose={() => setIsModalOpen(false)} 
-        region={selectedRegion} 
-      />
     </div>
   );
 }
