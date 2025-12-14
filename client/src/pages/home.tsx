@@ -139,34 +139,47 @@ export default function Home() {
                {regions.map((region) => (
                  <motion.button
                    key={region.id}
-                   whileHover={{ scale: 1.2, zIndex: 10 }}
-                   whileTap={{ scale: 0.9 }}
+                   whileHover={{ scale: 1.1, zIndex: 10 }}
+                   whileTap={{ scale: 0.95 }}
                    onClick={() => setSelectedRegion(region)}
                    className={`
-                     absolute flex items-center justify-center
-                     w-8 h-8 rounded-full shadow-md transition-all duration-300
-                     ${selectedRegion.id === region.id 
-                       ? 'bg-primary text-white scale-110 z-20 ring-4 ring-primary/20' 
-                       : 'bg-white/80 text-primary hover:bg-white'}
+                     absolute flex flex-col items-center justify-center
+                     transition-all duration-300 group
                    `}
                    style={{ 
                      left: `${region.x}%`, 
                      top: `${region.y}%`,
-                     transform: 'translate(-50%, -50%)' 
+                     transform: 'translate(-50%, -50%)',
+                     zIndex: selectedRegion.id === region.id ? 20 : 10
                    }}
                  >
-                   <region.icon className="w-4 h-4" />
+                   {/* Icon Bubble */}
+                   <div className={`
+                     w-8 h-8 rounded-full shadow-md flex items-center justify-center mb-1 transition-colors
+                     ${selectedRegion.id === region.id 
+                       ? 'bg-primary text-white ring-4 ring-primary/20' 
+                       : 'bg-white/80 text-primary group-hover:bg-white'}
+                   `}>
+                     <region.icon className="w-4 h-4" />
+                   </div>
                    
-                   {/* Label only visible on selected or hover */}
-                   {selectedRegion.id === region.id && (
-                     <motion.div 
-                       initial={{ opacity: 0, y: 10 }}
-                       animate={{ opacity: 1, y: 0 }}
-                       className="absolute -bottom-8 bg-white/90 backdrop-blur px-2 py-1 rounded-lg text-[10px] font-bold text-foreground shadow-sm whitespace-nowrap pointer-events-none"
-                     >
-                       {region.name}
-                     </motion.div>
-                   )}
+                   {/* Label - Always Visible & Animated */}
+                   <motion.div 
+                     initial={{ opacity: 0.8, y: 0 }}
+                     animate={{ 
+                       opacity: 1, 
+                       y: selectedRegion.id === region.id ? -2 : 0,
+                       scale: selectedRegion.id === region.id ? 1.1 : 1
+                     }}
+                     className={`
+                       px-2 py-0.5 rounded-lg text-[9px] font-bold backdrop-blur-sm shadow-sm whitespace-nowrap border transition-colors
+                       ${selectedRegion.id === region.id
+                         ? 'bg-primary text-primary-foreground border-primary/50'
+                         : 'bg-white/70 text-foreground/80 border-white/40 group-hover:bg-white/90'}
+                     `}
+                   >
+                     {region.name}
+                   </motion.div>
                  </motion.button>
                ))}
             </div>
