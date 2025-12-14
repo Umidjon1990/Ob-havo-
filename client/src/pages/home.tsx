@@ -88,9 +88,9 @@ export default function Home() {
                </div>
                
                <img 
-                 src="/map.jpg" 
+                 src="/colorful_map.jpg" 
                  alt="O'zbekiston Xaritasi" 
-                 className="w-full h-full object-contain opacity-80 scale-105 relative z-10 mix-blend-multiply dark:mix-blend-normal dark:opacity-60"
+                 className="w-full h-full object-contain relative z-10"
                />
 
                {/* Map Markers */}
