@@ -86,7 +86,7 @@ export default function Home() {
         <div className="flex-1 overflow-y-auto no-scrollbar pb-6 flex flex-col">
             
             {/* Interactive Map Section */}
-            <div className="relative w-full aspect-[1.53] glass-card rounded-3xl overflow-hidden shadow-2xl border border-white/60 mb-6 group bg-white/40 mx-4 mt-4 w-[calc(100%-2rem)]">
+            <div className="relative w-full min-h-[300px] glass-card rounded-3xl overflow-hidden shadow-2xl border border-white/60 mb-6 group bg-white/40 mx-4 mt-4 w-[calc(100%-2rem)] flex items-center justify-center">
                <div className="absolute top-3 left-4 z-10 bg-white/60 backdrop-blur-md px-3 py-1 rounded-full text-xs font-bold text-primary shadow-sm flex items-center gap-2 pointer-events-none">
                  <Compass className="w-3 h-3" /> O'zbekiston
                </div>
@@ -94,7 +94,7 @@ export default function Home() {
                <UzbekistanMap 
                  onRegionSelect={handleRegionClick}
                  selectedRegion={activeRegion.id}
-                 className="p-1"
+                 className="p-4 w-full h-full"
                />
 
                {/* Dropdown Selection Overlay on Map */}

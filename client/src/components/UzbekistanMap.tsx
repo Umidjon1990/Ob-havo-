@@ -55,14 +55,14 @@ export function UzbekistanMap({ onRegionSelect, className, selectedRegion }: Uzb
   };
 
   return (
-    <div className={cn("w-full h-full flex flex-col items-center justify-center relative", className)}>
-      <div className="relative w-full aspect-[1000/652]">
-        <svg
-          viewBox="0 0 1000 652"
-          className="w-full h-full drop-shadow-xl"
-          style={{ filter: 'drop-shadow(0 0 10px rgba(0,0,0,0.1))' }}
-        >
-          <g id="features">
+    <div className={cn("w-full h-full flex items-center justify-center relative", className)}>
+      <svg
+        viewBox="0 0 1000 652"
+        className="w-full h-full drop-shadow-xl"
+        style={{ filter: 'drop-shadow(0 0 10px rgba(0,0,0,0.1))' }}
+        preserveAspectRatio="xMidYMid meet"
+      >
+        <g id="features">
             {regions.map((region) => {
               // Map API ID back to SVG ID for selection state
               // The prop selectedRegion is likely an API ID (e.g. 'toshkent')
@@ -83,9 +83,9 @@ export function UzbekistanMap({ onRegionSelect, className, selectedRegion }: Uzb
                   animate={{ 
                     opacity: 1, 
                     scale: 1,
-                    fill: isSelected ? 'rgba(59, 130, 246, 0.8)' : isHovered ? 'rgba(59, 130, 246, 0.4)' : 'rgba(255, 255, 255, 0.1)',
-                    stroke: isSelected ? '#ffffff' : 'rgba(255, 255, 255, 0.4)',
-                    strokeWidth: isSelected ? 2 : 0.5,
+                    fill: isSelected ? 'hsl(var(--primary))' : isHovered ? 'hsl(var(--primary) / 0.5)' : 'hsl(var(--foreground) / 0.1)',
+                    stroke: isSelected ? '#ffffff' : 'hsl(var(--foreground) / 0.2)',
+                    strokeWidth: isSelected ? 2 : 1,
                     zIndex: isHovered || isSelected ? 10 : 1
                   }}
                   transition={{ duration: 0.3 }}
@@ -119,7 +119,6 @@ export function UzbekistanMap({ onRegionSelect, className, selectedRegion }: Uzb
             </motion.div>
           )}
         </AnimatePresence>
-      </div>
     </div>
   );
 }
