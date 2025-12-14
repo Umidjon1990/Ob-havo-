@@ -66,7 +66,7 @@ export async function handleTelegramUpdate(update: TelegramUpdate) {
       telegramId,
       username: from.username || from.first_name,
       preferredLang: 'uz',
-      preferredRegion: 'tashkent',
+      preferredRegion: 'toshkent',
     });
   }
 
@@ -79,7 +79,7 @@ export async function handleTelegramUpdate(update: TelegramUpdate) {
     await sendTelegramMessage(chatId, welcomeMessage);
   } 
   else if (text?.startsWith('/weather')) {
-    const region = user.preferredRegion || 'tashkent';
+    const region = user.preferredRegion || 'toshkent';
     const weatherData = await storage.getWeatherCache(region);
     
     if (weatherData) {
@@ -144,54 +144,61 @@ export async function setTelegramWebhook(webhookUrl: string) {
 }
 
 const ALL_REGIONS = [
-  { id: "toshkent", name: "Toshkent" },
-  { id: "samarqand", name: "Samarqand" },
-  { id: "buxoro", name: "Buxoro" },
-  { id: "andijon", name: "Andijon" },
-  { id: "namangan", name: "Namangan" },
-  { id: "fargona", name: "Farg'ona" },
-  { id: "nukus", name: "Nukus" },
-  { id: "qarshi", name: "Qarshi" },
-  { id: "urganch", name: "Urganch" },
-  { id: "jizzax", name: "Jizzax" },
-  { id: "navoiy", name: "Navoiy" },
-  { id: "guliston", name: "Guliston" },
-  { id: "termiz", name: "Termiz" },
+  { id: "toshkent", name: "Toshkent", name_ar: "طَشْقَنْد" },
+  { id: "samarqand", name: "Samarqand", name_ar: "سَمَرْقَنْد" },
+  { id: "buxoro", name: "Buxoro", name_ar: "بُخَارَى" },
+  { id: "andijon", name: "Andijon", name_ar: "أَنْدِيجَان" },
+  { id: "namangan", name: "Namangan", name_ar: "نَمَنْغَان" },
+  { id: "fargona", name: "Farg'ona", name_ar: "فَرْغَانَة" },
+  { id: "nukus", name: "Nukus", name_ar: "نُوكُوس" },
+  { id: "qarshi", name: "Qarshi", name_ar: "قَرْشِي" },
+  { id: "urganch", name: "Urganch", name_ar: "أُورْجِينْتْش" },
+  { id: "jizzax", name: "Jizzax", name_ar: "جِيزَاك" },
+  { id: "navoiy", name: "Navoiy", name_ar: "نَوَاوِي" },
+  { id: "guliston", name: "Guliston", name_ar: "جُولِيسْتَان" },
+  { id: "termiz", name: "Termiz", name_ar: "تِرْمِذ" },
 ];
 
 export async function sendDailyChannelMessage(channelId: string, miniAppUrl?: string) {
   const weatherLines: string[] = [];
   const inlineKeyboard: any[][] = [];
   
+  const appBaseUrl = miniAppUrl || (process.env.REPLIT_DEV_DOMAIN 
+    ? `https://${process.env.REPLIT_DEV_DOMAIN}`
+    : 'https://ob-havo.replit.app');
+  
   for (const region of ALL_REGIONS) {
     const weatherData = await storage.getWeatherCache(region.id);
     const temp = weatherData?.temperature ?? "--";
-    const condition = weatherData?.condition || "—";
     
-    weatherLines.push(`🏙 <b>${region.name}</b>: ${temp}°C, ${condition}`);
+    let condition_ar = "—";
+    if (weatherData?.forecastData) {
+      try {
+        const forecast = JSON.parse(weatherData.forecastData);
+        condition_ar = forecast.condition_ar || "—";
+      } catch {}
+    }
     
-    const buttonUrl = miniAppUrl 
-      ? `${miniAppUrl}?region=${region.id}`
-      : `https://t.me/ObHavoUzBot/app?startapp=${region.id}`;
+    weatherLines.push(`🏙 <b>${region.name_ar}</b>: ${temp}°C، ${condition_ar}`);
     
     inlineKeyboard.push([
-      { text: `📍 ${region.name} - Batafsil`, url: buttonUrl }
+      { text: `📍 ${region.name_ar} - التفاصيل`, web_app: { url: `${appBaseUrl}?region=${region.id}` } }
     ]);
   }
   
-  const today = new Date().toLocaleDateString('uz-UZ', { 
+  const today = new Date().toLocaleDateString('ar-SA', { 
     weekday: 'long', 
     year: 'numeric', 
     month: 'long', 
     day: 'numeric' 
   });
   
-  const message = `🌤 <b>Bugungi Ob-Havo</b>
+  const message = `🌤 <b>النَّشْرَة الجَوِّيَّة اليَوْم</b>
 📅 ${today}
 
 ${weatherLines.join('\n')}
 
-📱 Batafsil ma'lumot uchun quyidagi tugmalarni bosing:`;
+📱 اضْغَط عَلَى المَدِينَة لِلتَّفَاصِيل:`;
 
   await sendTelegramMessage(Number(channelId), message, 'HTML', {
     inline_keyboard: inlineKeyboard
