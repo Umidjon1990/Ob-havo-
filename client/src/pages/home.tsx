@@ -129,9 +129,9 @@ export default function Home() {
                      />
                    )}
 
-                   {/* Icon Bubble */}
+                   {/* Icon Bubble (The Dot on Map) */}
                    <div className={`
-                     w-8 h-8 rounded-full shadow-lg flex items-center justify-center mb-1 transition-all duration-300
+                     w-8 h-8 rounded-full shadow-lg flex items-center justify-center mb-1 transition-all duration-300 relative z-10
                      ${selectedRegion.id === region.id 
                        ? 'bg-primary text-white ring-4 ring-primary/20 scale-110' 
                        : 'bg-white/90 text-primary hover:bg-white hover:scale-110'}
@@ -139,33 +139,60 @@ export default function Home() {
                      <region.icon className="w-4 h-4" />
                    </div>
                    
-                  {/* Callout Label with Line */}
-                  <div className="absolute pointer-events-none flex items-center justify-center" style={{ 
-                    top: -20, // Slightly higher than center
-                    // Position label outwards from the center of the map
-                    left: region.x > 50 ? 60 : -60, 
-                    transform: 'translateX(-50%)', // Center the label itself relative to its new position
-                    width: 'auto'
-                  }}>
-                    {/* Connecting Line */}
-                    <div className={`
-                      absolute h-[2px] bg-primary/60
-                      ${region.x > 50 
-                        ? 'right-full mr-2 w-8 origin-right rotate-[-15deg] top-1/2' 
-                        : 'left-full ml-2 w-8 origin-left rotate-[15deg] top-1/2'}
-                    `} />
+                   {/* Callout System */}
+                   <div className="absolute pointer-events-none flex items-center justify-center" style={{ 
+                     top: -40, // Move label up
+                     left: region.x > 50 ? 50 : -50, // Move label left/right
+                     transform: 'translate(-50%, -50%)',
+                     width: 120,
+                     height: 60
+                   }}>
+                      {/* SVG Connector (The Arrow/Line) */}
+                      <svg width="120" height="60" className="absolute top-0 left-0 overflow-visible" style={{
+                        transform: region.x > 50 ? 'scaleX(1)' : 'scaleX(-1)', // Flip for left side
+                        left: region.x > 50 ? -30 : 30
+                      }}>
+                        <defs>
+                          <marker id="arrowhead" markerWidth="10" markerHeight="7" refX="0" refY="3.5" orient="auto">
+                            <polygon points="0 0, 10 3.5, 0 7" fill="hsl(var(--primary))" opacity="0.6" />
+                          </marker>
+                          <filter id="glow">
+                            <feGaussianBlur stdDeviation="2" result="coloredBlur"/>
+                            <feMerge>
+                              <feMergeNode in="coloredBlur"/>
+                              <feMergeNode in="SourceGraphic"/>
+                            </feMerge>
+                          </filter>
+                        </defs>
+                        {/* The Path */}
+                        <path 
+                          d="M 10,25 Q 30,50 55,55" 
+                          fill="none" 
+                          stroke="hsl(var(--primary))" 
+                          strokeWidth="2"
+                          strokeDasharray="4 2"
+                          markerStart="url(#arrowhead)"
+                          filter="url(#glow)"
+                          opacity="0.6"
+                        />
+                      </svg>
 
-                    {/* Label Box */}
-                    <div className={`
-                        px-3 py-1 rounded-full text-[11px] font-bold backdrop-blur-md shadow-md whitespace-nowrap border-2 transition-all text-center z-20
-                        ${selectedRegion.id === region.id
-                          ? 'bg-primary text-white border-white/50 scale-110'
-                          : 'bg-white/90 text-primary-900 border-white/60'}
-                      `}
-                    >
-                      {region.name}
-                    </div>
-                  </div>
+                      {/* Label Box */}
+                      <div className={`
+                          absolute top-0
+                          px-3 py-1.5 rounded-xl text-[11px] font-bold backdrop-blur-xl shadow-lg whitespace-nowrap border transition-all text-center z-20
+                          ${selectedRegion.id === region.id
+                            ? 'bg-primary text-white border-white/50 scale-110 shadow-primary/30'
+                            : 'bg-white/80 text-foreground/90 border-white/60'}
+                        `}
+                        style={{
+                          left: '50%',
+                          transform: 'translateX(-50%)'
+                        }}
+                      >
+                        {region.name}
+                      </div>
+                   </div>
                  </motion.button>
                ))}
             </div>
