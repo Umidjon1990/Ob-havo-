@@ -12,6 +12,7 @@ export interface IStorage {
   
   // Weather cache methods
   getWeatherCache(regionId: string): Promise<WeatherCache | undefined>;
+  getAllWeatherCache(): Promise<WeatherCache[]>;
   upsertWeatherCache(cache: InsertWeatherCache): Promise<WeatherCache>;
   
   // User progress methods
@@ -51,6 +52,10 @@ export class DatabaseStorage implements IStorage {
   async getWeatherCache(regionId: string): Promise<WeatherCache | undefined> {
     const [cache] = await db.select().from(weatherCache).where(eq(weatherCache.regionId, regionId)).limit(1);
     return cache;
+  }
+
+  async getAllWeatherCache(): Promise<WeatherCache[]> {
+    return await db.select().from(weatherCache);
   }
 
   async upsertWeatherCache(cache: InsertWeatherCache): Promise<WeatherCache> {

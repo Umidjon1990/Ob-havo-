@@ -1,6 +1,6 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useMemo } from "react";
 import { motion, AnimatePresence } from "framer-motion";
-import { Menu, Search, Compass, Calendar, Settings, Cloud, Sun, CloudRain, Wind, MapPin, X, Info, Quote, Sparkles, Globe, BookOpen } from "lucide-react";
+import { Menu, Search, Compass, Calendar, Settings, Cloud, Sun, CloudRain, Wind, MapPin, X, Info, Quote, Sparkles, Globe, BookOpen, CloudSnow, CloudLightning } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import FlipCard from "@/components/FlipCard";
@@ -9,17 +9,77 @@ import WeatherModal from "@/components/WeatherModal";
 import VocabularyModal from "@/components/VocabularyModal";
 import { Link, useSearch, useLocation } from "wouter";
 import heroBg from "@assets/generated_images/clean_modern_blue_sky_weather_background_with_soft_clouds.png";
-import { regions } from "@/data/regions";
+import { regions as staticRegions, type Region } from "@/data/regions";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { useQuery } from "@tanstack/react-query";
+
+interface WeatherData {
+  regionId: string;
+  temperature: number;
+  condition: string;
+  humidity: number;
+  windSpeed: number;
+  pressure: number;
+  forecastData: string;
+}
+
+function getWeatherIcon(condition: string) {
+  const lowerCondition = condition.toLowerCase();
+  if (lowerCondition.includes('qor') || lowerCondition.includes('snow') || lowerCondition.includes('ثلج')) return CloudSnow;
+  if (lowerCondition.includes('yomg\'ir') || lowerCondition.includes('rain') || lowerCondition.includes('مطر') || lowerCondition.includes('yog\'in')) return CloudRain;
+  if (lowerCondition.includes('momaqaldiroq') || lowerCondition.includes('thunder') || lowerCondition.includes('رعد')) return CloudLightning;
+  if (lowerCondition.includes('ochiq') || lowerCondition.includes('clear') || lowerCondition.includes('صافي')) return Sun;
+  if (lowerCondition.includes('bulutli') || lowerCondition.includes('cloud') || lowerCondition.includes('غائم')) return Cloud;
+  if (lowerCondition.includes('shamol') || lowerCondition.includes('wind')) return Wind;
+  return Cloud;
+}
 
 export default function Home() {
-  const [activeRegion, setActiveRegion] = useState(regions[0]);
+  const [activeRegionId, setActiveRegionId] = useState("toshkent");
   const [modalOpen, setModalOpen] = useState(false);
   const [vocabOpen, setVocabOpen] = useState(false);
   const [, setLocation] = useLocation();
   const search = useSearch();
   const [currentDate, setCurrentDate] = useState("");
   const [lang, setLang] = useState<'ar' | 'uz'>('ar');
+
+  const { data: weatherData, isLoading } = useQuery<WeatherData[]>({
+    queryKey: ['weather'],
+    queryFn: async () => {
+      const res = await fetch('/api/weather');
+      if (!res.ok) throw new Error('Failed to fetch weather');
+      return res.json();
+    },
+    refetchInterval: 5 * 60 * 1000,
+  });
+
+  const regions = useMemo(() => {
+    if (!weatherData) return staticRegions;
+    
+    return staticRegions.map(staticRegion => {
+      const liveWeather = weatherData.find(w => w.regionId === staticRegion.id);
+      if (!liveWeather) return staticRegion;
+      
+      let forecastInfo: { condition_ar?: string; hourly?: any[]; daily?: any[] } = {};
+      try {
+        forecastInfo = JSON.parse(liveWeather.forecastData || '{}');
+      } catch {}
+      
+      return {
+        ...staticRegion,
+        temp: liveWeather.temperature,
+        condition_uz: liveWeather.condition,
+        condition_ar: forecastInfo.condition_ar || liveWeather.condition,
+        humidity: liveWeather.humidity,
+        wind: liveWeather.windSpeed,
+        pressure: liveWeather.pressure,
+        icon: getWeatherIcon(liveWeather.condition),
+        hourly: forecastInfo.hourly || staticRegion.hourly,
+      };
+    });
+  }, [weatherData]);
+
+  const activeRegion = regions.find(r => r.id === activeRegionId) || regions[0];
 
   const toggleLang = () => {
     setLang(prev => prev === 'ar' ? 'uz' : 'ar');
@@ -34,7 +94,7 @@ export default function Home() {
       quote: "كُلّ يَوْم هُوَ فُرْصَة جَدِيدَة.",
       advice: "مَهْمَا كَان الطَّقْس الْيَوْم، حَافِظ عَلَى مِزَاجِك رَائِعاً!",
       select: "اخْتَر مَنْطِقَة",
-      yandex: "بَيَانَات مِنْ ياندكس",
+      source: "بَيَانَات حَيَّة",
       vocab: "الْقَامُوس / Lug'at"
     },
     uz: {
@@ -45,7 +105,7 @@ export default function Home() {
       quote: "Har bir kun - yangi imkoniyat.",
       advice: "Bugungi ob-havo qanday bo'lishidan qat'iy nazar, kayfiyatingizni a'lo darajada saqlang!",
       select: "Hududni tanlang",
-      yandex: "Ma'lumotlar Yandex dan",
+      source: "Jonli ma'lumotlar",
       vocab: "Lug'at / الْقَامُوس"
     }
   };
@@ -67,19 +127,12 @@ export default function Home() {
     const targetRegionId = startParam || tgStartParam;
 
     if (targetRegionId) {
-      const region = regions.find(r => r.id === targetRegionId.toLowerCase());
+      const region = staticRegions.find(r => r.id === targetRegionId.toLowerCase());
       if (region) {
-        setActiveRegion(region);
+        setActiveRegionId(region.id);
       }
     }
   }, [search, lang]);
-
-  const handleRegionClick = (regionId: string) => {
-    const region = regions.find(r => r.id === regionId);
-    if (region) {
-      setActiveRegion(region);
-    }
-  };
 
   return (
     <div className="h-screen w-full relative overflow-hidden bg-background text-foreground flex flex-col font-sans select-none">
@@ -132,7 +185,7 @@ export default function Home() {
                   <Compass className="w-4 h-4 text-primary" />
                   <h3 className="text-xs font-bold tracking-widest text-primary/80 uppercase">{t.regions}</h3>
                 </div>
-                <span className="text-[10px] text-muted-foreground/60">{t.yandex}</span>
+                <span className="text-[10px] text-muted-foreground/60">{t.source}</span>
               </div>
               <div className="grid grid-cols-2 gap-3" dir={isRtl ? "rtl" : "ltr"}>
                 {regions.map((region) => (
@@ -141,7 +194,7 @@ export default function Home() {
                     whileHover={{ scale: 1.02 }}
                     whileTap={{ scale: 0.98 }}
                     onClick={() => {
-                      setActiveRegion(region);
+                      setActiveRegionId(region.id);
                       setModalOpen(true);
                     }}
                     className={`cursor-pointer rounded-2xl p-4 flex flex-col items-center justify-center gap-2 relative overflow-hidden glass-card border-white/40 shadow-sm ${activeRegion.id === region.id ? 'ring-2 ring-primary ring-offset-2 ring-offset-white/50' : ''}`}

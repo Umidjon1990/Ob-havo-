@@ -1,10 +1,18 @@
-import { Wind, Droplets, MapPin, Sun, Clock } from "lucide-react";
+import { Wind, Droplets, MapPin, Sun, Clock, Cloud, CloudRain, CloudSnow, LucideIcon } from "lucide-react";
 import { motion } from "framer-motion";
 import { Region } from "@/data/regions";
 
 interface WeatherHeroProps {
   region: Region;
   lang: 'ar' | 'uz';
+}
+
+function getHourlyIcon(condition: string): LucideIcon {
+  const lowerCondition = condition?.toLowerCase() || '';
+  if (lowerCondition.includes('qor') || lowerCondition.includes('snow') || lowerCondition.includes('ثلج')) return CloudSnow;
+  if (lowerCondition.includes('yomg\'ir') || lowerCondition.includes('rain') || lowerCondition.includes('مطر')) return CloudRain;
+  if (lowerCondition.includes('ochiq') || lowerCondition.includes('clear') || lowerCondition.includes('صافي')) return Sun;
+  return Cloud;
 }
 
 const translations = {
@@ -91,13 +99,17 @@ export default function WeatherHero({ region, lang }: WeatherHeroProps) {
             <span className="text-xs font-bold uppercase tracking-wider">{t.hourly}</span>
           </div>
           <div className="flex overflow-x-auto gap-3 pb-4 no-scrollbar mask-gradient-sides">
-            {region.hourly.map((hour, idx) => (
-              <div key={idx} className="flex-shrink-0 flex flex-col items-center gap-2 bg-white/20 backdrop-blur-md p-3 rounded-xl min-w-[60px] border border-white/30">
-                <span className="text-xs font-medium text-muted-foreground">{hour.time}</span>
-                <hour.icon className="w-5 h-5 text-primary" />
-                <span className="text-sm font-bold">{hour.temp}°</span>
-              </div>
-            ))}
+            {region.hourly.slice(0, 12).map((hour, idx) => {
+              const condition = lang === 'ar' ? region.condition_ar : region.condition_uz;
+              const HourIcon = hour.icon || getHourlyIcon(condition);
+              return (
+                <div key={idx} className="flex-shrink-0 flex flex-col items-center gap-2 bg-white/20 backdrop-blur-md p-3 rounded-xl min-w-[60px] border border-white/30">
+                  <span className="text-xs font-medium text-muted-foreground">{hour.time}</span>
+                  <HourIcon className="w-5 h-5 text-primary" />
+                  <span className="text-sm font-bold">{hour.temp}°</span>
+                </div>
+              );
+            })}
           </div>
         </div>
 

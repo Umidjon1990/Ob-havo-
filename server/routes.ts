@@ -11,6 +11,16 @@ export async function registerRoutes(
   app: Express
 ): Promise<Server> {
   
+  // Weather API - Get all weather data
+  app.get("/api/weather", async (req, res) => {
+    try {
+      const allWeather = await storage.getAllWeatherCache();
+      res.json(allWeather);
+    } catch (error) {
+      res.status(500).json({ error: "Failed to fetch weather data" });
+    }
+  });
+
   // Weather API - Get weather for a region
   app.get("/api/weather/:regionId", async (req, res) => {
     try {
