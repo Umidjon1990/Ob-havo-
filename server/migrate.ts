@@ -14,6 +14,61 @@ async function migrate() {
   
   console.log("Creating database tables...");
   
+  // Drop old incompatible tables if they have wrong schema
+  const tablesResult = await client.query(`
+    SELECT table_name FROM information_schema.tables 
+    WHERE table_schema = 'public' AND table_name IN ('users', 'user_progress', 'weather_cache', 'bot_settings', 'channels')
+  `);
+  
+  const existingTables = tablesResult.rows.map(r => r.table_name);
+  
+  // Check if users table has integer id (old schema)
+  if (existingTables.includes('users')) {
+    const colResult = await client.query(`
+      SELECT data_type FROM information_schema.columns 
+      WHERE table_name = 'users' AND column_name = 'id'
+    `);
+    if (colResult.rows[0]?.data_type === 'integer') {
+      console.log("Dropping old tables with incompatible schema...");
+      await client.query(`DROP TABLE IF EXISTS user_progress CASCADE`);
+      await client.query(`DROP TABLE IF EXISTS users CASCADE`);
+    }
+  }
+  
+  // Check if weather_cache has integer id
+  if (existingTables.includes('weather_cache')) {
+    const colResult = await client.query(`
+      SELECT data_type FROM information_schema.columns 
+      WHERE table_name = 'weather_cache' AND column_name = 'id'
+    `);
+    if (colResult.rows[0]?.data_type === 'integer') {
+      await client.query(`DROP TABLE IF EXISTS weather_cache CASCADE`);
+    }
+  }
+  
+  // Check if bot_settings has integer id
+  if (existingTables.includes('bot_settings')) {
+    const colResult = await client.query(`
+      SELECT data_type FROM information_schema.columns 
+      WHERE table_name = 'bot_settings' AND column_name = 'id'
+    `);
+    if (colResult.rows[0]?.data_type === 'integer') {
+      await client.query(`DROP TABLE IF EXISTS bot_settings CASCADE`);
+    }
+  }
+  
+  // Check if channels has integer id
+  if (existingTables.includes('channels')) {
+    const colResult = await client.query(`
+      SELECT data_type FROM information_schema.columns 
+      WHERE table_name = 'channels' AND column_name = 'id'
+    `);
+    if (colResult.rows[0]?.data_type === 'integer') {
+      await client.query(`DROP TABLE IF EXISTS channels CASCADE`);
+    }
+  }
+  
+  // Create tables with correct schema
   await client.query(`
     CREATE TABLE IF NOT EXISTS users (
       id VARCHAR(255) PRIMARY KEY DEFAULT gen_random_uuid()::text,
@@ -70,11 +125,6 @@ async function migrate() {
       enabled BOOLEAN DEFAULT true,
       created_at TIMESTAMP DEFAULT NOW()
     );
-  `);
-  
-  // Add updated_at column to bot_settings if it doesn't exist (for existing tables)
-  await client.query(`
-    ALTER TABLE bot_settings ADD COLUMN IF NOT EXISTS updated_at TIMESTAMP DEFAULT NOW();
   `);
   
   // Insert default bot settings if not exists

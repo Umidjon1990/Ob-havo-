@@ -1,0 +1,121 @@
+  dataType: undefined,
+  constraint: undefined,
+  file: 'tablecmds.c',
+  line: '9896',
+  routine: 'ATAddForeignKeyConstraint'
+}
+  line: '9896',
+  routine: 'ATAddForeignKeyConstraint'
+}
+  schema: undefined,
+  table: undefined,
+  column: undefined,
+  dataType: undefined,
+  constraint: undefined,
+  file: 'tablecmds.c',
+Creating database tables...
+Migration failed: error: foreign key constraint "user_progress_user_id_fkey" cannot be implemented
+    at /app/dist/migrate.cjs:4027:21
+  detail: 'Key columns "user_id" and "id" are of incompatible types: character varying and integer.',
+    at process.processTicksAndRejections (node:internal/process/task_queues:95:5)
+  hint: undefined,
+  position: undefined,
+    at async migrate (/app/dist/migrate.cjs:4985:3) {
+  internalPosition: undefined,
+  length: 237,
+  severity: 'ERROR',
+  internalQuery: undefined,
+  code: '42804',
+  where: undefined,
+  code: '42804',
+}
+Creating database tables...
+  detail: 'Key columns "user_id" and "id" are of incompatible types: character varying and integer.',
+  file: 'tablecmds.c',
+  hint: undefined,
+Migration failed: error: foreign key constraint "user_progress_user_id_fkey" cannot be implemented
+  line: '9896',
+  schema: undefined,
+  position: undefined,
+    at /app/dist/migrate.cjs:4027:21
+  routine: 'ATAddForeignKeyConstraint'
+  table: undefined,
+    at process.processTicksAndRejections (node:internal/process/task_queues:95:5)
+  internalPosition: undefined,
+  column: undefined,
+    at async migrate (/app/dist/migrate.cjs:4985:3) {
+  internalQuery: undefined,
+  dataType: undefined,
+  length: 237,
+  where: undefined,
+  constraint: undefined,
+  severity: 'ERROR',
+    at process.processTicksAndRejections (node:internal/process/task_queues:95:5)
+  dataType: undefined,
+    at async migrate (/app/dist/migrate.cjs:4985:3) {
+  constraint: undefined,
+  length: 237,
+  file: 'tablecmds.c',
+  severity: 'ERROR',
+  line: '9896',
+  position: undefined,
+  code: '42804',
+  routine: 'ATAddForeignKeyConstraint'
+  detail: 'Key columns "user_id" and "id" are of incompatible types: character varying and integer.',
+}
+  internalPosition: undefined,
+  hint: undefined,
+  internalQuery: undefined,
+Creating database tables...
+  where: undefined,
+Migration failed: error: foreign key constraint "user_progress_user_id_fkey" cannot be implemented
+  schema: undefined,
+    at /app/dist/migrate.cjs:4027:21
+  table: undefined,
+  column: undefined,
+Creating database tables...
+Migration failed: error: foreign key constraint "user_progress_user_id_fkey" cannot be implemented
+    at /app/dist/migrate.cjs:4027:21
+    at process.processTicksAndRejections (node:internal/process/task_queues:95:5)
+    at async migrate (/app/dist/migrate.cjs:4985:3) {
+  length: 237,
+  severity: 'ERROR',
+  code: '42804',
+  detail: 'Key columns "user_id" and "id" are of incompatible types: character varying and integer.',
+  hint: undefined,
+  position: undefined,
+  internalPosition: undefined,
+  internalQuery: undefined,
+  where: undefined,
+  schema: undefined,
+  table: undefined,
+  column: undefined,
+  dataType: undefined,
+  constraint: undefined,
+  file: 'tablecmds.c',
+  line: '9896',
+  routine: 'ATAddForeignKeyConstraint'
+}
+Creating database tables...
+  code: '42804',
+  detail: 'Key columns "user_id" and "id" are of incompatible types: character varying and integer.',
+  hint: undefined,
+Migration failed: error: foreign key constraint "user_progress_user_id_fkey" cannot be implemented
+  position: undefined,
+  internalPosition: undefined,
+    at /app/dist/migrate.cjs:4027:21
+  internalQuery: undefined,
+  where: undefined,
+  schema: undefined,
+  table: undefined,
+    at process.processTicksAndRejections (node:internal/process/task_queues:95:5)
+    at async migrate (/app/dist/migrate.cjs:4985:3) {
+  length: 237,
+  severity: 'ERROR',
+  column: undefined,
+  dataType: undefined,
+  constraint: undefined,
+  file: 'tablecmds.c',
+  line: '9896',
+  routine: 'ATAddForeignKeyConstraint'
+}
