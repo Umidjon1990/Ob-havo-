@@ -264,6 +264,7 @@ export async function sendDailyChannelMessage(channelId: string, miniAppUrl?: st
     const weatherData = await storage.getWeatherCache(region.id);
     const temp = weatherData?.temperature ?? "--";
     const humidity = weatherData?.humidity ?? "--";
+    const condition_uz = weatherData?.condition ?? "—";
     
     let condition_ar = "—";
     let windSpeed = "--";
@@ -276,34 +277,42 @@ export async function sendDailyChannelMessage(channelId: string, miniAppUrl?: st
     }
     
     weatherLines.push(
-      `┌─────────────────────┐\n` +
-      `│ 🏙 <b>${region.name_ar}</b>\n` +
-      `│ 🌡 ${temp}°C  │  💧 ${humidity}%  │  💨 ${windSpeed} km/h\n` +
-      `│ ${condition_ar}\n` +
-      `└─────────────────────┘`
+      `┌─────────────────────────┐\n` +
+      `│ 🏙 <b>${region.name} | ${region.name_ar}</b>\n` +
+      `│ 🌡 ${temp}°C  💧 ${humidity}%  💨 ${windSpeed} km/h\n` +
+      `│ ${condition_uz} | ${condition_ar}\n` +
+      `└─────────────────────────┘`
     );
   }
   
-  const today = new Date().toLocaleDateString('ar-SA', { 
+  const todayAr = new Date().toLocaleDateString('ar-SA', { 
     weekday: 'long', 
     year: 'numeric', 
     month: 'long', 
     day: 'numeric' 
   });
   
-  const message = `☀️ <b>النَّشْرَة الجَوِّيَّة لِأُوزْبَكِسْتَان</b> ☀️
-━━━━━━━━━━━━━━━━━━━━━
-📅 ${today}
-━━━━━━━━━━━━━━━━━━━━━
+  const todayUz = new Date().toLocaleDateString('uz-UZ', { 
+    weekday: 'long', 
+    year: 'numeric', 
+    month: 'long', 
+    day: 'numeric' 
+  });
+  
+  const message = `☀️ <b>Ob-havo ma'lumoti | النَّشْرَة الجَوِّيَّة</b> ☀️
+━━━━━━━━━━━━━━━━━━━━━━━━
+📅 ${todayUz}
+📅 ${todayAr}
+━━━━━━━━━━━━━━━━━━━━━━━━
 
 ${weatherLines.join('\n\n')}
 
-━━━━━━━━━━━━━━━━━━━━━
-📲 لِلْمَزِيد مِنَ التَّفَاصِيل، اضْغَط عَلَى الزِّر أَدْنَاه`;
+━━━━━━━━━━━━━━━━━━━━━━━━
+📲 Batafsil | لِلْمَزِيد مِنَ التَّفَاصِيل`;
 
   await sendTelegramMessage(channelId, message, 'HTML', {
     inline_keyboard: [[
-      { text: "📱 بَتَفْصِيل - Batafsil", url: "https://t.me/Ztobhavobot" }
+      { text: "📱 Batafsil | بَتَفْصِيل", url: "https://t.me/Ztobhavobot" }
     ]]
   });
 }
