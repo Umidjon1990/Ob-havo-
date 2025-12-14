@@ -177,6 +177,17 @@ export default function Home() {
 
             {/* Quick Select List */}
             <div className="mb-8">
+              <div className="flex items-center justify-between mb-4">
+                  <h3 className="font-display font-semibold text-lg flex items-center gap-2">
+                  <Compass className="w-4 h-4 text-primary" /> Viloyatlar
+                  </h3>
+                  <Link href="/forecast">
+                    <Button variant="ghost" size="sm" className="text-primary text-xs font-bold hover:bg-primary/10">
+                      Haftalik to'liq &rarr;
+                    </Button>
+                  </Link>
+              </div>
+              
               <ScrollArea className="w-full whitespace-nowrap pb-2">
                   <div className="flex gap-3 px-1">
                   {regions.map((region) => (
