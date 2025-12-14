@@ -8,7 +8,7 @@ import WeatherHero from "@/components/WeatherHero";
 import WeatherModal from "@/components/WeatherModal";
 import { Link, useSearch } from "wouter";
 import heroBg from "@assets/generated_images/clean_modern_blue_sky_weather_background_with_soft_clouds.png";
-import mapImg from "@assets/generated_images/clean_grey_map_of_uzbekistan.png";
+// import mapImg from "@assets/generated_images/clean_grey_map_of_uzbekistan.png";
 import { regions } from "@/data/regions";
 
 export default function Home() {
@@ -88,9 +88,9 @@ export default function Home() {
                </div>
                
                <img 
-                 src={mapImg} 
+                 src="/map.jpg" 
                  alt="O'zbekiston Xaritasi" 
-                 className="w-full h-full object-contain opacity-90 scale-105 relative z-10"
+                 className="w-full h-full object-contain opacity-80 scale-105 relative z-10 mix-blend-multiply dark:mix-blend-normal dark:opacity-60"
                />
 
                {/* Map Markers */}
