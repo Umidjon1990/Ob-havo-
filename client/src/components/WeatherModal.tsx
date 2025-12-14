@@ -2,6 +2,8 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } f
 import { Cloud, Sun, Wind, Droplets, Thermometer, Calendar } from "lucide-react";
 import { motion } from "framer-motion";
 import { Region } from "@/data/regions";
+import { useState, useEffect } from "react";
+import { fetchWeatherAdvice } from "@/lib/api";
 
 interface WeatherModalProps {
   isOpen: boolean;
@@ -32,6 +34,24 @@ const translations = {
 };
 
 export default function WeatherModal({ isOpen, onClose, region, lang }: WeatherModalProps) {
+  const [aiAdvice, setAiAdvice] = useState("");
+  const [loading, setLoading] = useState(false);
+
+  useEffect(() => {
+    if (isOpen && region) {
+      setLoading(true);
+      fetchWeatherAdvice(
+        lang === 'ar' ? region.name_ar : region.name_uz,
+        region.temp,
+        lang === 'ar' ? region.condition_ar : region.condition_uz,
+        lang
+      ).then(advice => {
+        setAiAdvice(advice);
+        setLoading(false);
+      });
+    }
+  }, [isOpen, region, lang]);
+
   if (!region) return null;
 
   const t = translations[lang];
@@ -99,7 +119,7 @@ export default function WeatherModal({ isOpen, onClose, region, lang }: WeatherM
 
         <div className="mt-4 p-4 bg-muted/50 rounded-2xl text-center">
             <p className="text-sm text-muted-foreground italic" dir={isRtl ? "rtl" : "ltr"}>
-                "{t.quote}"
+                {loading ? "..." : `"${aiAdvice || t.quote}"`}
             </p>
         </div>
       </DialogContent>
