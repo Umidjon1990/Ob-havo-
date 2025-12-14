@@ -152,8 +152,20 @@ export async function registerRoutes(
   // Setup Telegram webhook
   app.post("/api/telegram/setup-webhook", async (req, res) => {
     try {
-      // Use APP_URL if set, otherwise construct from request (with https forced)
-      const appUrl = process.env.APP_URL || `https://${req.get('host')}`;
+      // Priority: APP_URL > RAILWAY_PUBLIC_DOMAIN > request host
+      let appUrl = process.env.APP_URL;
+      
+      // Ensure APP_URL has https:// prefix
+      if (appUrl && !appUrl.startsWith('http')) {
+        appUrl = `https://${appUrl}`;
+      }
+      
+      if (!appUrl && process.env.RAILWAY_PUBLIC_DOMAIN) {
+        appUrl = `https://${process.env.RAILWAY_PUBLIC_DOMAIN}`;
+      }
+      if (!appUrl) {
+        appUrl = `https://${req.get('host')}`;
+      }
       const webhookUrl = `${appUrl}/api/telegram/webhook`;
       console.log("Setting webhook URL:", webhookUrl);
       const result = await setTelegramWebhook(webhookUrl);
