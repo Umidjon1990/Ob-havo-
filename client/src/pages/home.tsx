@@ -139,15 +139,28 @@ export default function Home() {
                      <region.icon className="w-4 h-4" />
                    </div>
                    
-                   {/* Always Visible Label */}
-                   <div className={`
-                       px-2 py-0.5 rounded-md text-[10px] font-bold backdrop-blur-md shadow-sm whitespace-nowrap border transition-all
-                       ${selectedRegion.id === region.id
-                         ? 'bg-primary text-primary-foreground border-primary/50 translate-y-[-2px]'
-                         : 'bg-white/60 text-foreground/80 border-white/40'}
-                     `}
-                   >
-                     {region.name}
+                   {/* Callout Label with Line */}
+                   <div className="absolute pointer-events-none" style={{ 
+                     top: -24, 
+                     left: region.x > 50 ? -60 : 20, // Dynamic offset based on position
+                     width: 80
+                   }}>
+                     {/* Connecting Line (CSS) */}
+                     <div className={`
+                       absolute top-6 h-[1px] bg-primary/40
+                       ${region.x > 50 ? 'right-[-10px] w-4 rotate-12 origin-right' : 'left-[-10px] w-4 -rotate-12 origin-left'}
+                     `} />
+
+                     {/* Label Box */}
+                     <div className={`
+                         px-2 py-0.5 rounded-md text-[10px] font-bold backdrop-blur-md shadow-sm whitespace-nowrap border transition-all text-center
+                         ${selectedRegion.id === region.id
+                           ? 'bg-primary text-primary-foreground border-primary/50'
+                           : 'bg-white/80 text-foreground/80 border-white/40'}
+                       `}
+                     >
+                       {region.name}
+                     </div>
                    </div>
                  </motion.button>
                ))}
