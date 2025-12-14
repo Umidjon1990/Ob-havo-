@@ -78,9 +78,9 @@ export default function WeatherModal({ isOpen, onClose, region, lang }: WeatherM
             initial={{ opacity: 0, y: 10 }}
             animate={{ opacity: 1, y: 0 }}
             transition={{ delay: 0.2 }}
-            className="bg-orange-50 dark:bg-orange-900/20 p-4 rounded-2xl flex flex-col items-center gap-2"
+            className="bg-emerald-50 dark:bg-emerald-900/20 p-4 rounded-2xl flex flex-col items-center gap-2"
           >
-            <Thermometer className="w-6 h-6 text-orange-500" />
+            <Thermometer className="w-6 h-6 text-emerald-700" />
             <span className="text-xs text-muted-foreground">{t.pressure}</span>
             <span className="font-bold">{region.pressure} mm</span>
           </motion.div>

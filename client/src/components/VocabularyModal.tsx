@@ -81,7 +81,7 @@ function VocabCard({ item, index }: { item: any, index: number }) {
       className="bg-white/50 border border-white/40 shadow-sm rounded-xl p-4 flex items-center justify-between group hover:bg-white/80 transition-colors cursor-pointer"
     >
       <div className="flex items-center gap-4">
-        <div className={`w-10 h-10 rounded-full flex items-center justify-center ${item.category === 'condition' ? 'bg-orange-100 text-orange-600' : item.category === 'metric' ? 'bg-blue-100 text-blue-600' : 'bg-slate-100 text-slate-600'}`}>
+        <div className={`w-10 h-10 rounded-full flex items-center justify-center ${item.category === 'condition' ? 'bg-emerald-100 text-emerald-700' : item.category === 'metric' ? 'bg-blue-100 text-blue-600' : 'bg-slate-100 text-slate-600'}`}>
           {item.icon ? <item.icon className="w-5 h-5" /> : <Book className="w-5 h-5" />}
         </div>
         <div className="flex flex-col items-start">
