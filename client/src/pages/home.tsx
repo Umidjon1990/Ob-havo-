@@ -35,7 +35,7 @@ export default function Home() {
       advice: "مَهْمَا كَان الطَّقْس الْيَوْم، حَافِظ عَلَى مِزَاجِك رَائِعاً!",
       select: "اخْتَر مَنْطِقَة",
       yandex: "بَيَانَات مِنْ ياندكس",
-      vocab: "الْقَامُوس"
+      vocab: "الْقَامُوس / Lug'at"
     },
     uz: {
       title: "Ob-Havo",
@@ -46,7 +46,7 @@ export default function Home() {
       advice: "Bugungi ob-havo qanday bo'lishidan qat'iy nazar, kayfiyatingizni a'lo darajada saqlang!",
       select: "Hududni tanlang",
       yandex: "Ma'lumotlar Yandex dan",
-      vocab: "Lug'at"
+      vocab: "Lug'at / الْقَامُوس"
     }
   };
 

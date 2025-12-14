@@ -32,7 +32,7 @@ export default function VocabularyModal({ isOpen, onClose, lang }: VocabularyMod
           </DialogDescription>
         </DialogHeader>
 
-        <Tabs defaultValue="all" className="flex-1 flex flex-col">
+        <Tabs defaultValue="all" className="flex-1 flex flex-col min-h-0">
           <div className="px-6 mt-4">
             <TabsList className="w-full grid grid-cols-4 bg-muted/50 p-1 h-10">
               {categories.map(cat => (
@@ -47,21 +47,25 @@ export default function VocabularyModal({ isOpen, onClose, lang }: VocabularyMod
             </TabsList>
           </div>
 
-          <ScrollArea className="flex-1 p-6 pt-4">
-            <TabsContent value="all" className="mt-0 space-y-3">
-              {vocabulary.map((item, idx) => (
-                <VocabCard key={item.id} item={item} index={idx} />
-              ))}
-            </TabsContent>
-            
-            {['condition', 'metric', 'general'].map(catId => (
-              <TabsContent key={catId} value={catId} className="mt-0 space-y-3">
-                {vocabulary.filter(v => v.category === catId).map((item, idx) => (
-                  <VocabCard key={item.id} item={item} index={idx} />
-                ))}
-              </TabsContent>
-            ))}
-          </ScrollArea>
+          <div className="flex-1 overflow-hidden relative">
+             <ScrollArea className="h-full w-full">
+                <div className="p-6 pt-4">
+                    <TabsContent value="all" className="mt-0 space-y-3">
+                    {vocabulary.map((item, idx) => (
+                        <VocabCard key={item.id} item={item} index={idx} />
+                    ))}
+                    </TabsContent>
+                    
+                    {['condition', 'metric', 'general'].map(catId => (
+                    <TabsContent key={catId} value={catId} className="mt-0 space-y-3">
+                        {vocabulary.filter(v => v.category === catId).map((item, idx) => (
+                        <VocabCard key={item.id} item={item} index={idx} />
+                        ))}
+                    </TabsContent>
+                    ))}
+                </div>
+            </ScrollArea>
+          </div>
         </Tabs>
       </DialogContent>
     </Dialog>
