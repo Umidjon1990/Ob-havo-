@@ -299,22 +299,6 @@ export async function sendDailyChannelMessage(channelId: string, miniAppUrl?: st
     day: 'numeric' 
   });
   
-  const wisdoms = [
-    { uz: "Ilm izlash har bir musulmonga farzdir.", ar: "طَلَبُ العِلْمِ فَرِيضَةٌ عَلَى كُلِّ مُسْلِم" },
-    { uz: "Sabr - imonning yarmi.", ar: "الصَّبْرُ نِصْفُ الإِيمَان" },
-    { uz: "Kim yaxshilikka yo'l ko'rsatsa, uni qilgan kishining ajrini oladi.", ar: "مَنْ دَلَّ عَلَى خَيْرٍ فَلَهُ مِثْلُ أَجْرِ فَاعِلِه" },
-    { uz: "Musulmon musulmonning birodaridur.", ar: "المُسْلِمُ أَخُو المُسْلِم" },
-    { uz: "Eng yaxshi sadaqa - ilm o'rgatishdir.", ar: "أَفْضَلُ الصَّدَقَةِ أَنْ يَتَعَلَّمَ المَرْءُ عِلْماً ثُمَّ يُعَلِّمَهُ أَخَاه" },
-    { uz: "Dunyo oxirat uchun ekin dalasi.", ar: "الدُّنْيَا مَزْرَعَةُ الآخِرَة" },
-    { uz: "Yaxshi so'z sadaqadir.", ar: "الكَلِمَةُ الطَّيِّبَةُ صَدَقَة" },
-    { uz: "Tabassum sadaqadir.", ar: "تَبَسُّمُكَ فِي وَجْهِ أَخِيكَ صَدَقَة" },
-    { uz: "Kim Allohdan qo'rqsa, unga chiqish yo'li yaratiladi.", ar: "وَمَنْ يَتَّقِ اللهَ يَجْعَلْ لَهُ مَخْرَجاً" },
-    { uz: "Shukr qilsangiz, albatta ko'paytiraman.", ar: "لَئِنْ شَكَرْتُمْ لَأَزِيدَنَّكُم" },
-  ];
-  
-  const dayOfYear = Math.floor((Date.now() - new Date(new Date().getFullYear(), 0, 0).getTime()) / 86400000);
-  const wisdom = wisdoms[dayOfYear % wisdoms.length];
-  
   const message = `☀️ <b>Ob-havo ma'lumoti | النَّشْرَة الجَوِّيَّة</b> ☀️
 ━━━━━━━━━━━━━━━━━━━━━━━━
 📅 ${todayUz}
@@ -323,10 +307,6 @@ export async function sendDailyChannelMessage(channelId: string, miniAppUrl?: st
 
 ${weatherLines.join('\n\n')}
 
-━━━━━━━━━━━━━━━━━━━━━━━━
-💎 <b>Kun hikmati | حِكْمَةُ اليَوْم</b>
-${wisdom.uz}
-${wisdom.ar}
 ━━━━━━━━━━━━━━━━━━━━━━━━
 📲 Batafsil | لِلْمَزِيد مِنَ التَّفَاصِيل`;
 
