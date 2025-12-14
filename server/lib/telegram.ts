@@ -127,11 +127,54 @@ export async function handleTelegramUpdate(update: TelegramUpdate) {
     const newLang = user.preferredLang === 'ar' ? 'uz' : 'ar';
     await storage.updateUserPreferences(user.id, newLang);
     
-    const message = newLang === 'ar'
-      ? 'تم تغيير اللغة إلى العربية ✓\n\nاضغط /start لرؤية القائمة الجديدة'
-      : "Til o'zbekchaga o'zgartirildi ✓\n\nYangi menyuni ko'rish uchun /start bosing";
+    const appBaseUrl = process.env.REPLIT_DEV_DOMAIN 
+      ? `https://${process.env.REPLIT_DEV_DOMAIN}`
+      : 'https://ob-havo.replit.app';
     
-    await sendTelegramMessage(chatId, message);
+    const langButtonText = newLang === 'ar' ? "🌐 تغيير اللغة → O'zbekcha" : "🌐 Tilni o'zgartirish → العربية";
+    
+    const welcomeMessage = newLang === 'ar'
+      ? `🎓 <b>مشروع التعليم الحديث</b>\n\n✅ تم تغيير اللغة إلى العربية\n\nاختر المنطقة لمعرفة الطقس:`
+      : `🎓 <b>Zamonaviy ta'lim loyihasi</b>\n\n✅ Til o'zbekchaga o'zgartirildi\n\nOb-havo ma'lumotini ko'rish uchun viloyatni tanlang:`;
+    
+    const keyboard = [
+      [
+        { text: "🏙 طَشْقَنْد", web_app: { url: `${appBaseUrl}?region=toshkent` } },
+        { text: "🏙 سَمَرْقَنْد", web_app: { url: `${appBaseUrl}?region=samarqand` } }
+      ],
+      [
+        { text: "🏙 بُخَارَى", web_app: { url: `${appBaseUrl}?region=buxoro` } },
+        { text: "🏙 أَنْدِيجَان", web_app: { url: `${appBaseUrl}?region=andijon` } }
+      ],
+      [
+        { text: "🏙 نَمَنْغَان", web_app: { url: `${appBaseUrl}?region=namangan` } },
+        { text: "🏙 فَرْغَانَة", web_app: { url: `${appBaseUrl}?region=fargona` } }
+      ],
+      [
+        { text: "🏙 نُوكُوس", web_app: { url: `${appBaseUrl}?region=nukus` } },
+        { text: "🏙 قَرْشِي", web_app: { url: `${appBaseUrl}?region=qarshi` } }
+      ],
+      [
+        { text: "🏙 أُورْجِينْتْش", web_app: { url: `${appBaseUrl}?region=urganch` } },
+        { text: "🏙 جِيزَاك", web_app: { url: `${appBaseUrl}?region=jizzax` } }
+      ],
+      [
+        { text: "🏙 نَوَاوِي", web_app: { url: `${appBaseUrl}?region=navoiy` } },
+        { text: "🏙 جُولِيسْتَان", web_app: { url: `${appBaseUrl}?region=guliston` } }
+      ],
+      [
+        { text: "🏙 تِرْمِذ", web_app: { url: `${appBaseUrl}?region=termiz` } }
+      ],
+      [
+        { text: langButtonText }
+      ]
+    ];
+    
+    await sendTelegramMessage(chatId, welcomeMessage, 'HTML', {
+      keyboard,
+      resize_keyboard: true,
+      one_time_keyboard: false
+    });
   } 
   else if (text?.startsWith('/weather')) {
     const region = user.preferredRegion || 'toshkent';
