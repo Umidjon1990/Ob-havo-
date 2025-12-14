@@ -1,12 +1,14 @@
-import { useState } from "react";
-import { ArrowLeft, Save, RefreshCw, Send } from "lucide-react";
+import { useState, useEffect } from "react";
+import { ArrowLeft, Save, RefreshCw, Send, Radio } from "lucide-react";
 import { Link } from "wouter";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { useToast } from "@/hooks/use-toast";
-import { setupTelegramWebhook } from "@/lib/api";
+import { Switch } from "@/components/ui/switch";
+import { setupTelegramWebhook, getBotSettings, updateBotSettings, testChannelMessage } from "@/lib/api";
+import { regions } from "@/data/regions";
 
 export default function Admin() {
   const { toast } = useToast();
@@ -20,9 +22,26 @@ export default function Admin() {
     dailyMessage: "Xayrli tong! Bugungi kuningiz samarali o'tsin."
   });
 
+  const [channelId, setChannelId] = useState("");
+  const [dailyEnabled, setDailyEnabled] = useState(false);
+  const [dailyTime, setDailyTime] = useState("08:00");
+  const [dailyRegion, setDailyRegion] = useState("tashkent");
+  const [testingChannel, setTestingChannel] = useState(false);
+
+  useEffect(() => {
+    getBotSettings().then(settings => {
+      if (settings) {
+        setChannelId(settings.channelId || "");
+        setDailyEnabled(settings.dailyMessageEnabled || false);
+        setDailyTime(settings.dailyMessageTime || "08:00");
+        setDailyRegion(settings.dailyRegion || "tashkent");
+      }
+    });
+  }, []);
+
   const handleSetupWebhook = async () => {
     setLoadingWebhook(true);
-    setWebhookStatus("جاري الإعداد...");
+    setWebhookStatus("Sozlanmoqda...");
     
     const result = await setupTelegramWebhook();
     
@@ -41,6 +60,34 @@ export default function Admin() {
       });
     }
     setLoadingWebhook(false);
+  };
+
+  const handleSaveChannelSettings = async () => {
+    await updateBotSettings({
+      channelId,
+      dailyMessageEnabled: dailyEnabled,
+      dailyMessageTime: dailyTime,
+      dailyRegion,
+    });
+    toast({
+      title: "Saqlandi!",
+      description: "Kanal sozlamalari saqlandi.",
+    });
+  };
+
+  const handleTestChannel = async () => {
+    if (!channelId) {
+      toast({ title: "Xatolik", description: "Kanal ID kiriting", variant: "destructive" });
+      return;
+    }
+    setTestingChannel(true);
+    const result = await testChannelMessage(channelId, dailyRegion);
+    if (result?.ok) {
+      toast({ title: "Yuborildi!", description: "Kanalga test xabar yuborildi." });
+    } else {
+      toast({ title: "Xatolik", description: "Xabar yuborishda muammo. Botni kanalga admin qilib qo'shing.", variant: "destructive" });
+    }
+    setTestingChannel(false);
   };
 
   const handleSave = () => {
@@ -154,6 +201,64 @@ export default function Admin() {
                     )}
                 </div>
                 
+                <div className="border-t pt-4 space-y-4">
+                    <h3 className="text-sm font-semibold flex items-center gap-2">
+                      <Radio className="w-4 h-4" /> Kanal sozlamalari (Avto-xabar)
+                    </h3>
+                    
+                    <div className="space-y-2">
+                      <label className="text-sm font-medium">Kanal ID</label>
+                      <Input 
+                        value={channelId}
+                        onChange={(e) => setChannelId(e.target.value)}
+                        placeholder="-1001234567890 yoki @kanalusername"
+                      />
+                      <p className="text-xs text-muted-foreground">
+                        Botni kanalga admin qilib qo'shing, keyin kanal ID sini kiriting
+                      </p>
+                    </div>
+
+                    <div className="flex items-center justify-between">
+                      <div>
+                        <label className="text-sm font-medium">Kunlik avto-xabar</label>
+                        <p className="text-xs text-muted-foreground">Har kuni ob-havo xabarini yuborish</p>
+                      </div>
+                      <Switch checked={dailyEnabled} onCheckedChange={setDailyEnabled} />
+                    </div>
+
+                    <div className="grid grid-cols-2 gap-3">
+                      <div className="space-y-1">
+                        <label className="text-xs font-medium">Vaqt</label>
+                        <Input 
+                          type="time"
+                          value={dailyTime}
+                          onChange={(e) => setDailyTime(e.target.value)}
+                        />
+                      </div>
+                      <div className="space-y-1">
+                        <label className="text-xs font-medium">Hudud</label>
+                        <select 
+                          value={dailyRegion}
+                          onChange={(e) => setDailyRegion(e.target.value)}
+                          className="w-full h-10 rounded-md border border-input bg-background px-3 py-2 text-sm"
+                        >
+                          {regions.map(r => (
+                            <option key={r.id} value={r.id}>{r.name_uz}</option>
+                          ))}
+                        </select>
+                      </div>
+                    </div>
+
+                    <div className="flex gap-2">
+                      <Button onClick={handleSaveChannelSettings} className="flex-1">
+                        <Save className="w-4 h-4 mr-2" /> Saqlash
+                      </Button>
+                      <Button onClick={handleTestChannel} variant="outline" disabled={testingChannel}>
+                        {testingChannel ? "..." : "Test"}
+                      </Button>
+                    </div>
+                </div>
+
                 <div className="border-t pt-4 space-y-2">
                     <label className="text-sm font-medium">Bot buyruqlari</label>
                     <div className="space-y-1 text-xs text-muted-foreground">

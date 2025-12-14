@@ -32,6 +32,16 @@ export const weatherCache = pgTable("weather_cache", {
   updatedAt: timestamp("updated_at").defaultNow(),
 });
 
+export const botSettings = pgTable("bot_settings", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  channelId: text("channel_id"),
+  dailyMessageEnabled: boolean("daily_message_enabled").default(false),
+  dailyMessageTime: text("daily_message_time").default("08:00"),
+  dailyRegion: text("daily_region").default("tashkent"),
+  lastDailyMessageSent: timestamp("last_daily_message_sent"),
+  updatedAt: timestamp("updated_at").defaultNow(),
+});
+
 export const insertUserSchema = createInsertSchema(users).omit({
   id: true,
   createdAt: true,
@@ -47,9 +57,16 @@ export const insertWeatherCacheSchema = createInsertSchema(weatherCache).omit({
   updatedAt: true,
 });
 
+export const insertBotSettingsSchema = createInsertSchema(botSettings).omit({
+  id: true,
+  updatedAt: true,
+});
+
 export type InsertUser = z.infer<typeof insertUserSchema>;
 export type User = typeof users.$inferSelect;
 export type InsertUserProgress = z.infer<typeof insertUserProgressSchema>;
 export type UserProgress = typeof userProgress.$inferSelect;
 export type InsertWeatherCache = z.infer<typeof insertWeatherCacheSchema>;
 export type WeatherCache = typeof weatherCache.$inferSelect;
+export type InsertBotSettings = z.infer<typeof insertBotSettingsSchema>;
+export type BotSettings = typeof botSettings.$inferSelect;

@@ -139,5 +139,36 @@ export async function registerRoutes(
     }
   });
 
+  // Bot settings
+  app.get("/api/bot-settings", async (req, res) => {
+    try {
+      const settings = await storage.getBotSettings();
+      res.json(settings || {});
+    } catch (error) {
+      res.status(500).json({ error: "Failed to fetch settings" });
+    }
+  });
+
+  app.post("/api/bot-settings", async (req, res) => {
+    try {
+      const settings = await storage.updateBotSettings(req.body);
+      res.json(settings);
+    } catch (error) {
+      res.status(500).json({ error: "Failed to update settings" });
+    }
+  });
+
+  // Test channel message
+  app.post("/api/telegram/test-channel", async (req, res) => {
+    try {
+      const { channelId, region } = req.body;
+      const { sendDailyChannelMessage } = await import("./lib/telegram");
+      await sendDailyChannelMessage(channelId, region || 'tashkent');
+      res.json({ ok: true });
+    } catch (error: any) {
+      res.status(500).json({ error: error.message });
+    }
+  });
+
   return httpServer;
 }

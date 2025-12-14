@@ -1,6 +1,6 @@
 import { db } from "./db";
-import { users, weatherCache, userProgress } from "@shared/schema";
-import type { User, InsertUser, WeatherCache, InsertWeatherCache, UserProgress, InsertUserProgress } from "@shared/schema";
+import { users, weatherCache, userProgress, botSettings } from "@shared/schema";
+import type { User, InsertUser, WeatherCache, InsertWeatherCache, UserProgress, InsertUserProgress, BotSettings, InsertBotSettings } from "@shared/schema";
 import { eq } from "drizzle-orm";
 
 export interface IStorage {
@@ -17,6 +17,10 @@ export interface IStorage {
   // User progress methods
   getUserProgress(userId: string): Promise<UserProgress[]>;
   updateVocabularyProgress(progress: InsertUserProgress): Promise<UserProgress>;
+  
+  // Bot settings methods
+  getBotSettings(): Promise<BotSettings | undefined>;
+  updateBotSettings(settings: Partial<InsertBotSettings>): Promise<BotSettings>;
 }
 
 export class DatabaseStorage implements IStorage {
@@ -79,6 +83,27 @@ export class DatabaseStorage implements IStorage {
       })
       .returning();
     return result;
+  }
+
+  async getBotSettings(): Promise<BotSettings | undefined> {
+    const [settings] = await db.select().from(botSettings).limit(1);
+    return settings;
+  }
+
+  async updateBotSettings(settings: Partial<InsertBotSettings>): Promise<BotSettings> {
+    const existing = await this.getBotSettings();
+    
+    if (existing) {
+      const [updated] = await db
+        .update(botSettings)
+        .set({ ...settings, updatedAt: new Date() })
+        .where(eq(botSettings.id, existing.id))
+        .returning();
+      return updated;
+    } else {
+      const [inserted] = await db.insert(botSettings).values(settings as InsertBotSettings).returning();
+      return inserted;
+    }
   }
 }
 

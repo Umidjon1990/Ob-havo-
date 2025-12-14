@@ -123,3 +123,52 @@ export async function setTelegramWebhook(webhookUrl: string) {
   
   return await response.json();
 }
+
+export async function sendDailyChannelMessage(channelId: string, region: string) {
+  const weatherData = await storage.getWeatherCache(region);
+  
+  const advice = await generateWeatherAdvice(
+    region,
+    weatherData?.temperature || 20,
+    weatherData?.condition || 'Ochiq',
+    'uz'
+  );
+  
+  const message = `🌤 <b>Bugungi Ob-Havo - ${region.charAt(0).toUpperCase() + region.slice(1)}</b>
+
+🌡 Harorat: ${weatherData?.temperature || 20}°C
+☁️ Holat: ${weatherData?.condition || 'Ochiq'}
+💧 Namlik: ${weatherData?.humidity || 45}%
+💨 Shamol: ${weatherData?.windSpeed || 10} km/s
+
+💡 <i>${advice}</i>
+
+📱 Mini App: t.me/YOUR_BOT?startapp=${region}`;
+
+  await sendTelegramMessage(Number(channelId), message);
+}
+
+export async function startDailyMessageScheduler() {
+  setInterval(async () => {
+    try {
+      const settings = await storage.getBotSettings();
+      if (!settings?.dailyMessageEnabled || !settings.channelId) return;
+
+      const now = new Date();
+      const [targetHour, targetMinute] = (settings.dailyMessageTime || "08:00").split(":").map(Number);
+      
+      if (now.getHours() === targetHour && now.getMinutes() === targetMinute) {
+        const lastSent = settings.lastDailyMessageSent;
+        const today = new Date().toDateString();
+        
+        if (!lastSent || new Date(lastSent).toDateString() !== today) {
+          await sendDailyChannelMessage(settings.channelId, settings.dailyRegion || 'tashkent');
+          await storage.updateBotSettings({ lastDailyMessageSent: new Date() });
+          console.log("Daily message sent to channel");
+        }
+      }
+    } catch (error) {
+      console.error("Error in daily message scheduler:", error);
+    }
+  }, 60000); // Check every minute
+}

@@ -56,3 +56,41 @@ export async function setupTelegramWebhook() {
     return null;
   }
 }
+
+export async function getBotSettings() {
+  try {
+    const response = await fetch('/api/bot-settings');
+    return await response.json();
+  } catch (error) {
+    console.error('Error fetching bot settings:', error);
+    return null;
+  }
+}
+
+export async function updateBotSettings(settings: any) {
+  try {
+    const response = await fetch('/api/bot-settings', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(settings),
+    });
+    return await response.json();
+  } catch (error) {
+    console.error('Error updating bot settings:', error);
+    return null;
+  }
+}
+
+export async function testChannelMessage(channelId: string, region: string) {
+  try {
+    const response = await fetch('/api/telegram/test-channel', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ channelId, region }),
+    });
+    return await response.json();
+  } catch (error) {
+    console.error('Error testing channel:', error);
+    return null;
+  }
+}
