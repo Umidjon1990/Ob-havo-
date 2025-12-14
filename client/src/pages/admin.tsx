@@ -390,7 +390,7 @@ export default function Admin() {
                 <Input 
                   value={newChannelId}
                   onChange={(e) => setNewChannelId(e.target.value)}
-                  placeholder="-1001234567890"
+                  placeholder="@zamonaviymedia"
                   className="flex-1"
                 />
               </div>
@@ -398,7 +398,7 @@ export default function Admin() {
                 <Input 
                   value={newChannelTitle}
                   onChange={(e) => setNewChannelTitle(e.target.value)}
-                  placeholder="Kanal/guruh nomi (ixtiyoriy)"
+                  placeholder="Kanal nomi (ixtiyoriy)"
                   className="flex-1"
                 />
                 <Button onClick={handleAddChannel} className="gap-2">
@@ -406,7 +406,7 @@ export default function Admin() {
                 </Button>
               </div>
               <p className="text-xs text-muted-foreground">
-                Botni kanal/guruhga admin qilib qo'shing, keyin ID ni kiriting
+                Botni kanalga admin qilib qo'shing, keyin @username kiriting
               </p>
             </div>
 
