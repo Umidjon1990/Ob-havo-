@@ -10,33 +10,33 @@ import { useToast } from "@/hooks/use-toast";
 export default function Admin() {
   const { toast } = useToast();
   const [formData, setFormData] = useState({
-    arabicWord: "شُكْر",
-    uzbekWord: "Shukr",
-    pronunciation: "Shukr",
-    context: "Ne'matlarga minnatdor bo'lish. Alloh taolo aytadi: «Agar shukr qilsangiz, albatta, (ne'matimni) ziyoda qilurman» (Ibrohim surasi, 7-oyat).",
-    dailyMessage: "Xayrli tong! Bugungi kuningiz barokatli bo'lsin."
+    arabicWord: "سَلَام",
+    uzbekWord: "Salom",
+    pronunciation: "Salaam",
+    context: "Tinchlik va omonlik. Salomlashish odobi - insoniylikning go'zal belgisidir.",
+    dailyMessage: "Xayrli tong! Bugungi kuningiz samarali o'tsin."
   });
 
   const handleSave = () => {
     toast({
       title: "Muvaffaqiyatli saqlandi",
-      description: "Bugungi kun hikmati yangilandi.",
+      description: "Bugungi kun so'zi yangilandi.",
     });
   };
 
   const generateAI = () => {
     toast({
       title: "AI Generatsiya",
-      description: "ChatGPT yangi hikmat yozmoqda...",
+      description: "ChatGPT yangi so'z yozmoqda...",
     });
     // Mock AI delay
     setTimeout(() => {
         setFormData({
             ...formData,
-            arabicWord: "صَبْر",
-            uzbekWord: "Sabr",
-            pronunciation: "Sabr",
-            context: "Sabr – qiyinchiliklarga chidash va Allohdan mukofot kutishdir. «Albatta, Alloh sabrliylar bilandir» (Baqara surasi, 153-oyat)."
+            arabicWord: "حَيَاة",
+            uzbekWord: "Hayot",
+            pronunciation: "Hayaat",
+            context: "Hayot - bu eng katta ne'mat. Har bir lahzani qadrlash kerak."
         })
     }, 1000);
   };
@@ -55,7 +55,7 @@ export default function Admin() {
 
         <Card className="glass-panel border-white/20">
           <CardHeader className="flex flex-row items-center justify-between">
-            <CardTitle>Kun Hikmati Tahriri</CardTitle>
+            <CardTitle>Kun So'zi Tahriri</CardTitle>
             <Button variant="outline" size="sm" onClick={generateAI} className="gap-2">
               <RefreshCw className="w-4 h-4" /> AI Yordam
             </Button>
@@ -88,7 +88,7 @@ export default function Admin() {
             </div>
 
             <div className="space-y-2">
-              <label className="text-sm font-medium">Kontekst va Iqtibos</label>
+              <label className="text-sm font-medium">Ma'nosi va Izoh</label>
               <Textarea 
                 value={formData.context}
                 onChange={(e) => setFormData({...formData, context: e.target.value})}

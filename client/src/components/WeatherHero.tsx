@@ -14,12 +14,7 @@ interface WeatherHeroProps {
 export default function WeatherHero({ weather }: WeatherHeroProps) {
   return (
     <div className="relative w-full flex flex-col items-center justify-center py-6">
-      {/* Decorative Islamic Pattern Circle (CSS based) */}
-      <div className="absolute inset-0 flex items-center justify-center pointer-events-none opacity-10">
-        <div className="w-64 h-64 border-[1px] border-primary rounded-full animate-spin-slow" style={{ animationDuration: '60s' }} />
-        <div className="w-48 h-48 border-[1px] border-primary rounded-full absolute animate-spin-slow" style={{ animationDuration: '40s', animationDirection: 'reverse' }} />
-      </div>
-
+      
       <motion.div 
         initial={{ opacity: 0, scale: 0.9 }}
         animate={{ opacity: 1, scale: 1 }}
@@ -41,9 +36,9 @@ export default function WeatherHero({ weather }: WeatherHeroProps) {
 
         <p className="text-xl font-medium text-muted-foreground mb-2">{weather.condition}</p>
         
-        {/* Religious Phrase */}
-        <p className="text-sm text-primary/80 font-arabic font-medium mt-2">
-          "SubhanAllah, bugun havo ajoyib!"
+        {/* Simple Motivational Phrase (Secular) */}
+        <p className="text-sm text-primary/80 font-medium mt-2">
+          Bugun ajoyib kun bo'ladi!
         </p>
 
         <div className="grid grid-cols-2 gap-4 mt-8 w-full max-w-xs">
