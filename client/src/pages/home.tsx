@@ -8,7 +8,7 @@ import WeatherHero from "@/components/WeatherHero";
 import WeatherModal from "@/components/WeatherModal";
 import { Link, useSearch } from "wouter";
 import heroBg from "@assets/generated_images/clean_modern_blue_sky_weather_background_with_soft_clouds.png";
-import mapImg from "@assets/generated_images/uzbekistan_map.png";
+import mapImg from "@assets/generated_images/clean_grey_map_of_uzbekistan.png";
 import { regions } from "@/data/regions";
 
 export default function Home() {
