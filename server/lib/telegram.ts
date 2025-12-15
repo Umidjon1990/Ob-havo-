@@ -324,9 +324,11 @@ export async function startDailyMessageScheduler() {
       if (enabledChannels.length === 0) return;
 
       const now = new Date();
-      const currentHour = now.getHours();
-      const currentMinute = now.getMinutes();
-      const today = new Date().toDateString();
+      // O'zbekiston vaqti UTC+5
+      const uzTime = new Date(now.getTime() + (5 * 60 * 60 * 1000));
+      const currentHour = uzTime.getUTCHours();
+      const currentMinute = uzTime.getUTCMinutes();
+      const today = uzTime.toDateString();
 
       for (const channel of enabledChannels) {
         const scheduledTime = channel.scheduledTime || "08:00";
