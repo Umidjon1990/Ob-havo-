@@ -7,7 +7,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { useToast } from "@/hooks/use-toast";
 import { Switch } from "@/components/ui/switch";
-import { setupTelegramWebhook, getBotSettings, updateBotSettings, testChannelMessage, getChannels, addChannel, removeChannel, toggleChannel, broadcastToAllChannels, refreshWeatherData, generateNewVocabulary, type Channel, type GeneratedWord } from "@/lib/api";
+import { setupTelegramWebhook, getBotSettings, updateBotSettings, testChannelMessage, getChannels, addChannel, removeChannel, toggleChannel, updateChannelSchedule, refreshWeatherData, generateNewVocabulary, type Channel, type GeneratedWord } from "@/lib/api";
 import { regions } from "@/data/regions";
 
 export default function Admin() {
@@ -32,7 +32,6 @@ export default function Admin() {
   const [newChannelId, setNewChannelId] = useState("");
   const [newChannelTitle, setNewChannelTitle] = useState("");
   const [newChannelType, setNewChannelType] = useState<"channel" | "group">("channel");
-  const [broadcasting, setBroadcasting] = useState(false);
   const [refreshingWeather, setRefreshingWeather] = useState(false);
   const [generatingWords, setGeneratingWords] = useState(false);
   const [generatedWords, setGeneratedWords] = useState<GeneratedWord[]>([]);
@@ -83,15 +82,14 @@ export default function Admin() {
     loadChannels();
   };
 
-  const handleBroadcast = async () => {
-    setBroadcasting(true);
-    const result = await broadcastToAllChannels();
-    if (result?.ok) {
-      toast({ title: "Yuborildi!", description: `${result.sent} ta kanal/guruhga yuborildi` });
+  const handleScheduleChange = async (chatId: string, time: string) => {
+    const result = await updateChannelSchedule(chatId, time);
+    if (result) {
+      toast({ title: "Saqlandi!", description: `Yuborish vaqti: ${time}` });
+      loadChannels();
     } else {
-      toast({ title: "Xatolik", description: "Xabar yuborishda muammo", variant: "destructive" });
+      toast({ title: "Xatolik", description: "Vaqtni saqlashda muammo", variant: "destructive" });
     }
-    setBroadcasting(false);
   };
 
   const handleRefreshWeather = async () => {
@@ -408,19 +406,13 @@ export default function Admin() {
         </Card>
 
         <Card className="glass-panel border-white/20">
-          <CardHeader className="flex flex-row items-center justify-between">
+          <CardHeader>
             <CardTitle className="flex items-center gap-2">
               <Users className="w-5 h-5" /> Kanal/Guruhlar Boshqaruvi
             </CardTitle>
-            <Button 
-              onClick={handleBroadcast} 
-              disabled={broadcasting || channels.length === 0}
-              size="sm"
-              className="gap-2"
-            >
-              <Send className="w-4 h-4" />
-              {broadcasting ? "Yuborilmoqda..." : "Hammaga yuborish"}
-            </Button>
+            <p className="text-xs text-muted-foreground mt-1">
+              Har bir kanal/guruh uchun yuborish vaqtini belgilang (O'zbekiston vaqti)
+            </p>
           </CardHeader>
           <CardContent className="space-y-4">
             <div className="space-y-3">
@@ -460,26 +452,46 @@ export default function Admin() {
               <div className="border-t pt-4 space-y-2">
                 <h4 className="text-sm font-medium">Qo'shilgan kanallar ({channels.length})</h4>
                 {channels.map((ch) => (
-                  <div key={ch.id} className="flex items-center justify-between p-3 bg-muted rounded-lg">
-                    <div className="flex items-center gap-3">
-                      <Switch 
-                        checked={ch.enabled ?? true}
-                        onCheckedChange={(enabled) => handleToggleChannel(ch.chatId, enabled)}
-                      />
-                      <div>
-                        <p className="text-sm font-medium">{ch.title || ch.chatId}</p>
-                        <p className="text-xs text-muted-foreground">
-                          {ch.type === 'group' ? 'Guruh' : 'Kanal'} • {ch.chatId}
-                        </p>
+                  <div key={ch.id} className="p-3 bg-muted rounded-lg space-y-2">
+                    <div className="flex items-center justify-between">
+                      <div className="flex items-center gap-3">
+                        <Switch 
+                          checked={ch.enabled ?? true}
+                          onCheckedChange={(enabled) => handleToggleChannel(ch.chatId, enabled)}
+                        />
+                        <div>
+                          <p className="text-sm font-medium">{ch.title || ch.chatId}</p>
+                          <p className="text-xs text-muted-foreground">
+                            {ch.type === 'group' ? 'Guruh' : 'Kanal'} • {ch.chatId}
+                          </p>
+                        </div>
                       </div>
+                      <Button 
+                        variant="ghost" 
+                        size="icon"
+                        onClick={() => handleRemoveChannel(ch.chatId)}
+                      >
+                        <Trash2 className="w-4 h-4 text-destructive" />
+                      </Button>
                     </div>
-                    <Button 
-                      variant="ghost" 
-                      size="icon"
-                      onClick={() => handleRemoveChannel(ch.chatId)}
-                    >
-                      <Trash2 className="w-4 h-4 text-destructive" />
-                    </Button>
+                    <div className="flex items-center gap-2 pl-10">
+                      <label className="text-xs text-muted-foreground">Yuborish vaqti:</label>
+                      <Input 
+                        type="time"
+                        defaultValue={ch.scheduledTime || ""}
+                        onBlur={(e) => {
+                          if (e.target.value !== ch.scheduledTime) {
+                            handleScheduleChange(ch.chatId, e.target.value);
+                          }
+                        }}
+                        className="w-28 h-8 text-sm"
+                      />
+                      {ch.lastSentAt && (
+                        <span className="text-xs text-muted-foreground">
+                          Oxirgi: {new Date(ch.lastSentAt).toLocaleString('uz-UZ')}
+                        </span>
+                      )}
+                    </div>
                   </div>
                 ))}
               </div>

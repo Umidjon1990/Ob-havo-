@@ -102,6 +102,8 @@ export interface Channel {
   type: string | null;
   enabled: boolean | null;
   createdAt: string | null;
+  scheduledTime: string | null;
+  lastSentAt: string | null;
 }
 
 export async function getChannels(): Promise<Channel[]> {
@@ -154,14 +156,16 @@ export async function toggleChannel(chatId: string, enabled: boolean): Promise<C
   }
 }
 
-export async function broadcastToAllChannels(): Promise<{ ok: boolean; sent: number } | null> {
+export async function updateChannelSchedule(chatId: string, scheduledTime: string): Promise<Channel | null> {
   try {
-    const response = await fetch('/api/telegram/broadcast', {
-      method: 'POST',
+    const response = await fetch(`/api/channels/${encodeURIComponent(chatId)}/schedule`, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ scheduledTime }),
     });
-    return await response.json();
+    return response.ok ? await response.json() : null;
   } catch (error) {
-    console.error('Error broadcasting:', error);
+    console.error('Error updating schedule:', error);
     return null;
   }
 }
