@@ -29,6 +29,8 @@ export interface IStorage {
   addChannel(channel: InsertChannel): Promise<Channel>;
   removeChannel(chatId: string): Promise<void>;
   toggleChannel(chatId: string, enabled: boolean): Promise<Channel | undefined>;
+  updateChannelSchedule(chatId: string, scheduledTime: string): Promise<Channel | undefined>;
+  updateChannelLastSent(chatId: string): Promise<void>;
 }
 
 export class DatabaseStorage implements IStorage {
@@ -142,6 +144,22 @@ export class DatabaseStorage implements IStorage {
       .where(eq(channels.chatId, chatId))
       .returning();
     return updated;
+  }
+
+  async updateChannelSchedule(chatId: string, scheduledTime: string): Promise<Channel | undefined> {
+    const [updated] = await db
+      .update(channels)
+      .set({ scheduledTime })
+      .where(eq(channels.chatId, chatId))
+      .returning();
+    return updated;
+  }
+
+  async updateChannelLastSent(chatId: string): Promise<void> {
+    await db
+      .update(channels)
+      .set({ lastSentAt: new Date() })
+      .where(eq(channels.chatId, chatId));
   }
 }
 

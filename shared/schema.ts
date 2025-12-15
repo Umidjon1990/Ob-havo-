@@ -48,6 +48,8 @@ export const channels = pgTable("channels", {
   title: text("title"),
   type: text("type").default("channel"),
   enabled: boolean("enabled").default(true),
+  scheduledTime: text("scheduled_time").default("08:00"),
+  lastSentAt: timestamp("last_sent_at"),
   createdAt: timestamp("created_at").defaultNow(),
 });
 

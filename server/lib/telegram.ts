@@ -320,24 +320,30 @@ ${weatherLines.join('\n\n')}
 export async function startDailyMessageScheduler() {
   setInterval(async () => {
     try {
-      const settings = await storage.getBotSettings();
-      if (!settings?.dailyMessageEnabled || !settings.channelId) return;
+      const enabledChannels = await storage.getEnabledChannels();
+      if (enabledChannels.length === 0) return;
 
       const now = new Date();
-      const [targetHour, targetMinute] = (settings.dailyMessageTime || "08:00").split(":").map(Number);
-      
-      if (now.getHours() === targetHour && now.getMinutes() === targetMinute) {
-        const lastSent = settings.lastDailyMessageSent;
-        const today = new Date().toDateString();
+      const currentHour = now.getHours();
+      const currentMinute = now.getMinutes();
+      const today = new Date().toDateString();
+
+      for (const channel of enabledChannels) {
+        const scheduledTime = channel.scheduledTime || "08:00";
+        const [targetHour, targetMinute] = scheduledTime.split(":").map(Number);
         
-        if (!lastSent || new Date(lastSent).toDateString() !== today) {
-          await sendDailyChannelMessage(settings.channelId);
-          await storage.updateBotSettings({ lastDailyMessageSent: new Date() });
-          console.log("Daily message sent to channel");
+        if (currentHour === targetHour && currentMinute === targetMinute) {
+          const lastSent = channel.lastSentAt;
+          
+          if (!lastSent || new Date(lastSent).toDateString() !== today) {
+            await sendDailyChannelMessage(channel.chatId);
+            await storage.updateChannelLastSent(channel.chatId);
+            console.log(`Daily message sent to ${channel.title || channel.chatId} at ${scheduledTime}`);
+          }
         }
       }
     } catch (error) {
       console.error("Error in daily message scheduler:", error);
     }
-  }, 60000); // Check every minute
+  }, 60000);
 }

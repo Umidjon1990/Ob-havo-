@@ -210,15 +210,15 @@ export async function registerRoutes(
     }
   });
 
-  // Test channel message (sends all regions with "Batafsil" buttons)
-  app.post("/api/telegram/test-channel", async (req, res) => {
+  // Update channel schedule time
+  app.patch("/api/channels/:chatId/schedule", async (req, res) => {
     try {
-      const { channelId, miniAppUrl } = req.body;
-      const { sendDailyChannelMessage } = await import("./lib/telegram");
-      await sendDailyChannelMessage(channelId, miniAppUrl);
-      res.json({ ok: true });
-    } catch (error: any) {
-      res.status(500).json({ error: error.message });
+      const { chatId } = req.params;
+      const { scheduledTime } = req.body;
+      const channel = await storage.updateChannelSchedule(chatId, scheduledTime);
+      res.json(channel);
+    } catch (error) {
+      res.status(500).json({ error: "Failed to update schedule" });
     }
   });
 
@@ -260,22 +260,6 @@ export async function registerRoutes(
       res.json(channel);
     } catch (error) {
       res.status(500).json({ error: "Failed to toggle channel" });
-    }
-  });
-
-  // Send to all enabled channels
-  app.post("/api/telegram/broadcast", async (req, res) => {
-    try {
-      const { sendDailyChannelMessage } = await import("./lib/telegram");
-      const enabledChannels = await storage.getEnabledChannels();
-      
-      for (const channel of enabledChannels) {
-        await sendDailyChannelMessage(channel.chatId);
-      }
-      
-      res.json({ ok: true, sent: enabledChannels.length });
-    } catch (error: any) {
-      res.status(500).json({ error: error.message });
     }
   });
 
