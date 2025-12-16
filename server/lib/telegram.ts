@@ -258,61 +258,72 @@ const ALL_REGIONS = [
 ];
 
 export async function sendDailyChannelMessage(channelId: string, miniAppUrl?: string) {
-  const weatherLines: string[] = [];
+  // Faqat Toshkent ob-havosi
+  const weatherData = await storage.getWeatherCache("toshkent");
+  const temp = weatherData?.temperature ?? 0;
+  const humidity = weatherData?.humidity ?? 0;
+  const condition_uz = weatherData?.condition ?? "—";
+  const windSpeed = weatherData?.windSpeed ?? 0;
   
-  for (const region of ALL_REGIONS) {
-    const weatherData = await storage.getWeatherCache(region.id);
-    const temp = weatherData?.temperature ?? "--";
-    const humidity = weatherData?.humidity ?? "--";
-    const condition_uz = weatherData?.condition ?? "—";
-    
-    let condition_ar = "—";
-    let windSpeed = "--";
-    if (weatherData?.forecastData) {
-      try {
-        const forecast = JSON.parse(weatherData.forecastData);
-        condition_ar = forecast.condition_ar || "—";
-        windSpeed = forecast.windSpeed || "--";
-      } catch {}
-    }
-    
-    weatherLines.push(
-      `┌─────────────────────────┐\n` +
-      `│ 🏙 <b>${region.name} | ${region.name_ar}</b>\n` +
-      `│ 🌡 ${temp}°C  💧 ${humidity}%  💨 ${windSpeed} km/h\n` +
-      `│ ${condition_uz} | ${condition_ar}\n` +
-      `└─────────────────────────┘`
-    );
+  let forecastData: any = null;
+  let minTemp = temp - 5;
+  let maxTemp = temp + 3;
+  let morningTemp = temp - 2;
+  let dayTemp = temp + 2;
+  let eveningTemp = temp;
+  
+  if (weatherData?.forecastData) {
+    try {
+      forecastData = JSON.parse(weatherData.forecastData);
+      if (forecastData.daily && forecastData.daily[0]) {
+        minTemp = forecastData.daily[0].min;
+        maxTemp = forecastData.daily[0].max;
+      }
+      if (forecastData.hourly) {
+        const hours = forecastData.hourly;
+        morningTemp = hours.find((h: any) => h.time === "07:00")?.temp ?? temp;
+        dayTemp = hours.find((h: any) => h.time === "13:00")?.temp ?? temp;
+        eveningTemp = hours.find((h: any) => h.time === "19:00")?.temp ?? temp;
+      }
+    } catch {}
   }
   
-  const todayAr = new Date().toLocaleDateString('ar-SA', { 
-    weekday: 'long', 
-    year: 'numeric', 
-    month: 'long', 
-    day: 'numeric' 
-  });
+  // O'zbekiston vaqti
+  const now = new Date();
+  const uzTime = new Date(now.getTime() + (5 * 60 * 60 * 1000));
+  const day = uzTime.getUTCDate();
+  const months = ["yanvar", "fevral", "mart", "aprel", "may", "iyun", "iyul", "avgust", "sentyabr", "oktyabr", "noyabr", "dekabr"];
+  const month = months[uzTime.getUTCMonth()];
   
-  const todayUz = new Date().toLocaleDateString('uz-UZ', { 
-    weekday: 'long', 
-    year: 'numeric', 
-    month: 'long', 
-    day: 'numeric' 
-  });
+  // Ob-havo emoji
+  const getWeatherEmoji = (condition: string) => {
+    const c = condition.toLowerCase();
+    if (c.includes("ochiq") || c.includes("quyosh")) return "☀️";
+    if (c.includes("bulut")) return "☁️";
+    if (c.includes("yomg'ir")) return "🌧";
+    if (c.includes("qor")) return "❄️";
+    if (c.includes("tuman")) return "🌫";
+    return "🌤";
+  };
   
-  const message = `☀️ <b>Ob-havo ma'lumoti | النَّشْرَة الجَوِّيَّة</b> ☀️
-━━━━━━━━━━━━━━━━━━━━━━━━
-📅 ${todayUz}
-📅 ${todayAr}
-━━━━━━━━━━━━━━━━━━━━━━━━
+  const emoji = getWeatherEmoji(condition_uz);
+  const windDir = "⬇️";
+  
+  const message = `<b>📍 Toshkent</b>
+Bugun, ${day} ${month}
 
-${weatherLines.join('\n\n')}
+${emoji} <b>+${maxTemp}°...+${minTemp}°</b>, ${condition_uz}
+Hozir: ${emoji} +${temp}°, ${windDir} ${windSpeed} m/s
 
-━━━━━━━━━━━━━━━━━━━━━━━━
-📲 Batafsil | لِلْمَزِيد مِنَ التَّفَاصِيل`;
+🌅 Tong: ${emoji} +${morningTemp}°
+☀️ Kun: ${emoji} +${dayTemp}°
+🌆 Oqshom: ${emoji} +${eveningTemp}°
+
+💧 Namlik: ${humidity}%`;
 
   await sendTelegramMessage(channelId, message, 'HTML', {
     inline_keyboard: [[
-      { text: "📱 Batafsil | بَتَفْصِيل", url: "https://t.me/Ztobhavobot" }
+      { text: "📱 Batafsil", url: "https://t.me/Ztobhavobot" }
     ]]
   });
 }
