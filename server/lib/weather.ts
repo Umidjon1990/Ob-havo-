@@ -64,6 +64,8 @@ interface OpenMeteoResponse {
     temperature_2m_max: number[];
     temperature_2m_min: number[];
     weathercode: number[];
+    sunrise: string[];
+    sunset: string[];
   };
 }
 
@@ -81,7 +83,7 @@ async function fetchWeatherForCity(regionId: string): Promise<{
   if (!coords) return null;
 
   try {
-    const url = `https://api.open-meteo.com/v1/forecast?latitude=${coords.lat}&longitude=${coords.lon}&current_weather=true&hourly=temperature_2m,relativehumidity_2m,surface_pressure&daily=temperature_2m_max,temperature_2m_min,weathercode&timezone=Asia/Tashkent`;
+    const url = `https://api.open-meteo.com/v1/forecast?latitude=${coords.lat}&longitude=${coords.lon}&current_weather=true&hourly=temperature_2m,relativehumidity_2m,surface_pressure&daily=temperature_2m_max,temperature_2m_min,weathercode,sunrise,sunset&timezone=Asia/Tashkent`;
     
     const response = await fetch(url);
     if (!response.ok) {
@@ -104,7 +106,9 @@ async function fetchWeatherForCity(regionId: string): Promise<{
       date,
       max: Math.round(data.daily.temperature_2m_max[i]),
       min: Math.round(data.daily.temperature_2m_min[i]),
-      code: data.daily.weathercode[i]
+      code: data.daily.weathercode[i],
+      sunrise: data.daily.sunrise[i],
+      sunset: data.daily.sunset[i]
     }));
 
     return {

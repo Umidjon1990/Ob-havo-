@@ -271,6 +271,8 @@ export async function sendDailyChannelMessage(channelId: string, miniAppUrl?: st
   let morningTemp = temp - 2;
   let dayTemp = temp + 2;
   let eveningTemp = temp;
+  let sunrise = "07:00";
+  let sunset = "17:30";
   
   if (weatherData?.forecastData) {
     try {
@@ -278,6 +280,12 @@ export async function sendDailyChannelMessage(channelId: string, miniAppUrl?: st
       if (forecastData.daily && forecastData.daily[0]) {
         minTemp = forecastData.daily[0].min;
         maxTemp = forecastData.daily[0].max;
+        if (forecastData.daily[0].sunrise) {
+          sunrise = new Date(forecastData.daily[0].sunrise).toLocaleTimeString('uz-UZ', { hour: '2-digit', minute: '2-digit' });
+        }
+        if (forecastData.daily[0].sunset) {
+          sunset = new Date(forecastData.daily[0].sunset).toLocaleTimeString('uz-UZ', { hour: '2-digit', minute: '2-digit' });
+        }
       }
       if (forecastData.hourly) {
         const hours = forecastData.hourly;
@@ -315,10 +323,11 @@ Bugun, ${day} ${month}
 ${emoji} <b>+${maxTemp}°...+${minTemp}°</b>, ${condition_uz}
 Hozir: ${emoji} +${temp}°, ${windDir} ${windSpeed} m/s
 
-🌅 Tong: ${emoji} +${morningTemp}°
-☀️ Kun: ${emoji} +${dayTemp}°
-🌆 Oqshom: ${emoji} +${eveningTemp}°
+🌅 Tong: +${morningTemp}°
+☀️ Kun: +${dayTemp}°
+🌆 Oqshom: +${eveningTemp}°
 
+🌅 Quyosh: ${sunrise} - ${sunset}
 💧 Namlik: ${humidity}%`;
 
   await sendTelegramMessage(channelId, message, 'HTML', {
