@@ -258,44 +258,6 @@ const ALL_REGIONS = [
 ];
 
 export async function sendDailyChannelMessage(channelId: string, miniAppUrl?: string) {
-  // Faqat Toshkent ob-havosi
-  const weatherData = await storage.getWeatherCache("toshkent");
-  const temp = weatherData?.temperature ?? 0;
-  const humidity = weatherData?.humidity ?? 0;
-  const condition_uz = weatherData?.condition ?? "—";
-  const windSpeed = weatherData?.windSpeed ?? 0;
-  
-  let forecastData: any = null;
-  let minTemp = temp - 5;
-  let maxTemp = temp + 3;
-  let morningTemp = temp - 2;
-  let dayTemp = temp + 2;
-  let eveningTemp = temp;
-  let sunrise = "07:00";
-  let sunset = "17:30";
-  
-  if (weatherData?.forecastData) {
-    try {
-      forecastData = JSON.parse(weatherData.forecastData);
-      if (forecastData.daily && forecastData.daily[0]) {
-        minTemp = forecastData.daily[0].min;
-        maxTemp = forecastData.daily[0].max;
-        if (forecastData.daily[0].sunrise) {
-          sunrise = new Date(forecastData.daily[0].sunrise).toLocaleTimeString('uz-UZ', { hour: '2-digit', minute: '2-digit' });
-        }
-        if (forecastData.daily[0].sunset) {
-          sunset = new Date(forecastData.daily[0].sunset).toLocaleTimeString('uz-UZ', { hour: '2-digit', minute: '2-digit' });
-        }
-      }
-      if (forecastData.hourly) {
-        const hours = forecastData.hourly;
-        morningTemp = hours.find((h: any) => h.time === "07:00")?.temp ?? temp;
-        dayTemp = hours.find((h: any) => h.time === "13:00")?.temp ?? temp;
-        eveningTemp = hours.find((h: any) => h.time === "19:00")?.temp ?? temp;
-      }
-    } catch {}
-  }
-  
   // O'zbekiston vaqti
   const now = new Date();
   const uzTime = new Date(now.getTime() + (5 * 60 * 60 * 1000));
@@ -314,21 +276,72 @@ export async function sendDailyChannelMessage(channelId: string, miniAppUrl?: st
     return "🌤";
   };
   
-  const emoji = getWeatherEmoji(condition_uz);
-  const windDir = "⬇️";
+  // Toshkent uchun batafsil
+  const toshkentData = await storage.getWeatherCache("toshkent");
+  const tTemp = toshkentData?.temperature ?? 0;
+  const tHumidity = toshkentData?.humidity ?? 0;
+  const tCondition = toshkentData?.condition ?? "—";
+  const tWindSpeed = toshkentData?.windSpeed ?? 0;
+  
+  let minTemp = tTemp - 5, maxTemp = tTemp + 3;
+  let morningTemp = tTemp, dayTemp = tTemp, eveningTemp = tTemp;
+  let sunrise = "07:00", sunset = "17:30";
+  
+  if (toshkentData?.forecastData) {
+    try {
+      const fd = JSON.parse(toshkentData.forecastData);
+      if (fd.daily?.[0]) {
+        minTemp = fd.daily[0].min;
+        maxTemp = fd.daily[0].max;
+        if (fd.daily[0].sunrise) sunrise = new Date(fd.daily[0].sunrise).toLocaleTimeString('uz-UZ', { hour: '2-digit', minute: '2-digit' });
+        if (fd.daily[0].sunset) sunset = new Date(fd.daily[0].sunset).toLocaleTimeString('uz-UZ', { hour: '2-digit', minute: '2-digit' });
+      }
+      if (fd.hourly) {
+        morningTemp = fd.hourly.find((h: any) => h.time === "07:00")?.temp ?? tTemp;
+        dayTemp = fd.hourly.find((h: any) => h.time === "13:00")?.temp ?? tTemp;
+        eveningTemp = fd.hourly.find((h: any) => h.time === "19:00")?.temp ?? tTemp;
+      }
+    } catch {}
+  }
+  
+  const tEmoji = getWeatherEmoji(tCondition);
+  
+  // Boshqa hududlar uchun qisqa format
+  const otherRegions = [
+    { id: "samarqand", name: "Samarqand" },
+    { id: "buxoro", name: "Buxoro" },
+    { id: "andijon", name: "Andijon" },
+    { id: "namangan", name: "Namangan" },
+    { id: "fargona", name: "Farg'ona" },
+    { id: "nukus", name: "Nukus" },
+    { id: "qarshi", name: "Qarshi" },
+    { id: "urganch", name: "Urganch" },
+    { id: "jizzax", name: "Jizzax" },
+    { id: "navoiy", name: "Navoiy" },
+    { id: "guliston", name: "Guliston" },
+    { id: "termiz", name: "Termiz" },
+  ];
+  
+  const regionLines: string[] = [];
+  for (const region of otherRegions) {
+    const data = await storage.getWeatherCache(region.id);
+    if (data) {
+      const emoji = getWeatherEmoji(data.condition || "");
+      regionLines.push(`${emoji} <b>${region.name}</b>: ${data.temperature}°`);
+    }
+  }
   
   const message = `<b>📍 Toshkent</b>
-Bugun, ${day} ${month}
+${day} ${month}
 
-${emoji} <b>+${maxTemp}°...+${minTemp}°</b>, ${condition_uz}
-Hozir: ${emoji} +${temp}°, ${windDir} ${windSpeed} m/s
+${tEmoji} <b>${maxTemp}°...${minTemp}°</b>, ${tCondition}
+Hozir: ${tTemp}°, 💨 ${tWindSpeed} m/s
 
-🌅 Tong: +${morningTemp}°
-☀️ Kun: +${dayTemp}°
-🌆 Oqshom: +${eveningTemp}°
+🌅 Tong: ${morningTemp}° | ☀️ Kun: ${dayTemp}° | 🌆 Kech: ${eveningTemp}°
+🌅 Quyosh: ${sunrise} - ${sunset} | 💧 ${tHumidity}%
 
-🌅 Quyosh: ${sunrise} - ${sunset}
-💧 Namlik: ${humidity}%`;
+━━━━━━━━━━━━━━━━━━━━
+${regionLines.join('\n')}`;
 
   await sendTelegramMessage(channelId, message, 'HTML', {
     inline_keyboard: [[
