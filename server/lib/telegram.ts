@@ -265,15 +265,15 @@ export async function sendDailyChannelMessage(channelId: string, miniAppUrl?: st
   const months = ["yanvar", "fevral", "mart", "aprel", "may", "iyun", "iyul", "avgust", "sentyabr", "oktyabr", "noyabr", "dekabr"];
   const month = months[uzTime.getUTCMonth()];
   
-  // Ob-havo emoji
-  const getWeatherEmoji = (condition: string) => {
+  // Ob-havo emoji va arabcha
+  const getWeatherInfo = (condition: string) => {
     const c = condition.toLowerCase();
-    if (c.includes("ochiq") || c.includes("quyosh")) return "☀️";
-    if (c.includes("bulut")) return "☁️";
-    if (c.includes("yomg'ir")) return "🌧";
-    if (c.includes("qor")) return "❄️";
-    if (c.includes("tuman")) return "🌫";
-    return "🌤";
+    if (c.includes("ochiq") || c.includes("quyosh")) return { emoji: "☀️", ar: "صَافٍ" };
+    if (c.includes("bulut")) return { emoji: "☁️", ar: "غَائِم" };
+    if (c.includes("yomg'ir")) return { emoji: "🌧", ar: "مَاطِر" };
+    if (c.includes("qor")) return { emoji: "❄️", ar: "ثَلْجِي" };
+    if (c.includes("tuman")) return { emoji: "🌫", ar: "ضَبَابِي" };
+    return { emoji: "🌤", ar: "صَافٍ جُزْئِيًّا" };
   };
   
   // Toshkent uchun batafsil
@@ -304,7 +304,7 @@ export async function sendDailyChannelMessage(channelId: string, miniAppUrl?: st
     } catch {}
   }
   
-  const tEmoji = getWeatherEmoji(tCondition);
+  const tWeather = getWeatherInfo(tCondition);
   
   // Barcha hududlar
   const allRegions = [
@@ -327,15 +327,23 @@ export async function sendDailyChannelMessage(channelId: string, miniAppUrl?: st
   for (const region of allRegions) {
     const data = await storage.getWeatherCache(region.id);
     if (data) {
-      const emoji = getWeatherEmoji(data.condition || "");
+      const w = getWeatherInfo(data.condition || "");
       let rMin = data.temperature - 3, rMax = data.temperature + 2;
+      let rSunrise = "07:00", rSunset = "17:30";
       if (data.forecastData) {
         try {
           const fd = JSON.parse(data.forecastData);
-          if (fd.daily?.[0]) { rMin = fd.daily[0].min; rMax = fd.daily[0].max; }
+          if (fd.daily?.[0]) { 
+            rMin = fd.daily[0].min; 
+            rMax = fd.daily[0].max;
+            if (fd.daily[0].sunrise) rSunrise = new Date(fd.daily[0].sunrise).toLocaleTimeString('uz-UZ', { hour: '2-digit', minute: '2-digit' });
+            if (fd.daily[0].sunset) rSunset = new Date(fd.daily[0].sunset).toLocaleTimeString('uz-UZ', { hour: '2-digit', minute: '2-digit' });
+          }
         } catch {}
       }
-      regionLines.push(`${emoji} ${region.uz} | ${region.ar}: ${rMax}°/${rMin}°`);
+      regionLines.push(`<b>📍 ${region.uz} | ${region.ar}</b>
+${w.emoji} ${rMax}°/${rMin}° | ${data.condition} | ${w.ar}
+💨 ${data.windSpeed} m/s | 💧 ${data.humidity}% | 🌅 ${rSunrise} ↔ ${rSunset}`);
     }
   }
   
@@ -346,13 +354,7 @@ export async function sendDailyChannelMessage(channelId: string, miniAppUrl?: st
   const message = `☀️ <b>Ob-havo | الطَّقْس</b> ☀️
 📅 ${day} ${month} | ${day} ${monthAr}
 
-<b>📍 Toshkent | طَشْقَند</b>
-${tEmoji} ${maxTemp}°/${minTemp}° | ${tCondition}
-🌡 Hozir: ${tTemp}° | 💨 ${tWindSpeed} m/s | 💧 ${tHumidity}%
-🌅 ${sunrise} ↔ ${sunset}
-
-━━━━━━━━━━━━━━━━━━━━
-${regionLines.join('\n')}`;
+${regionLines.join('\n\n')}`;
 
   await sendTelegramMessage(channelId, message, 'HTML', {
     inline_keyboard: [[
