@@ -306,39 +306,50 @@ export async function sendDailyChannelMessage(channelId: string, miniAppUrl?: st
   
   const tEmoji = getWeatherEmoji(tCondition);
   
-  // Boshqa hududlar uchun qisqa format
-  const otherRegions = [
-    { id: "samarqand", name: "Samarqand" },
-    { id: "buxoro", name: "Buxoro" },
-    { id: "andijon", name: "Andijon" },
-    { id: "namangan", name: "Namangan" },
-    { id: "fargona", name: "Farg'ona" },
-    { id: "nukus", name: "Nukus" },
-    { id: "qarshi", name: "Qarshi" },
-    { id: "urganch", name: "Urganch" },
-    { id: "jizzax", name: "Jizzax" },
-    { id: "navoiy", name: "Navoiy" },
-    { id: "guliston", name: "Guliston" },
-    { id: "termiz", name: "Termiz" },
+  // Barcha hududlar
+  const allRegions = [
+    { id: "toshkent", uz: "Toshkent", ar: "طَشْقَند" },
+    { id: "samarqand", uz: "Samarqand", ar: "سَمَرْقَند" },
+    { id: "buxoro", uz: "Buxoro", ar: "بُخَارَى" },
+    { id: "andijon", uz: "Andijon", ar: "أَنْدِيجَان" },
+    { id: "namangan", uz: "Namangan", ar: "نَمَنْغَان" },
+    { id: "fargona", uz: "Farg'ona", ar: "فَرْغَانَة" },
+    { id: "nukus", uz: "Nukus", ar: "نُوكُوس" },
+    { id: "qarshi", uz: "Qarshi", ar: "قَرْشِي" },
+    { id: "urganch", uz: "Urganch", ar: "أُورْگَنْج" },
+    { id: "jizzax", uz: "Jizzax", ar: "جِيزَاخ" },
+    { id: "navoiy", uz: "Navoiy", ar: "نَوَائِي" },
+    { id: "guliston", uz: "Guliston", ar: "گُلِسْتَان" },
+    { id: "termiz", uz: "Termiz", ar: "تِرْمِذ" },
   ];
   
   const regionLines: string[] = [];
-  for (const region of otherRegions) {
+  for (const region of allRegions) {
     const data = await storage.getWeatherCache(region.id);
     if (data) {
       const emoji = getWeatherEmoji(data.condition || "");
-      regionLines.push(`${emoji} <b>${region.name}</b>: ${data.temperature}°`);
+      let rMin = data.temperature - 3, rMax = data.temperature + 2;
+      if (data.forecastData) {
+        try {
+          const fd = JSON.parse(data.forecastData);
+          if (fd.daily?.[0]) { rMin = fd.daily[0].min; rMax = fd.daily[0].max; }
+        } catch {}
+      }
+      regionLines.push(`${emoji} ${region.uz} | ${region.ar}: ${rMax}°/${rMin}°`);
     }
   }
   
-  const message = `<b>📍 Toshkent</b>
-${day} ${month}
+  // Arabcha oy nomlari
+  const monthsAr = ["يَنَايِر", "فِبْرَايِر", "مَارِس", "أَبْرِيل", "مَايُو", "يُونِيُو", "يُولِيُو", "أَغُسْطُس", "سِبْتَمْبَر", "أُكْتُوبَر", "نُوفَمْبَر", "دِيسَمْبَر"];
+  const monthAr = monthsAr[uzTime.getUTCMonth()];
+  
+  const message = `☀️ <b>Ob-havo | الطَّقْس</b> ☀️
+📅 ${day} ${month} | ${day} ${monthAr}
 
-${tEmoji} <b>${maxTemp}°...${minTemp}°</b>, ${tCondition}
-Hozir: ${tTemp}°, 💨 ${tWindSpeed} m/s
-
-🌅 Tong: ${morningTemp}° | ☀️ Kun: ${dayTemp}° | 🌆 Kech: ${eveningTemp}°
-🌅 Quyosh: ${sunrise} - ${sunset} | 💧 ${tHumidity}%
+<b>📍 Toshkent | طَشْقَند</b>
+${tEmoji} ${maxTemp}°/${minTemp}° | ${tCondition}
+🌡 Hozir: ${tTemp}° | 💨 ${tWindSpeed} m/s | 💧 ${tHumidity}%
+🌅 ${sunrise} ↔ ${sunset}
 
 ━━━━━━━━━━━━━━━━━━━━
 ${regionLines.join('\n')}`;
