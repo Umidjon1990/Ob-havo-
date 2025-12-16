@@ -343,7 +343,7 @@ export async function sendDailyChannelMessage(channelId: string, miniAppUrl?: st
       }
       regionLines.push(`<b>📍 ${region.uz} | ${region.ar}</b>
 ${w.emoji} ${rMax}°/${rMin}° | ${data.condition} | ${w.ar}
-💨 ${data.windSpeed} m/s | 💧 ${data.humidity}% | 🌅 ${rSunrise} ↔ ${rSunset}`);
+🌅 ${rSunrise} | 🌇 ${rSunset}`);
     }
   }
   
