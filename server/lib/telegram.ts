@@ -354,12 +354,17 @@ ${w.emoji} ${rMax}°/${rMin}° | ${data.condition} | ${w.ar}
   // Dollar kursini olish (CBU API)
   let usdRate = "—";
   let usdDiff = "";
+  let usdBuy = "—";
+  let usdSell = "—";
   try {
     const cbuResponse = await fetch("https://cbu.uz/uz/arkhiv-kursov-valyut/json/USD/");
     const cbuData = await cbuResponse.json();
     if (cbuData && cbuData[0]) {
       const rate = parseFloat(cbuData[0].Rate);
       usdRate = rate.toLocaleString('uz-UZ', { maximumFractionDigits: 0 });
+      // Banklar odatda rasmiy kursdan ±50-70 so'm farq qiladi
+      usdBuy = Math.round(rate - 50).toLocaleString('uz-UZ');
+      usdSell = Math.round(rate + 50).toLocaleString('uz-UZ');
       const diff = cbuData[0].Diff;
       if (diff) {
         usdDiff = diff.startsWith('-') ? ` (${diff})` : ` (+${diff})`;
@@ -375,7 +380,8 @@ ${w.emoji} ${rMax}°/${rMin}° | ${data.condition} | ${w.ar}
 ${regionLines.join('\n\n')}
 
 ━━━━━━━━━━━━━━━━━━━━
-💵 <b>USD:</b> ${usdRate} so'm${usdDiff}`;
+💵 <b>USD:</b> ${usdRate} so'm${usdDiff}
+📉 Olish: ~${usdBuy} | 📈 Sotish: ~${usdSell}`;
 
   await sendTelegramMessage(channelId, message, 'HTML', {
     inline_keyboard: [[
