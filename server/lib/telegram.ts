@@ -381,7 +381,8 @@ ${regionLines.join('\n\n')}
 
 ━━━━━━━━━━━━━━━━━━━━
 💵 <b>USD:</b> ${usdRate} so'm${usdDiff}
-📉 Olish: ~${usdBuy} | 📈 Sotish: ~${usdSell}`;
+📉 Olish: ~${usdBuy} | 📈 Sotish: ~${usdSell}
+📊 Manba: Markaziy Bank (cbu.uz)`;
 
   await sendTelegramMessage(channelId, message, 'HTML', {
     inline_keyboard: [[
