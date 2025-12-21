@@ -351,10 +351,31 @@ ${w.emoji} ${rMax}°/${rMin}° | ${data.condition} | ${w.ar}
   const monthsAr = ["يَنَايِر", "فِبْرَايِر", "مَارِس", "أَبْرِيل", "مَايُو", "يُونِيُو", "يُولِيُو", "أَغُسْطُس", "سِبْتَمْبَر", "أُكْتُوبَر", "نُوفَمْبَر", "دِيسَمْبَر"];
   const monthAr = monthsAr[uzTime.getUTCMonth()];
   
+  // Dollar kursini olish (CBU API)
+  let usdRate = "—";
+  let usdDiff = "";
+  try {
+    const cbuResponse = await fetch("https://cbu.uz/uz/arkhiv-kursov-valyut/json/USD/");
+    const cbuData = await cbuResponse.json();
+    if (cbuData && cbuData[0]) {
+      const rate = parseFloat(cbuData[0].Rate);
+      usdRate = rate.toLocaleString('uz-UZ', { maximumFractionDigits: 0 });
+      const diff = cbuData[0].Diff;
+      if (diff) {
+        usdDiff = diff.startsWith('-') ? ` (${diff})` : ` (+${diff})`;
+      }
+    }
+  } catch (e) {
+    console.error("CBU API error:", e);
+  }
+  
   const message = `☀️ <b>Ob-havo | الطَّقْس</b> ☀️
 📅 ${day} ${month} | ${day} ${monthAr}
 
-${regionLines.join('\n\n')}`;
+${regionLines.join('\n\n')}
+
+━━━━━━━━━━━━━━━━━━━━
+💵 <b>USD:</b> ${usdRate} so'm${usdDiff}`;
 
   await sendTelegramMessage(channelId, message, 'HTML', {
     inline_keyboard: [[
