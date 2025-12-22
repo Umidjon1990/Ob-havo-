@@ -202,3 +202,39 @@ export async function generateNewVocabulary(count: number = 5): Promise<Generate
     return [];
   }
 }
+
+// Admin authentication
+export async function adminLogin(username: string, password: string): Promise<{ success: boolean; token?: string; error?: string }> {
+  try {
+    const response = await fetch('/api/admin/login', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ username, password }),
+    });
+    return await response.json();
+  } catch (error) {
+    return { success: false, error: 'Tarmoq xatosi' };
+  }
+}
+
+export async function verifyAdminToken(token: string): Promise<boolean> {
+  try {
+    const response = await fetch('/api/admin/verify', {
+      method: 'POST',
+      headers: { 'Authorization': `Bearer ${token}` },
+    });
+    const data = await response.json();
+    return data.valid === true;
+  } catch (error) {
+    return false;
+  }
+}
+
+export async function adminLogout(token: string): Promise<void> {
+  try {
+    await fetch('/api/admin/logout', {
+      method: 'POST',
+      headers: { 'Authorization': `Bearer ${token}` },
+    });
+  } catch (error) {}
+}

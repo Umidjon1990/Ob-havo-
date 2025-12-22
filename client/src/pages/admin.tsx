@@ -1,5 +1,5 @@
 import { useState, useEffect } from "react";
-import { ArrowLeft, Save, RefreshCw, Send, Radio, Plus, Trash2, Users, Cloud } from "lucide-react";
+import { ArrowLeft, Save, RefreshCw, Send, Radio, Plus, Trash2, Users, Cloud, LogOut, Lock } from "lucide-react";
 import { Link } from "wouter";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -7,11 +7,19 @@ import { Textarea } from "@/components/ui/textarea";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { useToast } from "@/hooks/use-toast";
 import { Switch } from "@/components/ui/switch";
-import { setupTelegramWebhook, getBotSettings, updateBotSettings, testChannelMessage, getChannels, addChannel, removeChannel, toggleChannel, updateChannelSchedule, refreshWeatherData, generateNewVocabulary, type Channel, type GeneratedWord } from "@/lib/api";
+import { setupTelegramWebhook, getBotSettings, updateBotSettings, testChannelMessage, getChannels, addChannel, removeChannel, toggleChannel, updateChannelSchedule, refreshWeatherData, generateNewVocabulary, adminLogin, verifyAdminToken, adminLogout, type Channel, type GeneratedWord } from "@/lib/api";
 import { regions } from "@/data/regions";
 
 export default function Admin() {
   const { toast } = useToast();
+  
+  // Auth state
+  const [isAuthenticated, setIsAuthenticated] = useState(false);
+  const [authLoading, setAuthLoading] = useState(true);
+  const [loginUsername, setLoginUsername] = useState("");
+  const [loginPassword, setLoginPassword] = useState("");
+  const [loginLoading, setLoginLoading] = useState(false);
+  
   const [webhookStatus, setWebhookStatus] = useState<string>("");
   const [loadingWebhook, setLoadingWebhook] = useState(false);
   const [formData, setFormData] = useState({
@@ -36,7 +44,21 @@ export default function Admin() {
   const [generatingWords, setGeneratingWords] = useState(false);
   const [generatedWords, setGeneratedWords] = useState<GeneratedWord[]>([]);
 
+  // Check auth on load
   useEffect(() => {
+    const token = localStorage.getItem("admin_token");
+    if (token) {
+      verifyAdminToken(token).then(valid => {
+        setIsAuthenticated(valid);
+        setAuthLoading(false);
+        if (valid) loadInitialData();
+      });
+    } else {
+      setAuthLoading(false);
+    }
+  }, []);
+
+  const loadInitialData = () => {
     getBotSettings().then(settings => {
       if (settings) {
         setChannelId(settings.channelId || "");
@@ -46,7 +68,29 @@ export default function Admin() {
       }
     });
     loadChannels();
-  }, []);
+  };
+
+  const handleLogin = async () => {
+    setLoginLoading(true);
+    const result = await adminLogin(loginUsername, loginPassword);
+    if (result.success && result.token) {
+      localStorage.setItem("admin_token", result.token);
+      setIsAuthenticated(true);
+      loadInitialData();
+      toast({ title: "Xush kelibsiz!" });
+    } else {
+      toast({ title: "Xatolik", description: result.error || "Login yoki parol xato", variant: "destructive" });
+    }
+    setLoginLoading(false);
+  };
+
+  const handleLogout = async () => {
+    const token = localStorage.getItem("admin_token");
+    if (token) await adminLogout(token);
+    localStorage.removeItem("admin_token");
+    setIsAuthenticated(false);
+    toast({ title: "Chiqildi" });
+  };
 
   const loadChannels = async () => {
     const list = await getChannels();
@@ -194,16 +238,78 @@ export default function Admin() {
     setGeneratingWords(false);
   };
 
+  // Loading state
+  if (authLoading) {
+    return (
+      <div className="min-h-screen w-full bg-background flex items-center justify-center">
+        <div className="text-center">
+          <RefreshCw className="w-8 h-8 animate-spin mx-auto mb-4" />
+          <p>Yuklanmoqda...</p>
+        </div>
+      </div>
+    );
+  }
+
+  // Login form
+  if (!isAuthenticated) {
+    return (
+      <div className="min-h-screen w-full bg-background flex items-center justify-center p-4">
+        <Card className="w-full max-w-md">
+          <CardHeader className="text-center">
+            <Lock className="w-12 h-12 mx-auto mb-4 text-primary" />
+            <CardTitle className="text-2xl">Admin Panel</CardTitle>
+            <p className="text-muted-foreground">Kirish uchun login va parolni kiriting</p>
+          </CardHeader>
+          <CardContent className="space-y-4">
+            <div className="space-y-2">
+              <label className="text-sm font-medium">Login</label>
+              <Input
+                value={loginUsername}
+                onChange={(e) => setLoginUsername(e.target.value)}
+                placeholder="admin"
+                data-testid="input-admin-username"
+              />
+            </div>
+            <div className="space-y-2">
+              <label className="text-sm font-medium">Parol</label>
+              <Input
+                type="password"
+                value={loginPassword}
+                onChange={(e) => setLoginPassword(e.target.value)}
+                placeholder="••••••••"
+                onKeyDown={(e) => e.key === 'Enter' && handleLogin()}
+                data-testid="input-admin-password"
+              />
+            </div>
+            <Button
+              onClick={handleLogin}
+              disabled={loginLoading}
+              className="w-full"
+              data-testid="button-admin-login"
+            >
+              {loginLoading ? "Kirish..." : "Kirish"}
+            </Button>
+          </CardContent>
+        </Card>
+      </div>
+    );
+  }
+
   return (
     <div className="min-h-screen w-full bg-background p-4 md:p-8 font-sans">
       <div className="max-w-2xl mx-auto space-y-6">
-        <div className="flex items-center gap-4 mb-8">
-          <Link href="/">
-            <Button variant="ghost" size="icon">
-              <ArrowLeft className="w-5 h-5" />
-            </Button>
-          </Link>
-          <h1 className="text-2xl font-bold font-display">Admin Panel</h1>
+        <div className="flex items-center justify-between mb-8">
+          <div className="flex items-center gap-4">
+            <Link href="/">
+              <Button variant="ghost" size="icon">
+                <ArrowLeft className="w-5 h-5" />
+              </Button>
+            </Link>
+            <h1 className="text-2xl font-bold font-display">Admin Panel</h1>
+          </div>
+          <Button variant="outline" size="sm" onClick={handleLogout} data-testid="button-admin-logout">
+            <LogOut className="w-4 h-4 mr-2" /> Chiqish
+          </Button>
         </div>
 
         <Card className="glass-panel border-white/20">

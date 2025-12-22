@@ -7,11 +7,56 @@ import { updateWeatherCache } from "./lib/weather";
 import { regions } from "../client/src/data/regions";
 import { vocabulary } from "../client/src/data/vocabulary";
 
+// Admin credentials from environment variables
+const ADMIN_USERNAME = process.env.ADMIN_USERNAME || "admin";
+const ADMIN_PASSWORD = process.env.ADMIN_PASSWORD || "admin123";
+
+// Simple token storage (in production use Redis/DB)
+const validTokens = new Set<string>();
+
+function generateToken(): string {
+  return Math.random().toString(36).substring(2) + Date.now().toString(36);
+}
+
+function verifyToken(token: string | undefined): boolean {
+  if (!token) return false;
+  return validTokens.has(token);
+}
+
 export async function registerRoutes(
   httpServer: Server,
   app: Express
 ): Promise<Server> {
   
+  // Admin login
+  app.post("/api/admin/login", (req, res) => {
+    const { username, password } = req.body;
+    if (username === ADMIN_USERNAME && password === ADMIN_PASSWORD) {
+      const token = generateToken();
+      validTokens.add(token);
+      res.json({ success: true, token });
+    } else {
+      res.status(401).json({ success: false, error: "Login yoki parol xato" });
+    }
+  });
+
+  // Verify token
+  app.post("/api/admin/verify", (req, res) => {
+    const token = req.headers.authorization?.replace("Bearer ", "");
+    if (verifyToken(token)) {
+      res.json({ valid: true });
+    } else {
+      res.status(401).json({ valid: false });
+    }
+  });
+
+  // Admin logout
+  app.post("/api/admin/logout", (req, res) => {
+    const token = req.headers.authorization?.replace("Bearer ", "");
+    if (token) validTokens.delete(token);
+    res.json({ success: true });
+  });
+
   // Health check endpoint for keep-alive pings
   app.get("/api/health", (req, res) => {
     res.json({ status: "ok", timestamp: new Date().toISOString() });
