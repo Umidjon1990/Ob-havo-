@@ -47,24 +47,37 @@ export async function generateDailyNews(): Promise<DailyNews | null> {
   "imagePrompt": "Detailed English description for image generation"
 }`;
 
-  try {
-    const response = await openai.chat.completions.create({
-      model: "gpt-5",
-      messages: [{ role: "user", content: prompt }],
-      max_completion_tokens: 1000,
-    });
+  const models = ["gpt-5", "gpt-4o", "gpt-4-turbo"];
 
-    const content = response.choices[0]?.message?.content || "";
-    const jsonMatch = content.match(/\{[\s\S]*\}/);
-    if (jsonMatch) {
-      return JSON.parse(jsonMatch[0]) as DailyNews;
+  for (const model of models) {
+    try {
+      console.log(`Trying model: ${model}`);
+      const response = await openai.chat.completions.create({
+        model,
+        messages: [{ role: "user", content: prompt }],
+        max_completion_tokens: 1000,
+      });
+
+      const content = response.choices[0]?.message?.content || "";
+      console.log(`Model ${model} response length: ${content.length} chars`);
+
+      if (!content) {
+        console.warn(`Model ${model} returned empty content, trying next...`);
+        continue;
+      }
+
+      const jsonMatch = content.match(/\{[\s\S]*\}/);
+      if (jsonMatch) {
+        return JSON.parse(jsonMatch[0]) as DailyNews;
+      }
+      console.warn(`Could not parse JSON from ${model} response, trying next. Raw:`, content.slice(0, 200));
+    } catch (error: any) {
+      console.warn(`Model ${model} failed:`, error?.message || error);
     }
-    console.error("Could not parse news JSON from:", content);
-    return null;
-  } catch (error) {
-    console.error("Error generating daily news:", error);
-    return null;
   }
+
+  console.error("All models failed to generate news");
+  return null;
 }
 
 export async function generateNewsImage(prompt: string): Promise<Buffer | null> {
