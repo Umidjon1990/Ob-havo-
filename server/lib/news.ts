@@ -80,34 +80,73 @@ export async function generateDailyNews(): Promise<DailyNews | null> {
   return null;
 }
 
-export async function generateNewsImageUrl(prompt: string): Promise<string | null> {
-  const fullPrompt = `Professional editorial illustration for an Arabic science and technology news post: ${prompt}. Style: modern flat design, vibrant colors, no text or writing in the image.`;
+export type ImageResult =
+  | { type: "buffer"; data: Buffer }
+  | { type: "url"; data: string };
 
-  // Try dall-e-3 first, fall back to dall-e-2
-  const models: Array<{ model: string; size: "1024x1024" | "512x512" }> = [
-    { model: "dall-e-3", size: "1024x1024" },
-    { model: "dall-e-2", size: "512x512" },
-  ];
+export async function generateNewsImage(prompt: string): Promise<ImageResult | null> {
+  const fullPrompt = `Professional editorial illustration for an Arabic science and technology news post: ${prompt}. Style: modern flat design, vibrant colors, no text or Arabic writing in the image.`;
 
-  for (const { model, size } of models) {
-    try {
-      console.log(`Trying image model: ${model}`);
-      const response = await openai.images.generate({
-        model,
-        prompt: fullPrompt,
-        n: 1,
-        size,
-      });
-      const url = response.data?.[0]?.url;
-      if (url) {
-        console.log(`Image URL generated with ${model}`);
-        return url;
-      }
-    } catch (error: any) {
-      console.warn(`Image model ${model} failed:`, error?.message || error);
+  // 1. Try gpt-image-1 (newest OpenAI image model, returns base64)
+  try {
+    console.log("Trying image model: gpt-image-1");
+    const response = await openai.images.generate({
+      model: "gpt-image-1" as any,
+      prompt: fullPrompt,
+      n: 1,
+      size: "1024x1024",
+    } as any);
+    const b64 = (response.data?.[0] as any)?.b64_json;
+    if (b64) {
+      console.log("Image generated with gpt-image-1 (base64)");
+      return { type: "buffer", data: Buffer.from(b64, "base64") };
     }
+    const url = response.data?.[0]?.url;
+    if (url) {
+      console.log("Image URL from gpt-image-1");
+      return { type: "url", data: url };
+    }
+  } catch (e: any) {
+    console.warn("gpt-image-1 failed:", e?.message || e);
   }
 
+  // 2. Fall back to dall-e-3
+  try {
+    console.log("Trying image model: dall-e-3");
+    const response = await openai.images.generate({
+      model: "dall-e-3",
+      prompt: fullPrompt,
+      n: 1,
+      size: "1024x1024",
+    });
+    const url = response.data?.[0]?.url;
+    if (url) {
+      console.log("Image URL from dall-e-3");
+      return { type: "url", data: url };
+    }
+  } catch (e: any) {
+    console.warn("dall-e-3 failed:", e?.message || e);
+  }
+
+  // 3. Fall back to dall-e-2
+  try {
+    console.log("Trying image model: dall-e-2");
+    const response = await openai.images.generate({
+      model: "dall-e-2",
+      prompt: fullPrompt,
+      n: 1,
+      size: "512x512",
+    });
+    const url = response.data?.[0]?.url;
+    if (url) {
+      console.log("Image URL from dall-e-2");
+      return { type: "url", data: url };
+    }
+  } catch (e: any) {
+    console.warn("dall-e-2 failed:", e?.message || e);
+  }
+
+  console.warn("All image models failed");
   return null;
 }
 

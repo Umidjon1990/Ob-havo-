@@ -1,6 +1,6 @@
 import { storage } from "../storage";
 import { generateWeatherAdvice } from "./openai";
-import { generateDailyNews, generateNewsImageUrl, formatNewsCaption } from "./news";
+import { generateDailyNews, generateNewsImage, formatNewsCaption } from "./news";
 
 function getAppBaseUrl(): string {
   if (process.env.APP_URL) {
@@ -432,6 +432,35 @@ export async function sendTelegramPhotoUrl(
   return result;
 }
 
+export async function sendTelegramPhotoBuffer(
+  chatId: string,
+  imageBuffer: Buffer,
+  caption: string
+) {
+  if (!BOT_TOKEN) throw new Error("TELEGRAM_BOT_TOKEN not set");
+
+  const formData = new FormData();
+  formData.append("chat_id", chatId);
+  formData.append(
+    "photo",
+    new Blob([imageBuffer], { type: "image/png" }),
+    "news.png"
+  );
+  formData.append("caption", caption);
+  formData.append("parse_mode", "HTML");
+
+  const response = await fetch(
+    `https://api.telegram.org/bot${BOT_TOKEN}/sendPhoto`,
+    { method: "POST", body: formData }
+  );
+  const result = await response.json();
+  if (!result.ok) {
+    console.error("Telegram sendPhoto (buffer) error:", result);
+    throw new Error(result.description || "Telegram sendPhoto error");
+  }
+  return result;
+}
+
 export async function sendDailyNewsToChannel(channelId: string): Promise<void> {
   console.log(`Generating daily news for ${channelId}...`);
 
@@ -445,12 +474,16 @@ export async function sendDailyNewsToChannel(channelId: string): Promise<void> {
   const caption = formatNewsCaption(news);
   console.log(`News content generated (${caption.length} chars), sending to ${channelId}...`);
 
-  // Try image first (URL-based — no buffer download needed)
+  // Try image: gpt-image-1 (buffer) → dall-e-3/dall-e-2 (URL)
   try {
-    const imageUrl = await generateNewsImageUrl(news.imagePrompt);
-    if (imageUrl) {
-      await sendTelegramPhotoUrl(channelId, imageUrl, caption);
-      console.log(`News photo sent to ${channelId}`);
+    const img = await generateNewsImage(news.imagePrompt);
+    if (img) {
+      if (img.type === "buffer") {
+        await sendTelegramPhotoBuffer(channelId, img.data, caption);
+      } else {
+        await sendTelegramPhotoUrl(channelId, img.data, caption);
+      }
+      console.log(`News photo sent to ${channelId} (${img.type})`);
       return;
     }
   } catch (imgErr: any) {
