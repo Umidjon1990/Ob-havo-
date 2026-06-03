@@ -1,5 +1,6 @@
 import { storage } from "../storage";
 import { generateWeatherAdvice } from "./openai";
+import { generateDailyNews, generateNewsImage, formatNewsCaption } from "./news";
 
 interface TelegramMessage {
   message_id: number;
@@ -389,6 +390,88 @@ ${regionLines.join('\n\n')}
       { text: "📱 Batafsil", url: "https://t.me/Ztobhavobot" }
     ]]
   });
+}
+
+export async function sendTelegramPhoto(
+  chatId: string,
+  imageBuffer: Buffer,
+  caption: string
+) {
+  if (!BOT_TOKEN) throw new Error("TELEGRAM_BOT_TOKEN not set");
+
+  const formData = new FormData();
+  formData.append("chat_id", chatId);
+  formData.append(
+    "photo",
+    new Blob([imageBuffer], { type: "image/png" }),
+    "news.png"
+  );
+  formData.append("caption", caption);
+  formData.append("parse_mode", "HTML");
+
+  const response = await fetch(
+    `https://api.telegram.org/bot${BOT_TOKEN}/sendPhoto`,
+    { method: "POST", body: formData }
+  );
+  const result = await response.json();
+  if (!result.ok) {
+    console.error("Telegram sendPhoto error:", result);
+    throw new Error(result.description || "Telegram sendPhoto error");
+  }
+  return result;
+}
+
+export async function sendDailyNewsToChannel(channelId: string) {
+  console.log(`Generating daily news for ${channelId}...`);
+  const news = await generateDailyNews();
+  if (!news) {
+    console.error("Failed to generate news content");
+    return;
+  }
+
+  const caption = formatNewsCaption(news);
+
+  // Try to generate and send an image post
+  const imageBuffer = await generateNewsImage(news.imagePrompt);
+  if (imageBuffer) {
+    await sendTelegramPhoto(channelId, imageBuffer, caption);
+    console.log(`News photo sent to ${channelId}`);
+  } else {
+    // Fallback: send as text message
+    await sendTelegramMessage(channelId, caption, "HTML");
+    console.log(`News text sent to ${channelId} (image failed)`);
+  }
+}
+
+export async function startDailyNewsScheduler() {
+  setInterval(async () => {
+    try {
+      const newsChannels = await storage.getEnabledNewsChannels();
+      if (newsChannels.length === 0) return;
+
+      const now = new Date();
+      const uzTime = new Date(now.getTime() + 5 * 60 * 60 * 1000);
+      const currentHour = uzTime.getUTCHours();
+      const currentMinute = uzTime.getUTCMinutes();
+      const today = uzTime.toDateString();
+
+      for (const channel of newsChannels) {
+        const scheduledTime = channel.scheduledTime || "09:00";
+        const [targetHour, targetMinute] = scheduledTime.split(":").map(Number);
+
+        if (currentHour === targetHour && currentMinute === targetMinute) {
+          const lastSent = channel.lastSentAt;
+          if (!lastSent || new Date(lastSent).toDateString() !== today) {
+            await sendDailyNewsToChannel(channel.chatId);
+            await storage.updateNewsChannelLastSent(channel.chatId);
+            console.log(`Daily news sent to ${channel.title || channel.chatId}`);
+          }
+        }
+      }
+    } catch (error) {
+      console.error("Error in daily news scheduler:", error);
+    }
+  }, 60000);
 }
 
 export async function startDailyMessageScheduler() {

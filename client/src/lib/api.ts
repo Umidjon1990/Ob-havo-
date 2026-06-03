@@ -203,6 +203,92 @@ export async function generateNewVocabulary(count: number = 5): Promise<Generate
   }
 }
 
+export interface NewsChannel {
+  id: string;
+  chatId: string;
+  title: string | null;
+  enabled: boolean | null;
+  scheduledTime: string | null;
+  lastSentAt: string | null;
+  createdAt: string | null;
+}
+
+export async function getNewsChannels(): Promise<NewsChannel[]> {
+  try {
+    const response = await fetch('/api/news-channels');
+    return await response.json();
+  } catch (error) {
+    console.error('Error fetching news channels:', error);
+    return [];
+  }
+}
+
+export async function addNewsChannel(chatId: string, title: string): Promise<NewsChannel | null> {
+  try {
+    const response = await fetch('/api/news-channels', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ chatId, title }),
+    });
+    return await response.json();
+  } catch (error) {
+    console.error('Error adding news channel:', error);
+    return null;
+  }
+}
+
+export async function removeNewsChannel(chatId: string): Promise<boolean> {
+  try {
+    const response = await fetch(`/api/news-channels/${encodeURIComponent(chatId)}`, {
+      method: 'DELETE',
+    });
+    return response.ok;
+  } catch (error) {
+    console.error('Error removing news channel:', error);
+    return false;
+  }
+}
+
+export async function toggleNewsChannel(chatId: string, enabled: boolean): Promise<NewsChannel | null> {
+  try {
+    const response = await fetch(`/api/news-channels/${encodeURIComponent(chatId)}`, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ enabled }),
+    });
+    return await response.json();
+  } catch (error) {
+    console.error('Error toggling news channel:', error);
+    return null;
+  }
+}
+
+export async function updateNewsChannelSchedule(chatId: string, scheduledTime: string): Promise<NewsChannel | null> {
+  try {
+    const response = await fetch(`/api/news-channels/${encodeURIComponent(chatId)}/schedule`, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ scheduledTime }),
+    });
+    return response.ok ? await response.json() : null;
+  } catch (error) {
+    console.error('Error updating news schedule:', error);
+    return null;
+  }
+}
+
+export async function sendNewsNow(chatId: string): Promise<boolean> {
+  try {
+    const response = await fetch(`/api/news-channels/${encodeURIComponent(chatId)}/send-now`, {
+      method: 'POST',
+    });
+    return response.ok;
+  } catch (error) {
+    console.error('Error sending news now:', error);
+    return false;
+  }
+}
+
 // Admin authentication
 export async function adminLogin(username: string, password: string): Promise<{ success: boolean; token?: string; error?: string }> {
   try {

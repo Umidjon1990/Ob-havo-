@@ -1,7 +1,7 @@
 import type { Express } from "express";
 import { createServer, type Server } from "http";
 import { storage } from "./storage";
-import { handleTelegramUpdate, sendTelegramMessage, setTelegramWebhook } from "./lib/telegram";
+import { handleTelegramUpdate, sendTelegramMessage, setTelegramWebhook, sendDailyNewsToChannel } from "./lib/telegram";
 import { generateWeatherAdvice, generateVocabularyExample, generateNewVocabulary } from "./lib/openai";
 import { updateWeatherCache } from "./lib/weather";
 import { regions } from "../client/src/data/regions";
@@ -305,6 +305,70 @@ export async function registerRoutes(
       res.json(channel);
     } catch (error) {
       res.status(500).json({ error: "Failed to toggle channel" });
+    }
+  });
+
+  // News channels API
+  app.get("/api/news-channels", async (req, res) => {
+    try {
+      const list = await storage.getNewsChannels();
+      res.json(list);
+    } catch (error) {
+      res.status(500).json({ error: "Failed to fetch news channels" });
+    }
+  });
+
+  app.post("/api/news-channels", async (req, res) => {
+    try {
+      const { chatId, title } = req.body;
+      const channel = await storage.addNewsChannel({ chatId, title, enabled: true });
+      res.json(channel);
+    } catch (error: any) {
+      res.status(500).json({ error: error.message || "Failed to add news channel" });
+    }
+  });
+
+  app.delete("/api/news-channels/:chatId", async (req, res) => {
+    try {
+      const { chatId } = req.params;
+      await storage.removeNewsChannel(chatId);
+      res.json({ ok: true });
+    } catch (error) {
+      res.status(500).json({ error: "Failed to remove news channel" });
+    }
+  });
+
+  app.patch("/api/news-channels/:chatId", async (req, res) => {
+    try {
+      const { chatId } = req.params;
+      const { enabled } = req.body;
+      const channel = await storage.toggleNewsChannel(chatId, enabled);
+      res.json(channel);
+    } catch (error) {
+      res.status(500).json({ error: "Failed to toggle news channel" });
+    }
+  });
+
+  app.patch("/api/news-channels/:chatId/schedule", async (req, res) => {
+    try {
+      const { chatId } = req.params;
+      const { scheduledTime } = req.body;
+      const channel = await storage.updateNewsChannelSchedule(chatId, scheduledTime);
+      res.json(channel);
+    } catch (error) {
+      res.status(500).json({ error: "Failed to update news schedule" });
+    }
+  });
+
+  // Send test news to a channel immediately
+  app.post("/api/news-channels/:chatId/send-now", async (req, res) => {
+    try {
+      const { chatId } = req.params;
+      await sendDailyNewsToChannel(chatId);
+      await storage.updateNewsChannelLastSent(chatId);
+      res.json({ ok: true });
+    } catch (error: any) {
+      res.status(500).json({ error: error.message || "Failed to send news" });
     }
   });
 

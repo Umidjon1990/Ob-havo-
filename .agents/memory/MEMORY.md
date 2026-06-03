@@ -1,0 +1,1 @@
+- [News bot architecture](news-bot.md) — daily Arabic news uses separate news_channels table + scheduler, with DALL-E image fallback to text-only if image fails

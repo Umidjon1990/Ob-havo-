@@ -53,6 +53,16 @@ export const channels = pgTable("channels", {
   createdAt: timestamp("created_at").defaultNow(),
 });
 
+export const newsChannels = pgTable("news_channels", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  chatId: text("chat_id").notNull().unique(),
+  title: text("title"),
+  enabled: boolean("enabled").default(true),
+  scheduledTime: text("scheduled_time").default("09:00"),
+  lastSentAt: timestamp("last_sent_at"),
+  createdAt: timestamp("created_at").defaultNow(),
+});
+
 export const insertUserSchema = createInsertSchema(users).omit({
   id: true,
   createdAt: true,
@@ -78,6 +88,11 @@ export const insertChannelSchema = createInsertSchema(channels).omit({
   createdAt: true,
 });
 
+export const insertNewsChannelSchema = createInsertSchema(newsChannels).omit({
+  id: true,
+  createdAt: true,
+});
+
 export type InsertUser = z.infer<typeof insertUserSchema>;
 export type User = typeof users.$inferSelect;
 export type InsertUserProgress = z.infer<typeof insertUserProgressSchema>;
@@ -88,3 +103,5 @@ export type InsertBotSettings = z.infer<typeof insertBotSettingsSchema>;
 export type BotSettings = typeof botSettings.$inferSelect;
 export type InsertChannel = z.infer<typeof insertChannelSchema>;
 export type Channel = typeof channels.$inferSelect;
+export type InsertNewsChannel = z.infer<typeof insertNewsChannelSchema>;
+export type NewsChannel = typeof newsChannels.$inferSelect;

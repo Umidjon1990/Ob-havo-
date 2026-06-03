@@ -65,8 +65,9 @@ app.use((req, res, next) => {
   startWeatherUpdateSchedule();
   
   // Start daily message scheduler for Telegram channel
-  const { startDailyMessageScheduler } = await import("./lib/telegram");
+  const { startDailyMessageScheduler, startDailyNewsScheduler } = await import("./lib/telegram");
   startDailyMessageScheduler();
+  startDailyNewsScheduler();
   
   await registerRoutes(httpServer, app);
 

@@ -1,6 +1,6 @@
 import { db } from "./db";
-import { users, weatherCache, userProgress, botSettings, channels } from "@shared/schema";
-import type { User, InsertUser, WeatherCache, InsertWeatherCache, UserProgress, InsertUserProgress, BotSettings, InsertBotSettings, Channel, InsertChannel } from "@shared/schema";
+import { users, weatherCache, userProgress, botSettings, channels, newsChannels } from "@shared/schema";
+import type { User, InsertUser, WeatherCache, InsertWeatherCache, UserProgress, InsertUserProgress, BotSettings, InsertBotSettings, Channel, InsertChannel, NewsChannel, InsertNewsChannel } from "@shared/schema";
 import { eq } from "drizzle-orm";
 
 export interface IStorage {
@@ -31,6 +31,15 @@ export interface IStorage {
   toggleChannel(chatId: string, enabled: boolean): Promise<Channel | undefined>;
   updateChannelSchedule(chatId: string, scheduledTime: string): Promise<Channel | undefined>;
   updateChannelLastSent(chatId: string): Promise<void>;
+
+  // News channel methods
+  getNewsChannels(): Promise<NewsChannel[]>;
+  getEnabledNewsChannels(): Promise<NewsChannel[]>;
+  addNewsChannel(channel: InsertNewsChannel): Promise<NewsChannel>;
+  removeNewsChannel(chatId: string): Promise<void>;
+  toggleNewsChannel(chatId: string, enabled: boolean): Promise<NewsChannel | undefined>;
+  updateNewsChannelSchedule(chatId: string, scheduledTime: string): Promise<NewsChannel | undefined>;
+  updateNewsChannelLastSent(chatId: string): Promise<void>;
 }
 
 export class DatabaseStorage implements IStorage {
@@ -160,6 +169,48 @@ export class DatabaseStorage implements IStorage {
       .update(channels)
       .set({ lastSentAt: new Date() })
       .where(eq(channels.chatId, chatId));
+  }
+
+  async getNewsChannels(): Promise<NewsChannel[]> {
+    return await db.select().from(newsChannels);
+  }
+
+  async getEnabledNewsChannels(): Promise<NewsChannel[]> {
+    return await db.select().from(newsChannels).where(eq(newsChannels.enabled, true));
+  }
+
+  async addNewsChannel(channel: InsertNewsChannel): Promise<NewsChannel> {
+    const [inserted] = await db.insert(newsChannels).values(channel).returning();
+    return inserted;
+  }
+
+  async removeNewsChannel(chatId: string): Promise<void> {
+    await db.delete(newsChannels).where(eq(newsChannels.chatId, chatId));
+  }
+
+  async toggleNewsChannel(chatId: string, enabled: boolean): Promise<NewsChannel | undefined> {
+    const [updated] = await db
+      .update(newsChannels)
+      .set({ enabled })
+      .where(eq(newsChannels.chatId, chatId))
+      .returning();
+    return updated;
+  }
+
+  async updateNewsChannelSchedule(chatId: string, scheduledTime: string): Promise<NewsChannel | undefined> {
+    const [updated] = await db
+      .update(newsChannels)
+      .set({ scheduledTime })
+      .where(eq(newsChannels.chatId, chatId))
+      .returning();
+    return updated;
+  }
+
+  async updateNewsChannelLastSent(chatId: string): Promise<void> {
+    await db
+      .update(newsChannels)
+      .set({ lastSentAt: new Date() })
+      .where(eq(newsChannels.chatId, chatId));
   }
 }
 
