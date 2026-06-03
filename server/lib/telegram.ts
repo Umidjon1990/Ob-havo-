@@ -1,6 +1,6 @@
 import { storage } from "../storage";
 import { generateWeatherAdvice } from "./openai";
-import { generateDailyNews, generateNewsImage, formatNewsCaption } from "./news";
+import { generateDailyNews, generateNewsImage, formatPhotoCaption, formatNewsText, formatNewsCaption } from "./news";
 
 function getAppBaseUrl(): string {
   if (process.env.APP_URL) {
@@ -471,28 +471,42 @@ export async function sendDailyNewsToChannel(channelId: string): Promise<void> {
     );
   }
 
-  const caption = formatNewsCaption(news);
-  console.log(`News content generated (${caption.length} chars), sending to ${channelId}...`);
+  // Photo caption is short (≤1024 chars) — Telegram limit for captions
+  const photoCaption = formatPhotoCaption(news);
+  // Full text sent as a separate message
+  const textBody = formatNewsText(news);
 
-  // Try image: gpt-image-1 (buffer) → dall-e-3/dall-e-2 (URL)
+  console.log(`News generated. Photo caption: ${photoCaption.length} chars`);
+
+  // 1. Try to send with image
+  let imageSent = false;
   try {
     const img = await generateNewsImage(news.imagePrompt);
     if (img) {
       if (img.type === "buffer") {
-        await sendTelegramPhotoBuffer(channelId, img.data, caption);
+        await sendTelegramPhotoBuffer(channelId, img.data, photoCaption);
       } else {
-        await sendTelegramPhotoUrl(channelId, img.data, caption);
+        await sendTelegramPhotoUrl(channelId, img.data, photoCaption);
       }
-      console.log(`News photo sent to ${channelId} (${img.type})`);
-      return;
+      console.log(`✓ News photo sent to ${channelId} (${img.type})`);
+      imageSent = true;
+    } else {
+      console.warn("No image returned, will send text only");
     }
   } catch (imgErr: any) {
-    console.warn("Image send failed, falling back to text:", imgErr?.message || imgErr);
+    console.warn("Image send failed:", imgErr?.message || imgErr);
   }
 
-  // Fallback: text only
-  await sendTelegramMessage(channelId, caption, "HTML");
-  console.log(`News text sent to ${channelId} (no image)`);
+  // 2. If image sent — follow up with the full text body
+  if (imageSent) {
+    await sendTelegramMessage(channelId, textBody, "HTML");
+    console.log(`✓ News text body sent to ${channelId}`);
+  } else {
+    // Fallback: send everything as one text message
+    const fullText = formatNewsCaption(news);
+    await sendTelegramMessage(channelId, fullText, "HTML");
+    console.log(`✓ News text-only sent to ${channelId}`);
+  }
 }
 
 export async function startDailyNewsScheduler() {
