@@ -1,6 +1,6 @@
 import { storage } from "../storage";
 import { generateWeatherAdvice } from "./openai";
-import { generateDailyNews, generateNewsImage, formatNewsCaption } from "./news";
+import { generateDailyNews, generateNewsImageUrl, formatNewsCaption } from "./news";
 
 function getAppBaseUrl(): string {
   if (process.env.APP_URL) {
@@ -404,26 +404,25 @@ ${regionLines.join('\n\n')}
   });
 }
 
-export async function sendTelegramPhoto(
+export async function sendTelegramPhotoUrl(
   chatId: string,
-  imageBuffer: Buffer,
+  photoUrl: string,
   caption: string
 ) {
   if (!BOT_TOKEN) throw new Error("TELEGRAM_BOT_TOKEN not set");
 
-  const formData = new FormData();
-  formData.append("chat_id", chatId);
-  formData.append(
-    "photo",
-    new Blob([imageBuffer], { type: "image/png" }),
-    "news.png"
-  );
-  formData.append("caption", caption);
-  formData.append("parse_mode", "HTML");
-
   const response = await fetch(
     `https://api.telegram.org/bot${BOT_TOKEN}/sendPhoto`,
-    { method: "POST", body: formData }
+    {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        chat_id: chatId,
+        photo: photoUrl,
+        caption,
+        parse_mode: "HTML",
+      }),
+    }
   );
   const result = await response.json();
   if (!result.ok) {
@@ -438,27 +437,29 @@ export async function sendDailyNewsToChannel(channelId: string): Promise<void> {
 
   const news = await generateDailyNews();
   if (!news) {
-    throw new Error("OpenAI yangilik generatsiya qila olmadi. OPENAI_API_KEY yoki AI_INTEGRATIONS kaliti to'g'ri o'rnatilganligini tekshiring.");
+    throw new Error(
+      "OpenAI yangilik generatsiya qila olmadi. OPENAI_API_KEY yoki AI_INTEGRATIONS kaliti to'g'ri o'rnatilganligini tekshiring."
+    );
   }
 
   const caption = formatNewsCaption(news);
-  console.log(`News content generated, sending to ${channelId}...`);
+  console.log(`News content generated (${caption.length} chars), sending to ${channelId}...`);
 
-  // Try image post first, fall back to text
+  // Try image first (URL-based — no buffer download needed)
   try {
-    const imageBuffer = await generateNewsImage(news.imagePrompt);
-    if (imageBuffer) {
-      await sendTelegramPhoto(channelId, imageBuffer, caption);
+    const imageUrl = await generateNewsImageUrl(news.imagePrompt);
+    if (imageUrl) {
+      await sendTelegramPhotoUrl(channelId, imageUrl, caption);
       console.log(`News photo sent to ${channelId}`);
       return;
     }
-  } catch (imgErr) {
-    console.error("Image generation/send failed, falling back to text:", imgErr);
+  } catch (imgErr: any) {
+    console.warn("Image send failed, falling back to text:", imgErr?.message || imgErr);
   }
 
   // Fallback: text only
   await sendTelegramMessage(channelId, caption, "HTML");
-  console.log(`News text sent to ${channelId} (image skipped)`);
+  console.log(`News text sent to ${channelId} (no image)`);
 }
 
 export async function startDailyNewsScheduler() {

@@ -80,27 +80,35 @@ export async function generateDailyNews(): Promise<DailyNews | null> {
   return null;
 }
 
-export async function generateNewsImage(prompt: string): Promise<Buffer | null> {
-  try {
-    const response = await openai.images.generate({
-      model: "dall-e-3",
-      prompt: `Professional editorial illustration for an Arabic science and technology news post: ${prompt}. Style: modern flat design, vibrant colors, no text or writing in the image.`,
-      n: 1,
-      size: "1024x1024",
-    });
+export async function generateNewsImageUrl(prompt: string): Promise<string | null> {
+  const fullPrompt = `Professional editorial illustration for an Arabic science and technology news post: ${prompt}. Style: modern flat design, vibrant colors, no text or writing in the image.`;
 
-    const imageUrl = response.data?.[0]?.url;
-    if (!imageUrl) return null;
+  // Try dall-e-3 first, fall back to dall-e-2
+  const models: Array<{ model: string; size: "1024x1024" | "512x512" }> = [
+    { model: "dall-e-3", size: "1024x1024" },
+    { model: "dall-e-2", size: "512x512" },
+  ];
 
-    const imgResponse = await fetch(imageUrl);
-    if (!imgResponse.ok) return null;
-
-    const arrayBuffer = await imgResponse.arrayBuffer();
-    return Buffer.from(arrayBuffer);
-  } catch (error) {
-    console.error("Error generating news image:", error);
-    return null;
+  for (const { model, size } of models) {
+    try {
+      console.log(`Trying image model: ${model}`);
+      const response = await openai.images.generate({
+        model,
+        prompt: fullPrompt,
+        n: 1,
+        size,
+      });
+      const url = response.data?.[0]?.url;
+      if (url) {
+        console.log(`Image URL generated with ${model}`);
+        return url;
+      }
+    } catch (error: any) {
+      console.warn(`Image model ${model} failed:`, error?.message || error);
+    }
   }
+
+  return null;
 }
 
 export function formatNewsCaption(news: DailyNews): string {
