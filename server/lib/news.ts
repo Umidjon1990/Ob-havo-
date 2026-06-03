@@ -1,29 +1,34 @@
 import { openai } from "./openai";
 
 export interface DailyNews {
+  topic: string;
+  topicUz: string;
   arabicText: string;
   uzbekText: string;
-  phrases: Array<{ arabic: string; uzbek: string }>;
+  vocabulary: Array<{ arabic: string; uzbek: string }>;
   imagePrompt: string;
 }
 
 export async function generateDailyNews(): Promise<DailyNews | null> {
   const topics = [
-    "الذكاء الاصطناعي",
-    "الفضاء والنجوم",
-    "الطاقة المتجددة",
-    "الروبوتات",
-    "الطب الحديث",
-    "علم الأحياء",
-    "تقنية المعلومات",
-    "علم الفيزياء",
-    "اكتشافات علمية حديثة",
-    "تطور الإنترنت",
+    { ar: "الذَّكَاء الاصْطِنَاعِي", uz: "Sun'iy intellekt" },
+    { ar: "الفَضَاء وَالنُّجُوم", uz: "Kosmosva yulduzlar" },
+    { ar: "الطَّاقَة المُتَجَدِّدَة", uz: "Qayta tiklanadigan energiya" },
+    { ar: "الرُّوبُوتَات", uz: "Robotlar" },
+    { ar: "الطِّب الحَدِيث", uz: "Zamonaviy tibbiyot" },
+    { ar: "عِلْم الأَحْيَاء", uz: "Biologiya" },
+    { ar: "تَقْنِيَة المَعْلُومَات", uz: "Axborot texnologiyalari" },
+    { ar: "عِلْم الفِيزْيَاء", uz: "Fizika fani" },
+    { ar: "اكْتِشَافَات عِلْمِيَّة حَدِيثَة", uz: "Yangi ilmiy kashfiyotlar" },
+    { ar: "تَطَوُّر الإِنْتَرْنِت", uz: "Internetning rivojlanishi" },
+    { ar: "الهَنْدَسَة الوِرَاثِيَّة", uz: "Genetik muhandislik" },
+    { ar: "الحَوْسَبَة الكَمِّيَّة", uz: "Kvant hisoblash" },
   ];
-  const topic = topics[Math.floor(Math.random() * topics.length)];
+  const chosen = topics[Math.floor(Math.random() * topics.length)];
 
-  const prompt = `أنت صحفي عربي متخصص في أخبار التقنية والعلوم.
-اكتب خبراً يومياً بالعربية الفصحى مع الحركات الكاملة (التشكيل) عن موضوع: ${topic}.
+  const prompt = `أنت صحفي وأستاذ لغة عربية متخصص في أخبار التقنية والعلوم.
+
+اكتب خبراً يومياً تعليمياً بالعربية الفصحى مع الحركات الكاملة (التشكيل) عن موضوع: ${chosen.ar}.
 
 المتطلبات الصارمة:
 - اللغة: عربية فصحى مع الحركات الكاملة على كل كلمة
@@ -31,35 +36,42 @@ export async function generateDailyNews(): Promise<DailyNews | null> {
 - الأسلوب: أكاديمي وواضح ومناسب لتعليم اللغة العربية
 
 ثم أضف:
-- ترجمة كاملة دقيقة إلى اللغة الأوزبكية
-- 3 عبارات مفيدة مختارة من النص مع ترجمتها إلى الأوزبكية
-- وصف للصورة المناسبة بالإنجليزية لـ DALL-E (لا تشمل نصاً في الصورة)
+1. ترجمة كاملة دقيقة إلى الأوزبكية
+2. 10 مفردات مفيدة من نص الخبر مع ترجمتها إلى الأوزبكية (بحركات كاملة)
+3. وصف تفصيلي بالإنجليزية لصورة جميلة تعبر عن الموضوع (بدون نصوص أو كتابة في الصورة)
 
-أجب بتنسيق JSON فقط:
+أجب بتنسيق JSON فقط بدون أي نص إضافي:
 {
   "arabicText": "النص العربي مع الحركات هنا",
   "uzbekText": "O'zbekcha to'liq tarjima",
-  "phrases": [
-    {"arabic": "عبارة عربية", "uzbek": "O'zbekcha ma'no"},
-    {"arabic": "عبارة عربية", "uzbek": "O'zbekcha ma'no"},
-    {"arabic": "عبارة عربية", "uzbek": "O'zbekcha ma'no"}
+  "vocabulary": [
+    {"arabic": "كَلِمَة", "uzbek": "ma'no"},
+    {"arabic": "كَلِمَة", "uzbek": "ma'no"},
+    {"arabic": "كَلِمَة", "uzbek": "ma'no"},
+    {"arabic": "كَلِمَة", "uzbek": "ma'no"},
+    {"arabic": "كَلِمَة", "uzbek": "ma'no"},
+    {"arabic": "كَلِمَة", "uzbek": "ma'no"},
+    {"arabic": "كَلِمَة", "uzbek": "ma'no"},
+    {"arabic": "كَلِمَة", "uzbek": "ma'no"},
+    {"arabic": "كَلِمَة", "uzbek": "ma'no"},
+    {"arabic": "كَلِمَة", "uzbek": "ma'no"}
   ],
-  "imagePrompt": "Detailed English description for image generation"
+  "imagePrompt": "Detailed vivid English description for AI image generation, no text in image"
 }`;
 
   const models = ["gpt-5", "gpt-4o", "gpt-4-turbo"];
 
   for (const model of models) {
     try {
-      console.log(`Trying model: ${model}`);
+      console.log(`Trying text model: ${model}`);
       const response = await openai.chat.completions.create({
         model,
         messages: [{ role: "user", content: prompt }],
-        max_completion_tokens: 1000,
+        max_completion_tokens: 1500,
       });
 
       const content = response.choices[0]?.message?.content || "";
-      console.log(`Model ${model} response length: ${content.length} chars`);
+      console.log(`Model ${model} response: ${content.length} chars`);
 
       if (!content) {
         console.warn(`Model ${model} returned empty content, trying next...`);
@@ -68,15 +80,23 @@ export async function generateDailyNews(): Promise<DailyNews | null> {
 
       const jsonMatch = content.match(/\{[\s\S]*\}/);
       if (jsonMatch) {
-        return JSON.parse(jsonMatch[0]) as DailyNews;
+        const parsed = JSON.parse(jsonMatch[0]);
+        return {
+          topic: chosen.ar,
+          topicUz: chosen.uz,
+          arabicText: parsed.arabicText,
+          uzbekText: parsed.uzbekText,
+          vocabulary: parsed.vocabulary || [],
+          imagePrompt: parsed.imagePrompt,
+        } as DailyNews;
       }
-      console.warn(`Could not parse JSON from ${model} response, trying next. Raw:`, content.slice(0, 200));
+      console.warn(`Could not parse JSON from ${model}. Raw:`, content.slice(0, 200));
     } catch (error: any) {
       console.warn(`Model ${model} failed:`, error?.message || error);
     }
   }
 
-  console.error("All models failed to generate news");
+  console.error("All text models failed to generate news");
   return null;
 }
 
@@ -85,65 +105,44 @@ export type ImageResult =
   | { type: "url"; data: string };
 
 export async function generateNewsImage(prompt: string): Promise<ImageResult | null> {
-  const fullPrompt = `Professional editorial illustration for an Arabic science and technology news post: ${prompt}. Style: modern flat design, vibrant colors, no text or Arabic writing in the image.`;
+  const fullPrompt = `High quality editorial illustration for a science and technology news article about: ${prompt}. Style: modern, professional, vibrant colors, no text, no letters, no writing anywhere in the image.`;
 
-  // 1. Try gpt-image-1 (newest OpenAI image model, returns base64)
-  try {
-    console.log("Trying image model: gpt-image-1");
-    const response = await openai.images.generate({
-      model: "gpt-image-1" as any,
-      prompt: fullPrompt,
-      n: 1,
-      size: "1024x1024",
-    } as any);
-    const b64 = (response.data?.[0] as any)?.b64_json;
-    if (b64) {
-      console.log("Image generated with gpt-image-1 (base64)");
-      return { type: "buffer", data: Buffer.from(b64, "base64") };
-    }
-    const url = response.data?.[0]?.url;
-    if (url) {
-      console.log("Image URL from gpt-image-1");
-      return { type: "url", data: url };
-    }
-  } catch (e: any) {
-    console.warn("gpt-image-1 failed:", e?.message || e);
-  }
+  // Model list: newest first
+  const imageModels = [
+    { model: "gpt-image-2", base64: true },
+    { model: "gpt-image-1", base64: true },
+    { model: "dall-e-3", base64: false, size: "1024x1024" as const },
+    { model: "dall-e-2", base64: false, size: "512x512" as const },
+  ];
 
-  // 2. Fall back to dall-e-3
-  try {
-    console.log("Trying image model: dall-e-3");
-    const response = await openai.images.generate({
-      model: "dall-e-3",
-      prompt: fullPrompt,
-      n: 1,
-      size: "1024x1024",
-    });
-    const url = response.data?.[0]?.url;
-    if (url) {
-      console.log("Image URL from dall-e-3");
-      return { type: "url", data: url };
-    }
-  } catch (e: any) {
-    console.warn("dall-e-3 failed:", e?.message || e);
-  }
+  for (const cfg of imageModels) {
+    try {
+      console.log(`Trying image model: ${cfg.model}`);
+      const response = await openai.images.generate({
+        model: cfg.model as any,
+        prompt: fullPrompt,
+        n: 1,
+        size: (cfg.size || "1024x1024") as any,
+      } as any);
 
-  // 3. Fall back to dall-e-2
-  try {
-    console.log("Trying image model: dall-e-2");
-    const response = await openai.images.generate({
-      model: "dall-e-2",
-      prompt: fullPrompt,
-      n: 1,
-      size: "512x512",
-    });
-    const url = response.data?.[0]?.url;
-    if (url) {
-      console.log("Image URL from dall-e-2");
-      return { type: "url", data: url };
+      // Try base64 first (gpt-image-1/2 style)
+      const b64 = (response.data?.[0] as any)?.b64_json;
+      if (b64) {
+        console.log(`Image generated with ${cfg.model} (base64)`);
+        return { type: "buffer", data: Buffer.from(b64, "base64") };
+      }
+
+      // Try URL (dall-e style)
+      const url = response.data?.[0]?.url;
+      if (url) {
+        console.log(`Image URL from ${cfg.model}`);
+        return { type: "url", data: url };
+      }
+
+      console.warn(`${cfg.model}: no image data in response`);
+    } catch (e: any) {
+      console.warn(`${cfg.model} failed:`, e?.message || e);
     }
-  } catch (e: any) {
-    console.warn("dall-e-2 failed:", e?.message || e);
   }
 
   console.warn("All image models failed");
@@ -154,18 +153,28 @@ export function formatNewsCaption(news: DailyNews): string {
   const now = new Date();
   const uzTime = new Date(now.getTime() + 5 * 60 * 60 * 1000);
   const day = uzTime.getUTCDate();
+  const year = uzTime.getUTCFullYear();
+
   const monthsAr = [
     "يَنَايِر", "فِبْرَايِر", "مَارِس", "أَبْرِيل", "مَايُو", "يُونِيُو",
     "يُولِيُو", "أَغُسْطُس", "سِبْتَمْبَر", "أُكْتُوبَر", "نُوفَمْبَر", "دِيسَمْبَر",
   ];
+  const monthsUz = [
+    "Yanvar", "Fevral", "Mart", "Aprel", "May", "Iyun",
+    "Iyul", "Avgust", "Sentabr", "Oktabr", "Noyabr", "Dekabr",
+  ];
   const monthAr = monthsAr[uzTime.getUTCMonth()];
+  const monthUz = monthsUz[uzTime.getUTCMonth()];
 
-  const phrasesLines = news.phrases
-    .map((p) => `• <b>${p.arabic}</b> — ${p.uzbek}`)
+  // Vocabulary: numbered list
+  const vocabLines = news.vocabulary
+    .slice(0, 10)
+    .map((v, i) => `${i + 1}. <b>${v.arabic}</b> — ${v.uzbek}`)
     .join("\n");
 
   return `📰 <b>أَخْبَار التِّقْنِيَّة وَالْعِلْم</b>
-📅 ${day} ${monthAr}
+📅 ${day} ${monthAr} ${year} | ${day} ${monthUz} ${year}
+🏷 <b>Mavzu:</b> ${news.topicUz} | ${news.topic}
 
 ${news.arabicText}
 
@@ -174,6 +183,10 @@ ${news.arabicText}
 ${news.uzbekText}
 
 ━━━━━━━━━━━━━━━━━
-📚 <b>Foydali arabcha iboralar:</b>
-${phrasesLines}`;
+📖 <b>Foydali so'zlar (10 ta):</b>
+${vocabLines}
+
+━━━━━━━━━━━━━━━━━
+📌 <b>Manba:</b> Texnologiya va fan yangiliklari
+🤖 <b>AI:</b> GPT-4o | Rasm: GPT-Image`;
 }
