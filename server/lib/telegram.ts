@@ -2,6 +2,22 @@ import { storage } from "../storage";
 import { generateWeatherAdvice } from "./openai";
 import { generateDailyNews, generateNewsImage, formatNewsCaption } from "./news";
 
+function getAppBaseUrl(): string {
+  if (process.env.APP_URL) {
+    const url = process.env.APP_URL.startsWith('http')
+      ? process.env.APP_URL
+      : `https://${process.env.APP_URL}`;
+    return url.replace(/\/$/, '');
+  }
+  if (process.env.RAILWAY_PUBLIC_DOMAIN) {
+    return `https://${process.env.RAILWAY_PUBLIC_DOMAIN}`;
+  }
+  if (process.env.REPLIT_DEV_DOMAIN) {
+    return `https://${process.env.REPLIT_DEV_DOMAIN}`;
+  }
+  return 'https://ob-havo.replit.app';
+}
+
 interface TelegramMessage {
   message_id: number;
   from: {
@@ -80,8 +96,7 @@ export async function handleTelegramUpdate(update: TelegramUpdate) {
       ? `🎓 <b>مشروع التعليم الحديث</b>\n\n☀️ مرحباً ${from.first_name}!\n\nاختر المنطقة لمعرفة الطقس:`
       : `🎓 <b>Zamonaviy ta'lim loyihasi</b>\n\n☀️ Assalomu alaykum ${from.first_name}!\n\nOb-havo ma'lumotini ko'rish uchun viloyatni tanlang:`;
     
-    const appBaseUrl = process.env.APP_URL 
-      || (process.env.REPLIT_DEV_DOMAIN ? `https://${process.env.REPLIT_DEV_DOMAIN}` : 'https://ob-havo.replit.app');
+    const appBaseUrl = getAppBaseUrl();
     
     const langButtonText = user.preferredLang === 'ar' ? "🌐 تغيير اللغة → O'zbekcha" : "🌐 Tilni o'zgartirish → العربية";
     
@@ -129,8 +144,7 @@ export async function handleTelegramUpdate(update: TelegramUpdate) {
     const newLang = user.preferredLang === 'ar' ? 'uz' : 'ar';
     await storage.updateUserPreferences(user.id, newLang);
     
-    const appBaseUrl = process.env.APP_URL 
-      || (process.env.REPLIT_DEV_DOMAIN ? `https://${process.env.REPLIT_DEV_DOMAIN}` : 'https://ob-havo.replit.app');
+    const appBaseUrl = getAppBaseUrl();
     
     const langButtonText = newLang === 'ar' ? "🌐 تغيير اللغة → O'zbekcha" : "🌐 Tilni o'zgartirish → العربية";
     
@@ -214,9 +228,7 @@ export async function handleTelegramUpdate(update: TelegramUpdate) {
   else if (text?.startsWith('/admin')) {
     const message = `⚙️ <b>Admin Panel</b>\n\nAdmin panelga kirish uchun quyidagi tugmani bosing:`;
     
-    const appUrl = process.env.REPLIT_DEV_DOMAIN 
-      ? `https://${process.env.REPLIT_DEV_DOMAIN}/admin`
-      : 'https://ob-havo.replit.app/admin';
+    const appUrl = `${getAppBaseUrl()}/admin`;
     
     await sendTelegramMessage(chatId, message, 'HTML', {
       inline_keyboard: [[
