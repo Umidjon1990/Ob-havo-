@@ -121,12 +121,12 @@ export default function Admin() {
   const handleSendNewsNow = async (chatId: string) => {
     setSendingNewsNow(chatId);
     toast({ title: "Generatsiya...", description: "AI yangilik yozmoqda, iltimos kuting (30-60 soniya)" });
-    const ok = await sendNewsNow(chatId);
-    if (ok) {
+    const result = await sendNewsNow(chatId);
+    if (result.ok) {
       toast({ title: "Yuborildi!", description: "Arabcha yangilik kanalga yuborildi." });
       loadNewsChannels();
     } else {
-      toast({ title: "Xatolik", description: "Yangilik yuborishda muammo.", variant: "destructive" });
+      toast({ title: "Xatolik", description: result.error || "Yangilik yuborishda muammo.", variant: "destructive" });
     }
     setSendingNewsNow(null);
   };

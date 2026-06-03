@@ -277,15 +277,17 @@ export async function updateNewsChannelSchedule(chatId: string, scheduledTime: s
   }
 }
 
-export async function sendNewsNow(chatId: string): Promise<boolean> {
+export async function sendNewsNow(chatId: string): Promise<{ ok: boolean; error?: string }> {
   try {
     const response = await fetch(`/api/news-channels/${encodeURIComponent(chatId)}/send-now`, {
       method: 'POST',
     });
-    return response.ok;
+    const data = await response.json();
+    if (response.ok) return { ok: true };
+    return { ok: false, error: data.error || 'Yuborishda xatolik' };
   } catch (error) {
     console.error('Error sending news now:', error);
-    return false;
+    return { ok: false, error: 'Tarmoq xatosi' };
   }
 }
 

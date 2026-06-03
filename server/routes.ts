@@ -362,13 +362,15 @@ export async function registerRoutes(
 
   // Send test news to a channel immediately
   app.post("/api/news-channels/:chatId/send-now", async (req, res) => {
+    const { chatId } = req.params;
     try {
-      const { chatId } = req.params;
       await sendDailyNewsToChannel(chatId);
+      // Only update lastSentAt if sending actually succeeded
       await storage.updateNewsChannelLastSent(chatId);
       res.json({ ok: true });
     } catch (error: any) {
-      res.status(500).json({ error: error.message || "Failed to send news" });
+      console.error(`send-now error for ${chatId}:`, error.message);
+      res.status(500).json({ ok: false, error: error.message || "Yuborishda xatolik" });
     }
   });
 

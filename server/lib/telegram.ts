@@ -433,26 +433,32 @@ export async function sendTelegramPhoto(
   return result;
 }
 
-export async function sendDailyNewsToChannel(channelId: string) {
+export async function sendDailyNewsToChannel(channelId: string): Promise<void> {
   console.log(`Generating daily news for ${channelId}...`);
+
   const news = await generateDailyNews();
   if (!news) {
-    console.error("Failed to generate news content");
-    return;
+    throw new Error("OpenAI yangilik generatsiya qila olmadi. OPENAI_API_KEY yoki AI_INTEGRATIONS kaliti to'g'ri o'rnatilganligini tekshiring.");
   }
 
   const caption = formatNewsCaption(news);
+  console.log(`News content generated, sending to ${channelId}...`);
 
-  // Try to generate and send an image post
-  const imageBuffer = await generateNewsImage(news.imagePrompt);
-  if (imageBuffer) {
-    await sendTelegramPhoto(channelId, imageBuffer, caption);
-    console.log(`News photo sent to ${channelId}`);
-  } else {
-    // Fallback: send as text message
-    await sendTelegramMessage(channelId, caption, "HTML");
-    console.log(`News text sent to ${channelId} (image failed)`);
+  // Try image post first, fall back to text
+  try {
+    const imageBuffer = await generateNewsImage(news.imagePrompt);
+    if (imageBuffer) {
+      await sendTelegramPhoto(channelId, imageBuffer, caption);
+      console.log(`News photo sent to ${channelId}`);
+      return;
+    }
+  } catch (imgErr) {
+    console.error("Image generation/send failed, falling back to text:", imgErr);
   }
+
+  // Fallback: text only
+  await sendTelegramMessage(channelId, caption, "HTML");
+  console.log(`News text sent to ${channelId} (image skipped)`);
 }
 
 export async function startDailyNewsScheduler() {
