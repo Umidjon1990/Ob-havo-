@@ -1,6 +1,6 @@
 import { storage } from "../storage";
 import { generateWeatherAdvice } from "./openai";
-import { generateDailyNews, generateNewsImage, formatPhotoCaption, formatNewsText, formatNewsCaption } from "./news";
+import { generateDailyNews, generateNewsImage, generateNewsQuiz, formatPhotoCaption, formatNewsText, formatNewsCaption } from "./news";
 
 function getAppBaseUrl(): string {
   if (process.env.APP_URL) {
@@ -461,6 +461,40 @@ export async function sendTelegramPhotoBuffer(
   return result;
 }
 
+export async function sendTelegramQuiz(
+  chatId: string,
+  question: string,
+  options: [string, string, string, string],
+  correctOptionId: 0 | 1 | 2 | 3,
+  explanation: string
+) {
+  if (!BOT_TOKEN) throw new Error("TELEGRAM_BOT_TOKEN not set");
+
+  const response = await fetch(
+    `https://api.telegram.org/bot${BOT_TOKEN}/sendPoll`,
+    {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        chat_id: chatId,
+        question,
+        options,
+        type: "quiz",
+        correct_option_id: correctOptionId,
+        explanation: explanation || undefined,
+        is_anonymous: true,
+        open_period: 300,
+      }),
+    }
+  );
+  const result = await response.json();
+  if (!result.ok) {
+    console.error("Telegram sendPoll error:", result);
+    throw new Error(result.description || "Telegram sendPoll error");
+  }
+  return result;
+}
+
 export async function sendDailyNewsToChannel(channelId: string): Promise<void> {
   console.log(`Generating daily news for ${channelId}...`);
 
@@ -477,7 +511,7 @@ export async function sendDailyNewsToChannel(channelId: string): Promise<void> {
     console.warn(`Caption too long (${caption.length}), Telegram may truncate`);
   }
 
-  // Try image — everything in one post (image + caption)
+  // 1. Send news post (image + caption, or text fallback)
   try {
     const img = await generateNewsImage(news.imagePrompt);
     if (img) {
@@ -487,16 +521,36 @@ export async function sendDailyNewsToChannel(channelId: string): Promise<void> {
         await sendTelegramPhotoUrl(channelId, img.data, caption);
       }
       console.log(`✓ News photo+caption sent to ${channelId}`);
-      return;
+    } else {
+      console.warn("No image returned, sending text only");
+      await sendTelegramMessage(channelId, caption, "HTML");
+      console.log(`✓ News text-only sent to ${channelId}`);
     }
-    console.warn("No image returned, sending text only");
   } catch (imgErr: any) {
     console.warn("Image send failed, falling back to text:", imgErr?.message || imgErr);
+    await sendTelegramMessage(channelId, caption, "HTML");
+    console.log(`✓ News text-only (fallback) sent to ${channelId}`);
   }
 
-  // Fallback: text-only message
-  await sendTelegramMessage(channelId, caption, "HTML");
-  console.log(`✓ News text-only sent to ${channelId}`);
+  // 2. Generate and send quiz (2s delay after post)
+  try {
+    await new Promise((r) => setTimeout(r, 2000));
+    const quiz = await generateNewsQuiz(news);
+    if (quiz) {
+      await sendTelegramQuiz(
+        channelId,
+        `🧠 ${quiz.question}`,
+        quiz.options,
+        quiz.correctIndex,
+        quiz.explanation
+      );
+      console.log(`✓ Quiz sent to ${channelId}`);
+    } else {
+      console.warn("Quiz generation failed, skipping");
+    }
+  } catch (quizErr: any) {
+    console.warn("Quiz send failed (non-fatal):", quizErr?.message || quizErr);
+  }
 }
 
 export async function startDailyNewsScheduler() {

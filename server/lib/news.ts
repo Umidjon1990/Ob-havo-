@@ -259,6 +259,73 @@ ${news.arabicText}
 ${vocabLines}`;
 }
 
+// ─── Quiz Generation ──────────────────────────────────────────────────────────
+
+export interface NewsQuiz {
+  question: string;
+  options: [string, string, string, string];
+  correctIndex: 0 | 1 | 2 | 3;
+  explanation: string;
+}
+
+export async function generateNewsQuiz(news: DailyNews): Promise<NewsQuiz | null> {
+  const prompt = `Siz arabcha til o'qituvchisisiz. Quyidagi yangilik asosida Telegram quiz yarating.
+
+Yangilik mavzusi: ${news.topic} (${news.topicUz})
+Arabcha matn: ${news.arabicText}
+O'zbekcha tarjima: ${news.uzbekText}
+
+Quiz talablari:
+- Savol o'zbek tilida bo'lsin
+- 4 ta javob varianti: bittasi to'g'ri, uchtasi chalg'ituvchi lekin mantiqiy
+- Savol OSON bo'lmasin — mazmunni tushunishni, aracha so'zlarni bilishni yoki muhim faktni sinasin
+- Javoblar qisqa (max 100 belgi har bir variant)
+- Explanation (izohlash) — nima uchun bu javob to'g'ri, qisqacha
+
+Faqat JSON qaytaring:
+{
+  "question": "Savol matni o'zbek tilida?",
+  "options": ["Variant A", "Variant B", "Variant C", "Variant D"],
+  "correctIndex": 0,
+  "explanation": "Nima uchun bu to'g'ri javob (qisqacha)"
+}`;
+
+  const models = ["gpt-5", "gpt-4o", "gpt-4-turbo"];
+  for (const model of models) {
+    try {
+      const response = await openai.chat.completions.create({
+        model,
+        messages: [{ role: "user", content: prompt }],
+        max_completion_tokens: 500,
+      });
+      const content = response.choices[0]?.message?.content || "";
+      if (!content) continue;
+      const jsonMatch = content.match(/\{[\s\S]*\}/);
+      if (jsonMatch) {
+        const parsed = JSON.parse(jsonMatch[0]);
+        if (
+          parsed.question &&
+          Array.isArray(parsed.options) &&
+          parsed.options.length === 4 &&
+          typeof parsed.correctIndex === "number"
+        ) {
+          return {
+            question: parsed.question,
+            options: parsed.options as [string, string, string, string],
+            correctIndex: parsed.correctIndex as 0 | 1 | 2 | 3,
+            explanation: parsed.explanation || "",
+          };
+        }
+      }
+      console.warn(`Quiz JSON parse failed for ${model}`);
+    } catch (e: any) {
+      console.warn(`Quiz model ${model} failed:`, e?.message || e);
+    }
+  }
+  console.warn("All quiz models failed");
+  return null;
+}
+
 // Backwards-compatible aliases
 export function formatPhotoCaption(news: DailyNews): string {
   return formatSingleCaption(news);
