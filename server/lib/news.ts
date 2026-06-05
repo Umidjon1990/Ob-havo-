@@ -24,7 +24,7 @@ const RSS_SOURCES = [
   { url: "https://www.aljazeera.net/rss/health.xml", name: "Al Jazeera Salomatlik" },
 ];
 
-// Keywords that match allowed topic areas (education, medicine, history, culture, science)
+// Allowed topic areas: education, medicine, history, culture, science, environment
 const ALLOWED_KEYWORDS = [
   "علم", "تعليم", "صحة", "طب", "دواء", "تاريخ", "ثقافة", "حضارة", "اكتشاف",
   "بحث", "دراسة", "فضاء", "طبيعة", "بيئة", "تكنولوجيا", "ذكاء", "نبات", "حيوان",
@@ -32,7 +32,25 @@ const ALLOWED_KEYWORDS = [
   "كيمياء", "أحياء", "هندسة", "كمبيوتر", "فلك", "جغرافيا", "اقتصاد",
 ];
 
+// Blocked: political and religious topics
+const BLOCKED_KEYWORDS = [
+  // Political
+  "سياس", "حكوم", "رئيس", "وزير", "برلمان", "انتخاب", "حزب", "ثور", "حرب",
+  "عسكر", "جيش", "قوات", "هجوم", "اعتداء", "صراع", "أزمة", "احتجاج",
+  "معارض", "ديمقراط", "جمهور", "ترامب", "بايدن", "بوتين", "نتنياهو",
+  "trump", "biden", "putin", "election", "president", "minister", "war", "military",
+  "زواج ترامب", "باغام", "ترامب", "حفل زفاف",
+  // Religious (to avoid sectarian or sensitive content)
+  "فتوى", "طائفة", "شيعة", "سنة", "صهيون", "إسرائيل", "فلسطين", "جهاد",
+];
+
+function isBlockedTopic(title: string, desc: string): boolean {
+  const text = (title + " " + desc).toLowerCase();
+  return BLOCKED_KEYWORDS.some(kw => text.toLowerCase().includes(kw.toLowerCase()));
+}
+
 function isAllowedTopic(title: string, desc: string): boolean {
+  if (isBlockedTopic(title, desc)) return false;
   const text = (title + " " + desc).toLowerCase();
   return ALLOWED_KEYWORDS.some(kw => text.includes(kw));
 }
@@ -123,6 +141,7 @@ ${contextLine}
    - الطول: 50-70 كلمة تحديداً (مهم جداً — لا أقل ولا أكثر)
    - الأسلوب: أكاديمي وواضح ومناسب لتعليم اللغة العربية
    - الموضوع يجب أن يكون في مجال: التعليم أو الطب أو التاريخ أو الثقافة أو العلوم أو البيئة
+   - ⚠️ ممنوع تماماً: أي محتوى سياسي (سياسيون، حكومات، انتخابات، حروب) أو ديني (فتاوى، طوائف، نزاعات دينية)
 2. اكتب ترجمة موجزة (جملتان فقط) إلى الأوزبكية
 3. اختر 10 مفردات مهمة من النص مع معناها بالأوزبكية (بحركات كاملة)
 4. أعطِ وصفاً بالإنجليزية لصورة تعبر عن الموضوع (بدون نص في الصورة)
