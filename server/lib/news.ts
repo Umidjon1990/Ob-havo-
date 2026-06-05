@@ -19,10 +19,23 @@ interface RssItem {
 }
 
 const RSS_SOURCES = [
-  { url: "https://www.aljazeera.net/rss/tech.xml", name: "Al Jazeera" },
+  { url: "https://www.aljazeera.net/rss/science.xml", name: "Al Jazeera" },
   { url: "https://feeds.bbci.co.uk/arabic/science_and_technology/rss.xml", name: "BBC Arabic" },
-  { url: "https://arabic.rt.com/rss/", name: "RT Arabic" },
+  { url: "https://www.aljazeera.net/rss/health.xml", name: "Al Jazeera Salomatlik" },
 ];
+
+// Keywords that match allowed topic areas (education, medicine, history, culture, science)
+const ALLOWED_KEYWORDS = [
+  "علم", "تعليم", "صحة", "طب", "دواء", "تاريخ", "ثقافة", "حضارة", "اكتشاف",
+  "بحث", "دراسة", "فضاء", "طبيعة", "بيئة", "تكنولوجيا", "ذكاء", "نبات", "حيوان",
+  "جامعة", "مدرسة", "علاج", "مرض", "لغة", "أثر", "تراث", "رياضيات", "فيزياء",
+  "كيمياء", "أحياء", "هندسة", "كمبيوتر", "فلك", "جغرافيا", "اقتصاد",
+];
+
+function isAllowedTopic(title: string, desc: string): boolean {
+  const text = (title + " " + desc).toLowerCase();
+  return ALLOWED_KEYWORDS.some(kw => text.includes(kw));
+}
 
 function extractRssItems(xml: string, sourceName: string): RssItem[] {
   const items: RssItem[] = [];
@@ -41,7 +54,6 @@ function extractRssItems(xml: string, sourceName: string): RssItem[] {
 }
 
 async function fetchRealNewsHeadline(): Promise<RssItem | null> {
-  // Shuffle sources for variety
   const shuffled = [...RSS_SOURCES].sort(() => Math.random() - 0.5);
 
   for (const src of shuffled) {
@@ -53,9 +65,13 @@ async function fetchRealNewsHeadline(): Promise<RssItem | null> {
       if (!res.ok) continue;
       const xml = await res.text();
       const items = extractRssItems(xml, src.name);
-      if (items.length > 0) {
-        // Pick a random item from the first 10
-        const pick = items[Math.floor(Math.random() * Math.min(10, items.length))];
+
+      // Filter to allowed topic areas only
+      const filtered = items.filter(it => isAllowedTopic(it.title, it.description));
+      const pool = filtered.length > 0 ? filtered : items;
+
+      if (pool.length > 0) {
+        const pick = pool[Math.floor(Math.random() * Math.min(10, pool.length))];
         console.log(`✓ RSS: "${pick.title.slice(0, 60)}..." from ${src.name}`);
         return pick;
       }
@@ -78,18 +94,24 @@ export async function generateDailyNews(): Promise<DailyNews | null> {
     contextLine = `الخبر الأصلي: "${rss.title}"\nالتفاصيل: "${rss.description}"`;
     sourceName = rss.source;
   } else {
-    // Fallback: random topic if RSS fails
+    // Fallback: educational / medical / historical topics
     const topics = [
-      { ar: "الذَّكَاء الاصْطِنَاعِي", uz: "Sun'iy intellekt" },
-      { ar: "الفَضَاء وَالنُّجُوم", uz: "Kosmosva yulduzlar" },
-      { ar: "الطَّاقَة المُتَجَدِّدَة", uz: "Qayta tiklanadigan energiya" },
-      { ar: "الرُّوبُوتَات", uz: "Robotlar" },
-      { ar: "الطِّب الحَدِيث", uz: "Zamonaviy tibbiyot" },
-      { ar: "الهَنْدَسَة الوِرَاثِيَّة", uz: "Genetik muhandislik" },
+      { ar: "التَّعْلِيم وَطُرُق التَّدْرِيس الحَدِيثَة", uz: "Zamonaviy ta'lim usullari" },
+      { ar: "الطِّب وَالصِّحَّة الإِنْسَانِيَّة", uz: "Tibbiyot va inson salomatligi" },
+      { ar: "تَارِيخ الحَضَارَة الإِسْلَامِيَّة", uz: "Islom sivilizatsiyasi tarixi" },
+      { ar: "الاكْتِشَافَات العِلْمِيَّة فِي عِلْم الأَحْيَاء", uz: "Biologiyadagi kashfiyotlar" },
+      { ar: "الفَلَك وَاسْتِكْشَاف الفَضَاء", uz: "Astronomiya va kosmosni o'rganish" },
+      { ar: "تَارِيخ اللُّغَة العَرَبِيَّة وَتَطَوُّرُهَا", uz: "Arab tili tarixi va rivojlanishi" },
+      { ar: "الطَّاقَة المُتَجَدِّدَة وَالبِيئَة", uz: "Qayta tiklanadigan energiya va atrof-muhit" },
+      { ar: "عِلْم النَّفْس وَالسُّلُوك البَشَرِي", uz: "Psixologiya va inson xulq-atvori" },
+      { ar: "التَّغَذِيَة وَالصِّحَّة العَامَّة", uz: "Ovqatlanish va umumiy salomatlik" },
+      { ar: "الرِّيَاضِيَّات وَتَطْبِيقَاتُهَا الحَدِيثَة", uz: "Matematika va uning zamonaviy qo'llanilishi" },
+      { ar: "تَارِيخ الطِّب عِنْدَ العَرَب", uz: "Arablarda tibbiyot tarixi" },
+      { ar: "عِلْم الوِرَاثَة وَالجِينَات", uz: "Genetika va irsiyat ilmi" },
     ];
     const t = topics[Math.floor(Math.random() * topics.length)];
     contextLine = `الموضوع: ${t.ar}`;
-    sourceName = "Texnologiya yangiliklari";
+    sourceName = "Ta'lim va fan";
   }
 
   const prompt = `أنت صحفي وأستاذ لغة عربية. لديك الخبر التالي:
@@ -98,8 +120,9 @@ ${contextLine}
 
 المطلوب منك:
 1. أعِد صياغة هذا الخبر بالعربية الفصحى مع الحركات الكاملة (التشكيل) على كل كلمة.
-   - الطول: 30-40 كلمة فقط (مهم جداً — اجعله قصيراً ومركزاً)
+   - الطول: 50-70 كلمة تحديداً (مهم جداً — لا أقل ولا أكثر)
    - الأسلوب: أكاديمي وواضح ومناسب لتعليم اللغة العربية
+   - الموضوع يجب أن يكون في مجال: التعليم أو الطب أو التاريخ أو الثقافة أو العلوم أو البيئة
 2. اكتب ترجمة موجزة (جملتان فقط) إلى الأوزبكية
 3. اختر 10 مفردات مهمة من النص مع معناها بالأوزبكية (بحركات كاملة)
 4. أعطِ وصفاً بالإنجليزية لصورة تعبر عن الموضوع (بدون نص في الصورة)
