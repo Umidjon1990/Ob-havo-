@@ -32,16 +32,19 @@ const ALLOWED_KEYWORDS = [
   "كيمياء", "أحياء", "هندسة", "كمبيوتر", "فلك", "جغرافيا", "اقتصاد",
 ];
 
-// Blocked: political and religious topics
+// Blocked: political, religious, sports scandal topics
 const BLOCKED_KEYWORDS = [
   // Political
   "سياس", "حكوم", "رئيس", "وزير", "برلمان", "انتخاب", "حزب", "ثور", "حرب",
   "عسكر", "جيش", "قوات", "هجوم", "اعتداء", "صراع", "أزمة", "احتجاج",
   "معارض", "ديمقراط", "جمهور", "ترامب", "بايدن", "بوتين", "نتنياهو",
   "trump", "biden", "putin", "election", "president", "minister", "war", "military",
-  "زواج ترامب", "باغام", "ترامب", "حفل زفاف",
-  // Religious (to avoid sectarian or sensitive content)
+  // Religious / sectarian
   "فتوى", "طائفة", "شيعة", "سنة", "صهيون", "إسرائيل", "فلسطين", "جهاد",
+  "شيخ", "إمام", "تلاوة", "قرآن", "مسجد", "كنيسة",
+  // Sports
+  "كأس", "مباراة", "ملعب", "فضيحة", "هدف", "لاعب", "نادي", "تصفيات",
+  "كرة", "بطولة", "مونديال", "دوري", "فيفا",
 ];
 
 function isBlockedTopic(title: string, desc: string): boolean {
@@ -281,15 +284,13 @@ function getDateString() {
   return `${day} ${monthsAr[t.getUTCMonth()]} ${year} | ${day} ${monthsUz[t.getUTCMonth()]} ${year}`;
 }
 
-// Single all-in-one caption (fits within Telegram's 1024 char photo limit)
+const CAPTION_LIMIT = 1020;
+
+// Single all-in-one caption — trims vocab items to stay within Telegram's 1024 char limit
 export function formatSingleCaption(news: DailyNews): string {
   const date = getDateString();
-  const vocabLines = news.vocabulary
-    .slice(0, 10)
-    .map((v, i) => `${i + 1}. ${v.arabic} — ${v.uzbek}`)
-    .join("\n");
 
-  return `📰 <b>أَخْبَار التِّقْنِيَّة وَالْعِلْم</b>
+  const header = `📰 <b>أَخْبَار التِّقْنِيَّة وَالْعِلْم</b>
 📅 ${date}
 🏷 <b>${news.topicUz}</b> | ${news.topic}
 
@@ -297,8 +298,18 @@ ${news.arabicText}
 
 🇺🇿 ${news.uzbekText}
 
-📖 <b>Foydali so'zlar:</b>
-${vocabLines}`;
+📖 <b>Foydali so'zlar:</b>`;
+
+  // Add vocab items one by one until limit is hit
+  let caption = header;
+  for (let i = 0; i < Math.min(10, news.vocabulary.length); i++) {
+    const v = news.vocabulary[i];
+    const line = `\n${i + 1}. ${v.arabic} — ${v.uzbek}`;
+    if (caption.length + line.length > CAPTION_LIMIT) break;
+    caption += line;
+  }
+
+  return caption;
 }
 
 // ─── Quiz Generation ──────────────────────────────────────────────────────────
@@ -345,18 +356,22 @@ Faqat JSON qaytaring:
       if (!content) continue;
       const jsonMatch = content.match(/\{[\s\S]*\}/);
       if (jsonMatch) {
-        const parsed = JSON.parse(jsonMatch[0]);
+        // Sanitize control characters that break JSON.parse
+        const sanitized = jsonMatch[0].replace(/[\x00-\x08\x0b\x0c\x0e-\x1f]/g, " ");
+        const parsed = JSON.parse(sanitized);
         if (
           parsed.question &&
           Array.isArray(parsed.options) &&
           parsed.options.length === 4 &&
-          typeof parsed.correctIndex === "number"
+          parsed.options.every((o: unknown) => typeof o === "string" && o.trim()) &&
+          typeof parsed.correctIndex === "number" &&
+          parsed.correctIndex >= 0 && parsed.correctIndex <= 3
         ) {
           return {
-            question: parsed.question,
-            options: parsed.options as [string, string, string, string],
+            question: parsed.question.trim(),
+            options: parsed.options.map((o: string) => o.trim().slice(0, 100)) as [string, string, string, string],
             correctIndex: parsed.correctIndex as 0 | 1 | 2 | 3,
-            explanation: parsed.explanation || "",
+            explanation: (parsed.explanation || "").trim().slice(0, 200),
           };
         }
       }
