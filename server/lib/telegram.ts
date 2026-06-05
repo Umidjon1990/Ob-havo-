@@ -489,8 +489,7 @@ export async function sendTelegramQuiz(
         type: "quiz",
         correct_option_id: correctOptionId,
         explanation: explanation || undefined,
-        is_anonymous: false,
-        open_period: 300,
+        is_anonymous: true,
       }),
     }
   );
