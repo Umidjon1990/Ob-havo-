@@ -470,6 +470,13 @@ export async function sendTelegramQuiz(
 ) {
   if (!BOT_TOKEN) throw new Error("TELEGRAM_BOT_TOKEN not set");
 
+  // Runtime guard — reject malformed payloads before hitting Telegram API
+  if (!question || question.trim().length < 3) throw new Error("Quiz question too short");
+  if (!Array.isArray(options) || options.length !== 4 || options.some(o => !o || typeof o !== "string"))
+    throw new Error("Quiz options must be exactly 4 non-empty strings");
+  if (correctOptionId < 0 || correctOptionId > 3 || !Number.isInteger(correctOptionId))
+    throw new Error(`Invalid correctOptionId: ${correctOptionId}`);
+
   const response = await fetch(
     `https://api.telegram.org/bot${BOT_TOKEN}/sendPoll`,
     {
@@ -482,7 +489,7 @@ export async function sendTelegramQuiz(
         type: "quiz",
         correct_option_id: correctOptionId,
         explanation: explanation || undefined,
-        is_anonymous: true,
+        is_anonymous: false,
         open_period: 300,
       }),
     }
