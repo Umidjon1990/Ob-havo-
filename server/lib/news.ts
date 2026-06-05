@@ -318,15 +318,16 @@ Arabcha matn: ${news.arabicText}
 O'zbekcha tarjima: ${news.uzbekText}
 
 Quiz talablari:
-- Savol o'zbek tilida bo'lsin
+- Savol IKKI TILDA bo'lsin: avval arabcha (harakatlar bilan), keyin o'zbekcha
+  Format: "❓ [arabcha savol]\n🇺🇿 [o'zbekcha savol]"
 - 4 ta javob varianti: bittasi to'g'ri, uchtasi chalg'ituvchi lekin mantiqiy
-- Savol OSON bo'lmasin — mazmunni tushunishni, aracha so'zlarni bilishni yoki muhim faktni sinasin
-- Javoblar qisqa (max 100 belgi har bir variant)
-- Explanation (izohlash) — nima uchun bu javob to'g'ri, qisqacha
+- Javoblar o'zbek tilida, qisqa (max 80 belgi)
+- Savol OSON bo'lmasin — mazmunni tushunishni yoki arabcha so'zlarni bilishni sinasin
+- Explanation (izohlash) o'zbek tilida, qisqacha
 
 Faqat JSON qaytaring:
 {
-  "question": "Savol matni o'zbek tilida?",
+  "question": "❓ هَلْ تَعْرِفُ...؟\n🇺🇿 Savol o'zbekcha?",
   "options": ["Variant A", "Variant B", "Variant C", "Variant D"],
   "correctIndex": 0,
   "explanation": "Nima uchun bu to'g'ri javob (qisqacha)"
