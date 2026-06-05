@@ -471,42 +471,32 @@ export async function sendDailyNewsToChannel(channelId: string): Promise<void> {
     );
   }
 
-  // Photo caption is short (≤1024 chars) — Telegram limit for captions
-  const photoCaption = formatPhotoCaption(news);
-  // Full text sent as a separate message
-  const textBody = formatNewsText(news);
+  const caption = formatNewsCaption(news);
+  console.log(`News generated. Caption: ${caption.length} chars`);
+  if (caption.length > 1024) {
+    console.warn(`Caption too long (${caption.length}), Telegram may truncate`);
+  }
 
-  console.log(`News generated. Photo caption: ${photoCaption.length} chars`);
-
-  // 1. Try to send with image
-  let imageSent = false;
+  // Try image — everything in one post (image + caption)
   try {
     const img = await generateNewsImage(news.imagePrompt);
     if (img) {
       if (img.type === "buffer") {
-        await sendTelegramPhotoBuffer(channelId, img.data, photoCaption);
+        await sendTelegramPhotoBuffer(channelId, img.data, caption);
       } else {
-        await sendTelegramPhotoUrl(channelId, img.data, photoCaption);
+        await sendTelegramPhotoUrl(channelId, img.data, caption);
       }
-      console.log(`✓ News photo sent to ${channelId} (${img.type})`);
-      imageSent = true;
-    } else {
-      console.warn("No image returned, will send text only");
+      console.log(`✓ News photo+caption sent to ${channelId}`);
+      return;
     }
+    console.warn("No image returned, sending text only");
   } catch (imgErr: any) {
-    console.warn("Image send failed:", imgErr?.message || imgErr);
+    console.warn("Image send failed, falling back to text:", imgErr?.message || imgErr);
   }
 
-  // 2. If image sent — follow up with the full text body
-  if (imageSent) {
-    await sendTelegramMessage(channelId, textBody, "HTML");
-    console.log(`✓ News text body sent to ${channelId}`);
-  } else {
-    // Fallback: send everything as one text message
-    const fullText = formatNewsCaption(news);
-    await sendTelegramMessage(channelId, fullText, "HTML");
-    console.log(`✓ News text-only sent to ${channelId}`);
-  }
+  // Fallback: text-only message
+  await sendTelegramMessage(channelId, caption, "HTML");
+  console.log(`✓ News text-only sent to ${channelId}`);
 }
 
 export async function startDailyNewsScheduler() {

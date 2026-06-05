@@ -7,43 +7,110 @@ export interface DailyNews {
   uzbekText: string;
   vocabulary: Array<{ arabic: string; uzbek: string }>;
   imagePrompt: string;
+  source: string;
 }
 
+// ─── RSS Fetch ────────────────────────────────────────────────────────────────
+
+interface RssItem {
+  title: string;
+  description: string;
+  source: string;
+}
+
+const RSS_SOURCES = [
+  { url: "https://www.aljazeera.net/rss/tech.xml", name: "Al Jazeera" },
+  { url: "https://feeds.bbci.co.uk/arabic/science_and_technology/rss.xml", name: "BBC Arabic" },
+  { url: "https://arabic.rt.com/rss/", name: "RT Arabic" },
+];
+
+function extractRssItems(xml: string, sourceName: string): RssItem[] {
+  const items: RssItem[] = [];
+  const itemMatches = xml.matchAll(/<item[^>]*>([\s\S]*?)<\/item>/gi);
+  for (const match of itemMatches) {
+    const block = match[1];
+    const titleMatch = block.match(/<title[^>]*>(?:<!\[CDATA\[)?([\s\S]*?)(?:\]\]>)?<\/title>/i);
+    const descMatch = block.match(/<description[^>]*>(?:<!\[CDATA\[)?([\s\S]*?)(?:\]\]>)?<\/description>/i);
+    const title = titleMatch?.[1]?.replace(/<[^>]+>/g, "").trim() || "";
+    const desc = descMatch?.[1]?.replace(/<[^>]+>/g, "").trim() || "";
+    if (title && title.length > 10) {
+      items.push({ title, description: desc.slice(0, 200), source: sourceName });
+    }
+  }
+  return items;
+}
+
+async function fetchRealNewsHeadline(): Promise<RssItem | null> {
+  // Shuffle sources for variety
+  const shuffled = [...RSS_SOURCES].sort(() => Math.random() - 0.5);
+
+  for (const src of shuffled) {
+    try {
+      const res = await fetch(src.url, {
+        headers: { "User-Agent": "Mozilla/5.0 (compatible; NewsBot/1.0)" },
+        signal: AbortSignal.timeout(6000),
+      });
+      if (!res.ok) continue;
+      const xml = await res.text();
+      const items = extractRssItems(xml, src.name);
+      if (items.length > 0) {
+        // Pick a random item from the first 10
+        const pick = items[Math.floor(Math.random() * Math.min(10, items.length))];
+        console.log(`✓ RSS: "${pick.title.slice(0, 60)}..." from ${src.name}`);
+        return pick;
+      }
+    } catch (e: any) {
+      console.warn(`RSS ${src.name} failed:`, e?.message || e);
+    }
+  }
+  return null;
+}
+
+// ─── News Generation ──────────────────────────────────────────────────────────
+
 export async function generateDailyNews(): Promise<DailyNews | null> {
-  const topics = [
-    { ar: "الذَّكَاء الاصْطِنَاعِي", uz: "Sun'iy intellekt" },
-    { ar: "الفَضَاء وَالنُّجُوم", uz: "Kosmosva yulduzlar" },
-    { ar: "الطَّاقَة المُتَجَدِّدَة", uz: "Qayta tiklanadigan energiya" },
-    { ar: "الرُّوبُوتَات", uz: "Robotlar" },
-    { ar: "الطِّب الحَدِيث", uz: "Zamonaviy tibbiyot" },
-    { ar: "عِلْم الأَحْيَاء", uz: "Biologiya" },
-    { ar: "تَقْنِيَة المَعْلُومَات", uz: "Axborot texnologiyalari" },
-    { ar: "عِلْم الفِيزْيَاء", uz: "Fizika fani" },
-    { ar: "اكْتِشَافَات عِلْمِيَّة حَدِيثَة", uz: "Yangi ilmiy kashfiyotlar" },
-    { ar: "تَطَوُّر الإِنْتَرْنِت", uz: "Internetning rivojlanishi" },
-    { ar: "الهَنْدَسَة الوِرَاثِيَّة", uz: "Genetik muhandislik" },
-    { ar: "الحَوْسَبَة الكَمِّيَّة", uz: "Kvant hisoblash" },
-  ];
-  const chosen = topics[Math.floor(Math.random() * topics.length)];
+  const rss = await fetchRealNewsHeadline();
 
-  const prompt = `أنت صحفي وأستاذ لغة عربية متخصص في أخبار التقنية والعلوم.
+  let contextLine = "";
+  let sourceName = "Texnologiya yangiliklari";
 
-اكتب خبراً يومياً تعليمياً بالعربية الفصحى مع الحركات الكاملة (التشكيل) عن موضوع: ${chosen.ar}.
+  if (rss) {
+    contextLine = `الخبر الأصلي: "${rss.title}"\nالتفاصيل: "${rss.description}"`;
+    sourceName = rss.source;
+  } else {
+    // Fallback: random topic if RSS fails
+    const topics = [
+      { ar: "الذَّكَاء الاصْطِنَاعِي", uz: "Sun'iy intellekt" },
+      { ar: "الفَضَاء وَالنُّجُوم", uz: "Kosmosva yulduzlar" },
+      { ar: "الطَّاقَة المُتَجَدِّدَة", uz: "Qayta tiklanadigan energiya" },
+      { ar: "الرُّوبُوتَات", uz: "Robotlar" },
+      { ar: "الطِّب الحَدِيث", uz: "Zamonaviy tibbiyot" },
+      { ar: "الهَنْدَسَة الوِرَاثِيَّة", uz: "Genetik muhandislik" },
+    ];
+    const t = topics[Math.floor(Math.random() * topics.length)];
+    contextLine = `الموضوع: ${t.ar}`;
+    sourceName = "Texnologiya yangiliklari";
+  }
 
-المتطلبات الصارمة:
-- اللغة: عربية فصحى مع الحركات الكاملة على كل كلمة
-- الطول: 50-70 كلمة تحديداً
-- الأسلوب: أكاديمي وواضح ومناسب لتعليم اللغة العربية
+  const prompt = `أنت صحفي وأستاذ لغة عربية. لديك الخبر التالي:
 
-ثم أضف:
-1. ترجمة كاملة دقيقة إلى الأوزبكية
-2. 10 مفردات مفيدة من نص الخبر مع ترجمتها إلى الأوزبكية (بحركات كاملة)
-3. وصف تفصيلي بالإنجليزية لصورة جميلة تعبر عن الموضوع (بدون نصوص أو كتابة في الصورة)
+${contextLine}
 
-أجب بتنسيق JSON فقط بدون أي نص إضافي:
+المطلوب منك:
+1. أعِد صياغة هذا الخبر بالعربية الفصحى مع الحركات الكاملة (التشكيل) على كل كلمة.
+   - الطول: 30-40 كلمة فقط (مهم جداً — اجعله قصيراً ومركزاً)
+   - الأسلوب: أكاديمي وواضح ومناسب لتعليم اللغة العربية
+2. اكتب ترجمة موجزة (جملتان فقط) إلى الأوزبكية
+3. اختر 10 مفردات مهمة من النص مع معناها بالأوزبكية (بحركات كاملة)
+4. أعطِ وصفاً بالإنجليزية لصورة تعبر عن الموضوع (بدون نص في الصورة)
+5. حدد موضوع الخبر باختصار بالعربية والأوزبكية
+
+أجب بـ JSON فقط:
 {
-  "arabicText": "النص العربي مع الحركات هنا",
-  "uzbekText": "O'zbekcha to'liq tarjima",
+  "topic": "موضوع قصير بالعربية",
+  "topicUz": "Mavzu o'zbekcha",
+  "arabicText": "النص العربي القصير مع الحركات",
+  "uzbekText": "Ikki jumladan iborat o'zbekcha tarjima.",
   "vocabulary": [
     {"arabic": "كَلِمَة", "uzbek": "ma'no"},
     {"arabic": "كَلِمَة", "uzbek": "ma'no"},
@@ -56,7 +123,7 @@ export async function generateDailyNews(): Promise<DailyNews | null> {
     {"arabic": "كَلِمَة", "uzbek": "ma'no"},
     {"arabic": "كَلِمَة", "uzbek": "ma'no"}
   ],
-  "imagePrompt": "Detailed vivid English description for AI image generation, no text in image"
+  "imagePrompt": "Vivid description for image generation, no text"
 }`;
 
   const models = ["gpt-5", "gpt-4o", "gpt-4-turbo"];
@@ -67,14 +134,12 @@ export async function generateDailyNews(): Promise<DailyNews | null> {
       const response = await openai.chat.completions.create({
         model,
         messages: [{ role: "user", content: prompt }],
-        max_completion_tokens: 1500,
+        max_completion_tokens: 1200,
       });
 
       const content = response.choices[0]?.message?.content || "";
-      console.log(`Model ${model} response: ${content.length} chars`);
-
       if (!content) {
-        console.warn(`Model ${model} returned empty content, trying next...`);
+        console.warn(`Model ${model} empty content`);
         continue;
       }
 
@@ -82,23 +147,26 @@ export async function generateDailyNews(): Promise<DailyNews | null> {
       if (jsonMatch) {
         const parsed = JSON.parse(jsonMatch[0]);
         return {
-          topic: chosen.ar,
-          topicUz: chosen.uz,
-          arabicText: parsed.arabicText,
-          uzbekText: parsed.uzbekText,
+          topic: parsed.topic || "",
+          topicUz: parsed.topicUz || "",
+          arabicText: parsed.arabicText || "",
+          uzbekText: parsed.uzbekText || "",
           vocabulary: parsed.vocabulary || [],
-          imagePrompt: parsed.imagePrompt,
+          imagePrompt: parsed.imagePrompt || "",
+          source: sourceName,
         } as DailyNews;
       }
-      console.warn(`Could not parse JSON from ${model}. Raw:`, content.slice(0, 200));
-    } catch (error: any) {
-      console.warn(`Model ${model} failed:`, error?.message || error);
+      console.warn(`Could not parse JSON from ${model}`);
+    } catch (e: any) {
+      console.warn(`Model ${model} failed:`, e?.message || e);
     }
   }
 
-  console.error("All text models failed to generate news");
+  console.error("All text models failed");
   return null;
 }
+
+// ─── Image Generation ─────────────────────────────────────────────────────────
 
 export type ImageResult =
   | { type: "buffer"; data: Buffer }
@@ -106,13 +174,9 @@ export type ImageResult =
 
 async function downloadImageAsBuffer(url: string): Promise<Buffer | null> {
   try {
-    const res = await fetch(url);
-    if (!res.ok) {
-      console.warn(`Image download failed: ${res.status} ${res.statusText}`);
-      return null;
-    }
-    const arrayBuffer = await res.arrayBuffer();
-    return Buffer.from(arrayBuffer);
+    const res = await fetch(url, { signal: AbortSignal.timeout(15000) });
+    if (!res.ok) return null;
+    return Buffer.from(await res.arrayBuffer());
   } catch (e: any) {
     console.warn("Image download error:", e?.message || e);
     return null;
@@ -120,9 +184,8 @@ async function downloadImageAsBuffer(url: string): Promise<Buffer | null> {
 }
 
 export async function generateNewsImage(prompt: string): Promise<ImageResult | null> {
-  const fullPrompt = `High quality editorial illustration for a science and technology news article about: ${prompt}. Modern, professional, vibrant colors. No text, no letters, no writing anywhere in the image.`;
+  const fullPrompt = `High quality editorial illustration: ${prompt}. Style: modern, professional, vibrant. No text, no letters, no writing anywhere.`;
 
-  // Model list: newest first
   const imageModels = [
     { model: "gpt-image-1", size: "1024x1024" as const },
     { model: "dall-e-3", size: "1024x1024" as const },
@@ -139,30 +202,24 @@ export async function generateNewsImage(prompt: string): Promise<ImageResult | n
         size: cfg.size as any,
       } as any);
 
-      // Try base64 first (gpt-image-1 style)
       const b64 = (response.data?.[0] as any)?.b64_json;
       if (b64) {
         console.log(`✓ Image ready (${cfg.model}, base64)`);
         return { type: "buffer", data: Buffer.from(b64, "base64") };
       }
 
-      // Try URL — download ourselves for reliability
       const url = response.data?.[0]?.url;
       if (url) {
-        console.log(`✓ Image URL from ${cfg.model}, downloading...`);
+        console.log(`✓ Downloading image from ${cfg.model}...`);
         const buf = await downloadImageAsBuffer(url);
         if (buf) {
           console.log(`✓ Image downloaded (${buf.length} bytes)`);
           return { type: "buffer", data: buf };
         }
-        // If download fails, still try URL directly
-        console.warn(`Download failed, trying direct URL for ${cfg.model}`);
         return { type: "url", data: url };
       }
-
-      console.warn(`${cfg.model}: no image data in response`);
     } catch (e: any) {
-      console.warn(`✗ ${cfg.model} failed:`, e?.message || e);
+      console.warn(`✗ ${cfg.model}:`, e?.message || e);
     }
   }
 
@@ -170,55 +227,45 @@ export async function generateNewsImage(prompt: string): Promise<ImageResult | n
   return null;
 }
 
-function getDateStrings() {
+// ─── Caption Formatting ───────────────────────────────────────────────────────
+
+function getDateString() {
   const now = new Date();
-  const uzTime = new Date(now.getTime() + 5 * 60 * 60 * 1000);
-  const day = uzTime.getUTCDate();
-  const year = uzTime.getUTCFullYear();
-  const monthsAr = [
-    "يَنَايِر","فِبْرَايِر","مَارِس","أَبْرِيل","مَايُو","يُونِيُو",
-    "يُولِيُو","أَغُسْطُس","سِبْتَمْبَر","أُكْتُوبَر","نُوفَمْبَر","دِيسَمْبَر",
-  ];
-  const monthsUz = [
-    "Yanvar","Fevral","Mart","Aprel","May","Iyun",
-    "Iyul","Avgust","Sentabr","Oktabr","Noyabr","Dekabr",
-  ];
-  return {
-    ar: `${day} ${monthsAr[uzTime.getUTCMonth()]} ${year}`,
-    uz: `${day} ${monthsUz[uzTime.getUTCMonth()]} ${year}`,
-  };
+  const t = new Date(now.getTime() + 5 * 60 * 60 * 1000);
+  const day = t.getUTCDate();
+  const year = t.getUTCFullYear();
+  const monthsUz = ["Yanvar","Fevral","Mart","Aprel","May","Iyun","Iyul","Avgust","Sentabr","Oktabr","Noyabr","Dekabr"];
+  const monthsAr = ["يَنَايِر","فِبْرَايِر","مَارِس","أَبْرِيل","مَايُو","يُونِيُو","يُولِيُو","أَغُسْطُس","سِبْتَمْبَر","أُكْتُوبَر","نُوفَمْبَر","دِيسَمْبَر"];
+  return `${day} ${monthsAr[t.getUTCMonth()]} ${year} | ${day} ${monthsUz[t.getUTCMonth()]} ${year}`;
 }
 
-// Short caption for photo (max ~900 chars — Telegram limit is 1024)
-export function formatPhotoCaption(news: DailyNews): string {
-  const date = getDateStrings();
-  return `📰 <b>أَخْبَار التِّقْنِيَّة وَالْعِلْم</b>
-📅 ${date.ar} | ${date.uz}
-🏷 <b>Mavzu:</b> ${news.topicUz} | <b>${news.topic}</b>
-
-${news.arabicText}`;
-}
-
-// Full text message with translation + vocabulary
-export function formatNewsText(news: DailyNews): string {
+// Single all-in-one caption (fits within Telegram's 1024 char photo limit)
+export function formatSingleCaption(news: DailyNews): string {
+  const date = getDateString();
   const vocabLines = news.vocabulary
     .slice(0, 10)
-    .map((v, i) => `${i + 1}. <b>${v.arabic}</b> — ${v.uzbek}`)
+    .map((v, i) => `${i + 1}. ${v.arabic} — ${v.uzbek}`)
     .join("\n");
 
-  return `🇺🇿 <b>O'zbekcha:</b>
-${news.uzbekText}
+  return `📰 <b>أَخْبَار التِّقْنِيَّة وَالْعِلْم</b>
+📅 ${date}
+🏷 <b>${news.topicUz}</b> | ${news.topic}
 
-━━━━━━━━━━━━━━━━━
-📖 <b>Foydali so'zlar (10 ta):</b>
-${vocabLines}
+${news.arabicText}
 
-━━━━━━━━━━━━━━━━━
-📌 <b>Manba:</b> Texnologiya va fan yangiliklari
-🤖 <b>AI:</b> GPT-4o | 🖼 GPT-Image`;
+🇺🇿 ${news.uzbekText}
+
+📖 <b>Foydali so'zlar:</b>
+${vocabLines}`;
 }
 
-// Kept for backwards compatibility (text-only fallback)
+// Backwards-compatible aliases
+export function formatPhotoCaption(news: DailyNews): string {
+  return formatSingleCaption(news);
+}
+export function formatNewsText(_news: DailyNews): string {
+  return "";
+}
 export function formatNewsCaption(news: DailyNews): string {
-  return formatPhotoCaption(news) + "\n\n" + formatNewsText(news);
+  return formatSingleCaption(news);
 }
