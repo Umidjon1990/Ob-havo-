@@ -550,11 +550,20 @@ export async function sendDailyNewsToChannel(channelId: string): Promise<void> {
     await new Promise((r) => setTimeout(r, 2000));
     const quiz = await generateNewsQuiz(news);
     if (quiz) {
+      // Shuffle options so the correct answer isn't always option A
+      const indexed = quiz.options.map((opt, i) => ({ opt, correct: i === quiz.correctIndex }));
+      for (let i = indexed.length - 1; i > 0; i--) {
+        const j = Math.floor(Math.random() * (i + 1));
+        [indexed[i], indexed[j]] = [indexed[j], indexed[i]];
+      }
+      const shuffledOptions = indexed.map(x => x.opt) as [string, string, string, string];
+      const shuffledCorrect = indexed.findIndex(x => x.correct) as 0 | 1 | 2 | 3;
+
       await sendTelegramQuiz(
         channelId,
         `🧠 ${quiz.question}`,
-        quiz.options,
-        quiz.correctIndex,
+        shuffledOptions,
+        shuffledCorrect,
         quiz.explanation
       );
       console.log(`✓ Quiz sent to ${channelId}`);
