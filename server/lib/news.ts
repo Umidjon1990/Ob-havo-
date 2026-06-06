@@ -135,20 +135,20 @@ export async function generateDailyNews(): Promise<DailyNews | null> {
     sourceName = "Ta'lim va fan";
   }
 
-  const prompt = `أنت صحفي وأستاذ لغة عربية. لديك الخبر التالي:
+  const prompt = `أنت أستاذ لغة عربية ومعلم متخصص في تعليم الطلاب. مهمتك كتابة محتوى تعليمي مفيد وممتع.
 
-${contextLine}
+الموضوع المقترح: ${contextLine}
 
 المطلوب منك:
-1. أعِد صياغة هذا الخبر بالعربية الفصحى مع الحركات الكاملة (التشكيل) على كل كلمة.
-   - الطول: 50-70 كلمة تحديداً (مهم جداً — لا أقل ولا أكثر)
-   - الأسلوب: أكاديمي وواضح ومناسب لتعليم اللغة العربية
-   - الموضوع يجب أن يكون في مجال: التعليم أو الطب أو التاريخ أو الثقافة أو العلوم أو البيئة
-   - ⚠️ ممنوع تماماً: أي محتوى سياسي (سياسيون، حكومات، انتخابات، حروب) أو ديني (فتاوى، طوائف، نزاعات دينية)
-2. اكتب ترجمة كاملة ودقيقة إلى الأوزبكية — يجب أن تعكس كل جملة عربية بدقة، لا تختصر ولا تضف معلومات جديدة
+1. اكتب حقيقة علمية أو معلومة مثيرة للاهتمام أو فائدة تعليمية مهمة بالعربية الفصحى مع الحركات الكاملة (التشكيل).
+   - الطول: 50-70 كلمة تحديداً (لا أقل ولا أكثر)
+   - الأسلوب: مشوّق، واضح، مفيد للطلاب — يجعل القارئ يشعر أنه تعلّم شيئاً جديداً ومفيداً
+   - المحتوى: حقائق علمية، فوائد طبية، معلومات تاريخية، اكتشافات، ظواهر طبيعية، نصائح صحية، حقائق عن اللغة
+   - ⚠️ ممنوع: أي محتوى سياسي، ديني طائفي، رياضي، أو أخبار عن أشخاص مشهورين
+2. اكتب ترجمة كاملة ودقيقة إلى الأوزبكية — كل جملة عربية تُترجم بدقة، لا تختصر ولا تضف
 3. اختر 10 مفردات مهمة من النص مع معناها بالأوزبكية (بحركات كاملة)
-4. أعطِ وصفاً بالإنجليزية لصورة تعبر عن الموضوع (بدون نص في الصورة)
-5. حدد موضوع الخبر باختصار بالعربية والأوزبكية
+4. أعطِ وصفاً بالإنجليزية لصورة جميلة تعبر عن الموضوع (بدون نص في الصورة)
+5. حدد الموضوع باختصار بالعربية والأوزبكية
 
 أجب بـ JSON فقط:
 {
@@ -284,32 +284,25 @@ function getDateString() {
   return `${day} ${monthsAr[t.getUTCMonth()]} ${year} | ${day} ${monthsUz[t.getUTCMonth()]} ${year}`;
 }
 
-const CAPTION_LIMIT = 1020;
-
-// Single all-in-one caption — trims vocab items to stay within Telegram's 1024 char limit
+// Photo caption — only Arabic fact + Uzbek translation (vocab sent separately)
 export function formatSingleCaption(news: DailyNews): string {
   const date = getDateString();
-
-  const header = `📰 <b>أَخْبَار التِّقْنِيَّة وَالْعِلْم</b>
+  return `💡 <b>Bilim va Fan</b>
 📅 ${date}
 🏷 <b>${news.topicUz}</b> | ${news.topic}
 
 ${news.arabicText}
 
-🇺🇿 ${news.uzbekText}
+🇺🇿 ${news.uzbekText}`;
+}
 
-📖 <b>Foydali so'zlar:</b>`;
-
-  // Add vocab items one by one until limit is hit
-  let caption = header;
-  for (let i = 0; i < Math.min(10, news.vocabulary.length); i++) {
-    const v = news.vocabulary[i];
-    const line = `\n${i + 1}. ${v.arabic} — ${v.uzbek}`;
-    if (caption.length + line.length > CAPTION_LIMIT) break;
-    caption += line;
-  }
-
-  return caption;
+// Vocabulary — sent as a separate text message after the photo
+export function formatVocabMessage(news: DailyNews): string {
+  const lines = news.vocabulary
+    .slice(0, 10)
+    .map((v, i) => `${i + 1}. ${v.arabic} — ${v.uzbek}`)
+    .join("\n");
+  return `📖 <b>Foydali so'zlar | كَلِمَات مُفِيدَة</b>\n\n${lines}`;
 }
 
 // ─── Quiz Generation ──────────────────────────────────────────────────────────

@@ -1,6 +1,6 @@
 import { storage } from "../storage";
 import { generateWeatherAdvice } from "./openai";
-import { generateDailyNews, generateNewsImage, generateNewsQuiz, formatPhotoCaption, formatNewsText, formatNewsCaption } from "./news";
+import { generateDailyNews, generateNewsImage, generateNewsQuiz, formatPhotoCaption, formatNewsText, formatNewsCaption, formatVocabMessage } from "./news";
 
 function getAppBaseUrl(): string {
   if (process.env.APP_URL) {
@@ -512,12 +512,10 @@ export async function sendDailyNewsToChannel(channelId: string): Promise<void> {
   }
 
   const caption = formatNewsCaption(news);
-  console.log(`News generated. Caption: ${caption.length} chars`);
-  if (caption.length > 1024) {
-    console.warn(`Caption too long (${caption.length}), Telegram may truncate`);
-  }
+  const vocabMsg = formatVocabMessage(news);
+  console.log(`News generated. Caption: ${caption.length} chars, Vocab: ${vocabMsg.length} chars`);
 
-  // 1. Send news post (image + caption, or text fallback)
+  // 1. Send photo + caption (Arabic fact + Uzbek translation only)
   try {
     const img = await generateNewsImage(news.imagePrompt);
     if (img) {
@@ -538,7 +536,16 @@ export async function sendDailyNewsToChannel(channelId: string): Promise<void> {
     console.log(`✓ News text-only (fallback) sent to ${channelId}`);
   }
 
-  // 2. Generate and send quiz (2s delay after post)
+  // 2. Send vocabulary as separate message (1s delay)
+  try {
+    await new Promise((r) => setTimeout(r, 1000));
+    await sendTelegramMessage(channelId, vocabMsg, "HTML");
+    console.log(`✓ Vocab message sent to ${channelId}`);
+  } catch (vocabErr: any) {
+    console.warn("Vocab send failed (non-fatal):", vocabErr?.message || vocabErr);
+  }
+
+  // 3. Generate and send quiz (2s delay after vocab)
   try {
     await new Promise((r) => setTimeout(r, 2000));
     const quiz = await generateNewsQuiz(news);
