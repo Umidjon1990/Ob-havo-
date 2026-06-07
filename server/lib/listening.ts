@@ -403,10 +403,10 @@ ${passage.arabicText}
           )
           .slice(0, 3)
           .map((q) => ({
-            question: q.question.trim(),
-            options: q.options.map((o: string) => o.trim().slice(0, 100)) as [string, string, string, string],
+            question: stripHarakat(q.question.trim()),
+            options: q.options.map((o: string) => stripHarakat(o.trim()).slice(0, 100)) as [string, string, string, string],
             correctIndex: q.correctIndex as 0 | 1 | 2 | 3,
-            explanation: (q.explanation || "").trim().slice(0, 200),
+            explanation: stripHarakat((q.explanation || "").trim()).slice(0, 200),
           }));
         if (valid.length > 0) {
           console.log(`✓ ${valid.length} listening quizzes generated (${model})`);
