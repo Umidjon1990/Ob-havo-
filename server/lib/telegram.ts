@@ -644,8 +644,8 @@ export async function sendDailyListeningToChannel(channelId: string): Promise<vo
   if (quizzes.length < 3) throw new Error(`Could not generate 3 quizzes (got ${quizzes.length})`);
   quizzes = quizzes.slice(0, 3);
 
-  // 3. Generate audio (ElevenLabs) — skip run entirely if unavailable/failed
-  const audioBuffer = await textToSpeechArabic(passage.arabicText);
+  // 3. Generate dialog audio (ElevenLabs — male+female voices) — skip if unavailable
+  const audioBuffer = await textToSpeechArabic(passage);
   if (!audioBuffer) {
     console.warn(`TTS unavailable for ${channelId} — skipping listening run`);
     throw new Error("ElevenLabs TTS unavailable — listening run skipped");
@@ -657,19 +657,20 @@ export async function sendDailyListeningToChannel(channelId: string): Promise<vo
 ${levelLabel}
 🏷 <b>${passage.topicUz}</b> | ${passage.topicAr}
 
-🎵 <i>Audioga quloq soling, so'ng savollarga javob bering!</i>
+👨 أَحْمَد  ·  👩 سَارَة
+🎵 <i>Dialogni diqqat bilan tinglang, so'ng savollarga javob bering!</i>
 ⬇️ Quyidagi testlarga javob bering`;
 
   // 4. Send audio
   await sendTelegramAudio(channelId, audioBuffer, audioCaption);
-  console.log(`✓ Listening audio sent to ${channelId}`);
+  console.log(`✓ Listening dialog audio sent to ${channelId}`);
 
   // 5. Send exactly 3 quiz polls (2s delay after audio, 1s between each)
   await new Promise(r => setTimeout(r, 2000));
   for (let i = 0; i < 3; i++) {
     const quiz = quizzes[i];
     const { options, correctIndex } = shuffleQuizOptions(quiz);
-    const pollTitle = `🎧 [${levelTag}] | السَّمَاعَة\n🧠 ${quiz.question}`;
+    const pollTitle = `🎧 [${levelTag}] | السَّمَاعَة\n❓ ${quiz.question}`;
     try {
       await sendTelegramQuiz(
         channelId,

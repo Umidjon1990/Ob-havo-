@@ -9,8 +9,14 @@ const openai = new OpenAI(
 
 export type ListeningLevel = "A1A2" | "B1B2";
 
+export interface DialogLine {
+  speaker: "M" | "F";
+  text: string;
+}
+
 export interface ListeningPassage {
   arabicText: string;
+  dialog: DialogLine[];
   topicAr: string;
   topicUz: string;
 }
@@ -22,21 +28,17 @@ export interface ListeningQuiz {
   explanation: string;
 }
 
-// ─── ElevenLabs Text-to-Speech ────────────────────────────────────────────────
-
-const ELEVENLABS_VOICE_ID = process.env.ELEVENLABS_VOICE_ID || "onwK4e9ZLuTAKqWW03F9";
+// ─── ElevenLabs Voices ────────────────────────────────────────────────────────
+// Male: Daniel (multilingual Arabic)
+// Female: Aria (multilingual) — good Arabic pronunciation
+const MALE_VOICE_ID   = process.env.ELEVENLABS_VOICE_ID        || "onwK4e9ZLuTAKqWW03F9";
+const FEMALE_VOICE_ID = process.env.ELEVENLABS_FEMALE_VOICE_ID || "9BWtsMINqrJLrRacOk9x";
 const ELEVENLABS_MODEL = "eleven_multilingual_v2";
 
-export async function textToSpeechArabic(text: string): Promise<Buffer | null> {
-  const apiKey = process.env.ELEVENLABS_API_KEY;
-  if (!apiKey) {
-    console.warn("ELEVENLABS_API_KEY not set — skipping TTS");
-    return null;
-  }
-
+async function ttsLine(text: string, voiceId: string, apiKey: string): Promise<Buffer | null> {
   try {
     const response = await fetch(
-      `https://api.elevenlabs.io/v1/text-to-speech/${ELEVENLABS_VOICE_ID}`,
+      `https://api.elevenlabs.io/v1/text-to-speech/${voiceId}`,
       {
         method: "POST",
         headers: {
@@ -56,19 +58,43 @@ export async function textToSpeechArabic(text: string): Promise<Buffer | null> {
         }),
       }
     );
-
     if (!response.ok) {
       const errText = await response.text();
-      console.warn(`ElevenLabs TTS error ${response.status}:`, errText);
+      console.warn(`ElevenLabs TTS error ${response.status} (voice ${voiceId}):`, errText);
       return null;
     }
-
-    const arrayBuffer = await response.arrayBuffer();
-    return Buffer.from(arrayBuffer);
+    return Buffer.from(await response.arrayBuffer());
   } catch (err: any) {
-    console.warn("ElevenLabs TTS failed:", err?.message || err);
+    console.warn("ElevenLabs TTS line failed:", err?.message || err);
     return null;
   }
+}
+
+// Generate dialog audio: each line with correct gendered voice, then concatenate
+export async function textToSpeechArabic(passage: ListeningPassage): Promise<Buffer | null> {
+  const apiKey = process.env.ELEVENLABS_API_KEY;
+  if (!apiKey) {
+    console.warn("ELEVENLABS_API_KEY not set — skipping TTS");
+    return null;
+  }
+
+  const parts: Buffer[] = [];
+
+  for (const line of passage.dialog) {
+    const voiceId = line.speaker === "M" ? MALE_VOICE_ID : FEMALE_VOICE_ID;
+    const buf = await ttsLine(line.text, voiceId, apiKey);
+    if (!buf) {
+      console.warn(`TTS failed for a dialog line — skipping whole audio`);
+      return null;
+    }
+    parts.push(buf);
+    // Small delay between API calls to avoid rate limits
+    await new Promise(r => setTimeout(r, 300));
+  }
+
+  if (parts.length === 0) return null;
+  // Concatenate all MP3 buffers — MP3 is frame-based, direct concat works
+  return Buffer.concat(parts);
 }
 
 // ─── Listening Passage Generation ─────────────────────────────────────────────
@@ -105,24 +131,28 @@ export async function generateListeningPassage(level: ListeningLevel): Promise<L
 
   const levelDesc =
     level === "A1A2"
-      ? "A1/A2 (مستوى مبتدئ: جمل قصيرة، مفردات أساسية، موضوع يومي بسيط)"
+      ? "A1/A2 (مستوى مبتدئ: جمل قصيرة، مفردات أساسية)"
       : "B1/B2 (مستوى متوسط-متقدم: جمل معقدة، مفردات أكاديمية، أسلوب IELTS)";
 
-  const prompt = `أنت خبير في إعداد اختبارات IELTS Listening. اكتب نصاً صوتياً للاستماع باللغة العربية الفصحى.
+  const prompt = `أنت خبير في إعداد اختبارات IELTS Listening. اكتب حواراً بين شخصين باللغة العربية الفصحى.
 
 الموضوع: ${topic}
 المستوى: ${levelDesc}
 
-متطلبات النص:
-- الطول: 100-130 كلمة
-- الأسلوب: حوار بين شخصين أو مونولوج (مثل IELTS Listening Part 1 أو Part 2)
+⚠️ المتطلبات الأساسية:
+- الحوار بين شخصَين: رجل اسمه أَحْمَد [م] وامرأة اسمها سَارَة [أ]
+- يبدأ كل سطر بـ [م] للرجل أو [أ] للمرأة
+- الحوار 8-12 سطراً (يتبادلان الكلام)
 - كل الحركات (التشكيل الكامل) على كل كلمة بدون استثناء
-- واضح ومنطقي، يحتوي على معلومات محددة يمكن الاختبار منها (أرقام، أوصاف، أسماء أماكن، مواعيد)
+- يحتوي على معلومات محددة قابلة للاختبار (أرقام، أسماء، أماكن، أوقات، أوصاف)
 - ⚠️ ممنوع: أي محتوى سياسي، ديني طائفي، رياضي
 
 أجب بـ JSON فقط:
 {
-  "arabicText": "النص الكامل بالتشكيل",
+  "dialog": [
+    {"speaker": "M", "text": "نَصُّ أَحْمَد..."},
+    {"speaker": "F", "text": "نَصُّ سَارَة..."}
+  ],
   "topicAr": "عنوان قصير بالعربية",
   "topicUz": "Mavzu o'zbekcha"
 }`;
@@ -134,7 +164,7 @@ export async function generateListeningPassage(level: ListeningLevel): Promise<L
       const response = await openai.chat.completions.create({
         model,
         messages: [{ role: "user", content: prompt }],
-        max_completion_tokens: 800,
+        max_completion_tokens: 1000,
       });
       const content = response.choices[0]?.message?.content || "";
       if (!content) continue;
@@ -142,10 +172,23 @@ export async function generateListeningPassage(level: ListeningLevel): Promise<L
       if (jsonMatch) {
         const sanitized = jsonMatch[0].replace(/[\x00-\x08\x0b\x0c\x0e-\x1f]/g, " ");
         const parsed = JSON.parse(sanitized);
-        if (parsed.arabicText && parsed.topicAr && parsed.topicUz) {
-          console.log(`✓ Listening passage generated (${model}), ${parsed.arabicText.length} chars`);
+        if (
+          Array.isArray(parsed.dialog) &&
+          parsed.dialog.length >= 4 &&
+          parsed.dialog.every((l: any) => (l.speaker === "M" || l.speaker === "F") && l.text?.trim()) &&
+          parsed.topicAr &&
+          parsed.topicUz
+        ) {
+          const dialog: DialogLine[] = parsed.dialog.map((l: any) => ({
+            speaker: l.speaker as "M" | "F",
+            text: l.text.trim(),
+          }));
+          // Full text for reference (joining dialog lines)
+          const arabicText = dialog.map(l => `${l.speaker === "M" ? "أَحْمَد" : "سَارَة"}: ${l.text}`).join("\n");
+          console.log(`✓ Dialog generated (${model}), ${dialog.length} lines`);
           return {
-            arabicText: parsed.arabicText.trim(),
+            arabicText,
+            dialog,
             topicAr: parsed.topicAr.trim(),
             topicUz: parsed.topicUz.trim(),
           };
@@ -167,23 +210,26 @@ export async function generateListeningQuizzes(
 ): Promise<ListeningQuiz[]> {
   const levelDesc = level === "A1A2" ? "A1/A2 (مستوى مبتدئ)" : "B1/B2 (IELTS مستوى)";
 
-  const prompt = `أنت خبير IELTS Listening. بناءً على نص الاستماع التالي، اكتب 3 أسئلة اختبار.
+  const prompt = `أنت خبير IELTS Listening. بناءً على الحوار التالي، اكتب 3 أسئلة اختبار فهم.
 
-النص: ${passage.arabicText}
+الحوار:
+${passage.arabicText}
 
-متطلبات الأسئلة (مستوى ${levelDesc}):
-- كل سؤال يختبر فهم معلومة محددة من النص (ليس رأياً)
-- السؤال بالعربية (مع تشكيل) ثم الأوزبكية: "❓ [عربي]\n🇺🇿 [أوزبكي]"
-- 4 خيارات بالأوزبكية، قصيرة (max 80 حرف)، خيار واحد صحيح وثلاثة منطقية لكن خاطئة
-- الشرح بالأوزبكية، قصير
+⚠️ متطلبات الأسئلة (مستوى ${levelDesc}):
+- كل سؤال يختبر فهم معلومة محددة من الحوار (ليس رأياً)
+- السؤال بالعربية الفصحى مع تشكيل كامل
+- 4 خيارات بالعربية الفصحى، قصيرة (max 60 حرف لكل خيار)
+- خيار واحد صحيح وثلاثة منطقية لكن خاطئة
+- الشرح بالعربية الفصحى، جملة واحدة قصيرة
+- ⚠️ الأسئلة والخيارات والشرح كلها بالعربية فقط — ممنوع الأوزبكية
 
 أجب بـ JSON فقط — مصفوفة من 3 كائنات:
 [
   {
-    "question": "❓ هَلْ...؟\n🇺🇿 Savol?",
-    "options": ["A variant", "B variant", "C variant", "D variant"],
+    "question": "مَاذَا فَعَلَ أَحْمَد؟",
+    "options": ["خيار أ", "خيار ب", "خيار ج", "خيار د"],
     "correctIndex": 0,
-    "explanation": "Chunki matnda..."
+    "explanation": "لأَنَّ أَحْمَد قَالَ فِي الحِوَارِ..."
   }
 ]`;
 
@@ -193,7 +239,7 @@ export async function generateListeningQuizzes(
       const response = await openai.chat.completions.create({
         model,
         messages: [{ role: "user", content: prompt }],
-        max_completion_tokens: 1000,
+        max_completion_tokens: 1200,
       });
       const content = response.choices[0]?.message?.content || "";
       if (!content) continue;
