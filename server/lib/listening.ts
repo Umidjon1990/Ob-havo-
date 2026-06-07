@@ -191,24 +191,31 @@ export async function generateListeningPassage(level: ListeningLevel): Promise<L
       ? "A1/A2 (مستوى مبتدئ: جمل قصيرة، مفردات أساسية)"
       : "B1/B2 (مستوى متوسط-متقدم: جمل معقدة، مفردات أكاديمية، أسلوب IELTS)";
 
-  const prompt = `أنت خبير في إعداد اختبارات IELTS Listening. اكتب حواراً بين شخصين باللغة العربية الفصحى.
+  const prompt = `أنت خبير في إعداد اختبارات IELTS Listening Section 3. اكتب حواراً طويلاً وغنياً بالمعلومات بين شخصين باللغة العربية الفصحى.
 
 الموضوع: ${topic}
 المستوى: ${levelDesc}
 
-⚠️ المتطلبات الأساسية:
-- الحوار بين شخصَين: رجل اسمه أَحْمَد [م] وامرأة اسمها سَارَة [أ]
-- يبدأ كل سطر بـ [م] للرجل أو [أ] للمرأة
-- الحوار 8-12 سطراً (يتبادلان الكلام)
-- كل الحركات (التشكيل الكامل) على كل كلمة بدون استثناء
-- يحتوي على معلومات محددة قابلة للاختبار (أرقام، أسماء، أماكن، أوقات، أوصاف)
-- ⚠️ ممنوع: أي محتوى سياسي، ديني طائفي، رياضي
+⚠️ المتطلبات الإلزامية:
+- الشخصيتان: رجل اسمه أَحْمَد [M] وامرأة اسمها سَارَة [F]
+- يبدأ كل سطر بـ [M] أو [F]
+- الحوار 16 إلى 20 سطراً — كل سطر جملة طويلة تحتوي على 15-25 كلمة
+- الهدف: مدة الحوار المقروء لا تقل عن دقيقة كاملة عند قراءته بصوت عالٍ
+- التشكيل الكامل (الفتحة والضمة والكسرة والشدة والسكون) على كل كلمة بدون استثناء
+- يتضمن الحوار معلومات محددة وقابلة للاختبار:
+  * أرقام دقيقة (تواريخ، أسعار، مسافات، أوقات، نسب مئوية)
+  * أسماء أماكن وأشخاص ومؤسسات
+  * أحداث متسلسلة بترتيب زمني
+  * مقارنات بين خيارين أو أكثر
+  * آراء شخصية تختلف عن الحقائق الواردة
+- الأسلوب: حوار طبيعي وواقعي يحاكي IELTS Academic Listening — يتضمن تعليقات، استفسارات، توضيحات، موافقات واعتراضات
+- ⚠️ ممنوع: السياسة، الطائفية، الرياضة
 
 أجب بـ JSON فقط:
 {
   "dialog": [
-    {"speaker": "M", "text": "نَصُّ أَحْمَد..."},
-    {"speaker": "F", "text": "نَصُّ سَارَة..."}
+    {"speaker": "M", "text": "نَصُّ أَحْمَد الطَّوِيل..."},
+    {"speaker": "F", "text": "نَصُّ سَارَة الطَّوِيل..."}
   ],
   "topicAr": "عنوان قصير بالعربية",
   "topicUz": "Mavzu o'zbekcha"
@@ -221,7 +228,7 @@ export async function generateListeningPassage(level: ListeningLevel): Promise<L
       const response = await openai.chat.completions.create({
         model,
         messages: [{ role: "user", content: prompt }],
-        max_completion_tokens: 1000,
+        max_completion_tokens: 2500,
       });
       const content = response.choices[0]?.message?.content || "";
       if (!content) continue;
@@ -231,7 +238,7 @@ export async function generateListeningPassage(level: ListeningLevel): Promise<L
         const parsed = JSON.parse(sanitized);
         if (
           Array.isArray(parsed.dialog) &&
-          parsed.dialog.length >= 4 &&
+          parsed.dialog.length >= 12 &&
           parsed.dialog.every((l: any) => (l.speaker === "M" || l.speaker === "F") && l.text?.trim()) &&
           parsed.topicAr &&
           parsed.topicUz
@@ -265,28 +272,41 @@ export async function generateListeningQuizzes(
   passage: ListeningPassage,
   level: ListeningLevel
 ): Promise<ListeningQuiz[]> {
-  const levelDesc = level === "A1A2" ? "A1/A2 (مستوى مبتدئ)" : "B1/B2 (IELTS مستوى)";
+  const levelDesc = level === "A1A2"
+    ? "A1/A2 — أسئلة مباشرة تختبر فهم تفاصيل واضحة"
+    : "B1/B2 — أسئلة IELTS Academic من المستوى العالي";
 
-  const prompt = `أنت خبير IELTS Listening. بناءً على الحوار التالي، اكتب 3 أسئلة اختبار فهم.
+  const prompt = `أنت محكّم IELTS Listening معتمد. بناءً على الحوار التالي، اكتب 3 أسئلة اختبار فهم دقيقة ومُحكمة.
 
 الحوار:
 ${passage.arabicText}
 
-⚠️ متطلبات الأسئلة (مستوى ${levelDesc}):
-- كل سؤال يختبر فهم معلومة محددة من الحوار (ليس رأياً)
-- السؤال بالعربية الفصحى مع تشكيل كامل
-- 4 خيارات بالعربية الفصحى، قصيرة (max 60 حرف لكل خيار)
-- خيار واحد صحيح وثلاثة منطقية لكن خاطئة
-- الشرح بالعربية الفصحى، جملة واحدة قصيرة
-- ⚠️ الأسئلة والخيارات والشرح كلها بالعربية فقط — ممنوع الأوزبكية
+⚠️ قواعد صياغة الأسئلة (مستوى ${levelDesc}):
+
+1. نوع الأسئلة المطلوبة:
+   - سؤال عن تفصيل محدد وُرد صراحةً في الحوار (رقم، تاريخ، مكان، اسم)
+   - سؤال عن موقف أو رأي شخصية معينة
+   - سؤال استنتاجي: يتطلب ربط جملتين من الحوار لا جملة واحدة
+
+2. معايير الخيارات الخاطئة — يجب أن:
+   - تحتوي على معلومات موجودة فعلاً في الحوار لكنها تنتمي لسياق مختلف (swap context)
+   - تبدو معقولة تماماً لمن لم ينتبه جيداً
+   - تشمل رقماً قريباً من الصحيح أو مكاناً ذُكر بسياق آخر
+   - ⚠️ ممنوع: خيارات واضحة الخطأ أو خارج الحوار كلياً
+
+3. الصياغة:
+   - السؤال بالعربية الفصحى مع تشكيل كامل
+   - كل خيار جملة قصيرة (max 70 حرف) بالعربية مع تشكيل
+   - الشرح: يوضح لماذا الإجابة الصحيحة صحيحة ولماذا أكثر الخيارات إغراءً خاطئ
+   - ⚠️ بالعربية فقط — ممنوع الأوزبكية
 
 أجب بـ JSON فقط — مصفوفة من 3 كائنات:
 [
   {
-    "question": "مَاذَا فَعَلَ أَحْمَد؟",
+    "question": "مَا الَّذِي ذَكَرَتْهُ سَارَة بِشَأْنِ...؟",
     "options": ["خيار أ", "خيار ب", "خيار ج", "خيار د"],
-    "correctIndex": 0,
-    "explanation": "لأَنَّ أَحْمَد قَالَ فِي الحِوَارِ..."
+    "correctIndex": 2,
+    "explanation": "قَالَتْ سَارَة... بَيْنَمَا الخِيَار... يُشِير إِلَى مَعْلُومَة مِنْ سِيَاقٍ آخَر."
   }
 ]`;
 
@@ -296,7 +316,7 @@ ${passage.arabicText}
       const response = await openai.chat.completions.create({
         model,
         messages: [{ role: "user", content: prompt }],
-        max_completion_tokens: 1200,
+        max_completion_tokens: 1800,
       });
       const content = response.choices[0]?.message?.content || "";
       if (!content) continue;
