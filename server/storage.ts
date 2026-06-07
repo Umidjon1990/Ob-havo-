@@ -49,6 +49,7 @@ export interface IStorage {
   toggleListeningChannel(chatId: string, enabled: boolean): Promise<ListeningChannel | undefined>;
   updateListeningChannelSchedule(chatId: string, scheduledTime: string): Promise<ListeningChannel | undefined>;
   updateListeningChannelAfterSend(chatId: string, nextLevel: string): Promise<void>;
+  updateListeningChannelLevel(chatId: string, level: string): Promise<ListeningChannel | undefined>;
 }
 
 export class DatabaseStorage implements IStorage {
@@ -262,6 +263,15 @@ export class DatabaseStorage implements IStorage {
       .update(listeningChannels)
       .set({ lastSentAt: new Date(), currentLevel: nextLevel })
       .where(eq(listeningChannels.chatId, chatId));
+  }
+
+  async updateListeningChannelLevel(chatId: string, level: string): Promise<ListeningChannel | undefined> {
+    const [updated] = await db
+      .update(listeningChannels)
+      .set({ currentLevel: level })
+      .where(eq(listeningChannels.chatId, chatId))
+      .returning();
+    return updated;
   }
 }
 

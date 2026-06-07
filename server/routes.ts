@@ -421,6 +421,20 @@ export async function registerRoutes(
     }
   });
 
+  app.patch("/api/listening-channels/:chatId/level", async (req, res) => {
+    try {
+      const { chatId } = req.params;
+      const { level } = req.body;
+      if (level !== "A1A2" && level !== "B1B2") {
+        return res.status(400).json({ error: "level must be A1A2 or B1B2" });
+      }
+      const channel = await storage.updateListeningChannelLevel(chatId, level);
+      res.json(channel);
+    } catch (error) {
+      res.status(500).json({ error: "Failed to update listening level" });
+    }
+  });
+
   app.patch("/api/listening-channels/:chatId/schedule", async (req, res) => {
     try {
       const { chatId } = req.params;

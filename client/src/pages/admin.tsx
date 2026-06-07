@@ -7,7 +7,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { useToast } from "@/hooks/use-toast";
 import { Switch } from "@/components/ui/switch";
-import { setupTelegramWebhook, getBotSettings, updateBotSettings, testChannelMessage, getChannels, addChannel, removeChannel, toggleChannel, updateChannelSchedule, refreshWeatherData, generateNewVocabulary, adminLogin, verifyAdminToken, adminLogout, getNewsChannels, addNewsChannel, removeNewsChannel, toggleNewsChannel, updateNewsChannelSchedule, sendNewsNow, getListeningChannels, addListeningChannel, removeListeningChannel, toggleListeningChannel, updateListeningChannelSchedule, sendListeningNow, type Channel, type NewsChannel, type ListeningChannel, type GeneratedWord } from "@/lib/api";
+import { setupTelegramWebhook, getBotSettings, updateBotSettings, testChannelMessage, getChannels, addChannel, removeChannel, toggleChannel, updateChannelSchedule, refreshWeatherData, generateNewVocabulary, adminLogin, verifyAdminToken, adminLogout, getNewsChannels, addNewsChannel, removeNewsChannel, toggleNewsChannel, updateNewsChannelSchedule, sendNewsNow, getListeningChannels, addListeningChannel, removeListeningChannel, toggleListeningChannel, updateListeningChannelSchedule, updateListeningChannelLevel, sendListeningNow, type Channel, type NewsChannel, type ListeningChannel, type GeneratedWord } from "@/lib/api";
 import { regions } from "@/data/regions";
 
 export default function Admin() {
@@ -127,6 +127,14 @@ export default function Admin() {
     const result = await updateListeningChannelSchedule(chatId, time);
     if (result) {
       toast({ title: "Saqlandi!", description: `Tinglash vaqti: ${time}` });
+      loadListeningChannels();
+    }
+  };
+
+  const handleListeningLevelChange = async (chatId: string, level: "A1A2" | "B1B2") => {
+    const result = await updateListeningChannelLevel(chatId, level);
+    if (result) {
+      toast({ title: "Daraja o'zgartirildi!", description: `${level === "A1A2" ? "A1/A2 — Boshlang'ich" : "B1/B2 — O'rta daraja"}` });
       loadListeningChannels();
     }
   };
@@ -865,7 +873,10 @@ export default function Admin() {
                 🎧 <b>Format:</b> Audio (arabcha matn) → A1/A2 yoki B1/B2 darajasida 3 ta comprehension savoli (quiz poll)
               </p>
               <p className="text-xs text-purple-700 mt-1">
-                ⚠️ ElevenLabs API yo'q bo'lsa, matn ko'rinishida yuboriladi (audio o'rniga)
+                📅 Daraja kalendar kun paritetiga ko'ra avtomat almashadi (toq kun = A1/A2, juft kun = B1/B2). Qo'lda ham o'zgartirishingiz mumkin.
+              </p>
+              <p className="text-xs text-red-600 mt-1">
+                ⚠️ ElevenLabs API kalit bo'lmasa yuborish to'xtatiladi (fallback yo'q — audio majburiy)
               </p>
             </div>
 
@@ -914,12 +925,7 @@ export default function Admin() {
                         />
                         <div>
                           <p className="text-sm font-medium">{ch.title || ch.chatId}</p>
-                          <p className="text-xs text-muted-foreground">
-                            {ch.chatId} •{" "}
-                            <span className={new Date().getDate() % 2 !== 0 ? "text-green-600 font-medium" : "text-blue-600 font-medium"}>
-                              Bugun: {new Date().getDate() % 2 !== 0 ? "A1/A2" : "B1/B2"}
-                            </span>
-                          </p>
+                          <p className="text-xs text-muted-foreground">{ch.chatId}</p>
                         </div>
                       </div>
                       <Button
@@ -930,11 +936,23 @@ export default function Admin() {
                         <Trash2 className="w-4 h-4 text-destructive" />
                       </Button>
                     </div>
-                    <div className="flex items-center gap-2 pl-10">
-                      <label className="text-xs text-muted-foreground">Vaqt (O'z):</label>
+                    <div className="flex items-center gap-2 pl-10 flex-wrap">
+                      <div className="flex items-center border rounded-md overflow-hidden">
+                        <button
+                          className={`px-2 py-1 text-xs font-medium transition-colors ${ch.currentLevel === "A1A2" ? "bg-green-500 text-white" : "bg-muted text-muted-foreground hover:bg-green-100"}`}
+                          onClick={() => handleListeningLevelChange(ch.chatId, "A1A2")}
+                          data-testid={`button-level-a1a2-${ch.id}`}
+                        >A1/A2</button>
+                        <button
+                          className={`px-2 py-1 text-xs font-medium transition-colors ${ch.currentLevel === "B1B2" ? "bg-blue-500 text-white" : "bg-muted text-muted-foreground hover:bg-blue-100"}`}
+                          onClick={() => handleListeningLevelChange(ch.chatId, "B1B2")}
+                          data-testid={`button-level-b1b2-${ch.id}`}
+                        >B1/B2</button>
+                      </div>
+                      <label className="text-xs text-muted-foreground">Vaqt:</label>
                       <Input
                         type="time"
-                        defaultValue={ch.scheduledTime || "10:00"}
+                        defaultValue={ch.scheduledTime || "09:00"}
                         onBlur={(e) => {
                           if (e.target.value !== ch.scheduledTime) {
                             handleListeningScheduleChange(ch.chatId, e.target.value);

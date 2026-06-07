@@ -361,6 +361,19 @@ export async function updateListeningChannelSchedule(chatId: string, scheduledTi
   }
 }
 
+export async function updateListeningChannelLevel(chatId: string, level: "A1A2" | "B1B2"): Promise<ListeningChannel | null> {
+  try {
+    const response = await fetch(`/api/listening-channels/${encodeURIComponent(chatId)}/level`, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ level }),
+    });
+    return response.ok ? await response.json() : null;
+  } catch (error) {
+    return null;
+  }
+}
+
 export async function sendListeningNow(chatId: string): Promise<{ ok: boolean; error?: string }> {
   try {
     const response = await fetch(`/api/listening-channels/${encodeURIComponent(chatId)}/send-now`, { method: 'POST' });
