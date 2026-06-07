@@ -65,13 +65,70 @@ function stripId3v1(buf: Buffer): Buffer {
   return buf;
 }
 
-/** Return clean MP3 frames with no ID3 tags */
-function stripAllId3(buf: Buffer): Buffer {
-  return stripId3v1(stripId3v2(buf));
+/** Skip the Xing/Info/VBRI VBR header frame if present as the first audio frame.
+ *  ElevenLabs embeds a Xing frame that reports only the first segment's duration. */
+function skipVbrFrame(buf: Buffer): Buffer {
+  let offset = 0;
+  // Find first MP3 frame sync (0xFF + high 3 bits of next byte = 0xE0)
+  while (offset < buf.length - 4) {
+    if (buf[offset] === 0xFF && (buf[offset + 1] & 0xE0) === 0xE0) break;
+    offset++;
+  }
+  if (offset >= buf.length - 4) return buf;
+
+  const b1 = buf[offset + 1];
+  const b2 = buf[offset + 2];
+  const b3 = buf[offset + 3];
+
+  // Determine side-info size (MPEG version + channel mode)
+  const mpegVersion = (b1 >> 3) & 0x3; // 3=MPEG1
+  const channelMode = (b3 >> 6) & 0x3; // 3=Mono
+  const isMpeg1 = mpegVersion === 3;
+  const isMono  = channelMode === 3;
+  const sideInfoSize = isMpeg1 ? (isMono ? 17 : 32) : (isMono ? 9 : 17);
+
+  const tagOffset = offset + 4 + sideInfoSize;
+  if (tagOffset + 4 > buf.length) return buf;
+
+  const tag = buf.slice(tagOffset, tagOffset + 4).toString("ascii");
+  if (tag !== "Xing" && tag !== "Info" && tag !== "VBRI") return buf;
+
+  // Calculate this frame's byte length so we can skip it
+  const BITRATES_MPEG1  = [0,32,40,48,56,64,80,96,112,128,160,192,224,256,320,0].map(x => x * 1000);
+  const SAMPLERATES     = [44100, 48000, 32000, 0];
+  const bitrateIdx  = (b2 >> 4) & 0xF;
+  const srIdx       = (b2 >> 2) & 0x3;
+  const padding     = (b2 >> 1) & 0x1;
+  const bitrate     = BITRATES_MPEG1[bitrateIdx];
+  const sampleRate  = SAMPLERATES[srIdx];
+
+  if (!bitrate || !sampleRate) {
+    // Fallback: scan for next sync
+    for (let i = tagOffset + 4; i < buf.length - 4; i++) {
+      if (buf[i] === 0xFF && (buf[i + 1] & 0xE0) === 0xE0) return buf.slice(i);
+    }
+    return buf;
+  }
+
+  const frameSize = Math.floor(144 * bitrate / sampleRate) + padding;
+  const next = offset + frameSize;
+
+  if (next < buf.length && buf[next] === 0xFF && (buf[next + 1] & 0xE0) === 0xE0) {
+    return buf.slice(next);
+  }
+  // Fallback scan
+  for (let i = next; i < buf.length - 4; i++) {
+    if (buf[i] === 0xFF && (buf[i + 1] & 0xE0) === 0xE0) return buf.slice(i);
+  }
+  return buf;
 }
 
-/** Concatenate MP3 chunks properly: strip ALL ID3 tags from every chunk.
- *  Without metadata, players calculate duration from raw CBR frame count — always accurate. */
+/** Return clean MP3 frames: strip ID3 tags AND Xing/VBR info frame */
+function stripAllId3(buf: Buffer): Buffer {
+  return skipVbrFrame(stripId3v1(stripId3v2(buf)));
+}
+
+/** Concatenate MP3 chunks: strip all metadata so players calculate duration from frame count */
 function concatMp3(parts: Buffer[]): Buffer {
   if (parts.length === 0) return Buffer.alloc(0);
   const cleanParts = parts.map(p => stripAllId3(p));
