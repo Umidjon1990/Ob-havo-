@@ -35,6 +35,50 @@ const MALE_VOICE_ID   = process.env.ELEVENLABS_VOICE_ID        || "onwK4e9ZLuTAK
 const FEMALE_VOICE_ID = process.env.ELEVENLABS_FEMALE_VOICE_ID || "9BWtsMINqrJLrRacOk9x";
 const ELEVENLABS_MODEL = "eleven_multilingual_v2";
 
+// ─── MP3 helpers ──────────────────────────────────────────────────────────────
+
+/** Strip ID3v2 header from the start of an MP3 buffer */
+function stripId3v2(buf: Buffer): Buffer {
+  if (buf.length > 10 && buf[0] === 0x49 && buf[1] === 0x44 && buf[2] === 0x33) {
+    // synchsafe integer: each byte uses only 7 bits
+    const size =
+      ((buf[6] & 0x7f) << 21) |
+      ((buf[7] & 0x7f) << 14) |
+      ((buf[8] & 0x7f) << 7) |
+      (buf[9] & 0x7f);
+    const headerLen = 10 + size;
+    return buf.slice(headerLen);
+  }
+  return buf;
+}
+
+/** Strip ID3v1 tag from the end of an MP3 buffer (128 bytes, starts with "TAG") */
+function stripId3v1(buf: Buffer): Buffer {
+  if (
+    buf.length >= 128 &&
+    buf[buf.length - 128] === 0x54 && // T
+    buf[buf.length - 127] === 0x41 && // A
+    buf[buf.length - 126] === 0x47    // G
+  ) {
+    return buf.slice(0, buf.length - 128);
+  }
+  return buf;
+}
+
+/** Return clean MP3 frames with no ID3 tags */
+function stripAllId3(buf: Buffer): Buffer {
+  return stripId3v1(stripId3v2(buf));
+}
+
+/** Concatenate MP3 chunks properly: keep first file's ID3 header, strip from the rest */
+function concatMp3(parts: Buffer[]): Buffer {
+  if (parts.length === 0) return Buffer.alloc(0);
+  if (parts.length === 1) return parts[0];
+  // Keep full first chunk (with its header), strip ID3 from the rest
+  const cleanRest = parts.slice(1).map(p => stripAllId3(p));
+  return Buffer.concat([parts[0], ...cleanRest]);
+}
+
 async function ttsLine(text: string, voiceId: string, apiKey: string): Promise<Buffer | null> {
   try {
     const response = await fetch(
@@ -70,7 +114,7 @@ async function ttsLine(text: string, voiceId: string, apiKey: string): Promise<B
   }
 }
 
-// Generate dialog audio: each line with correct gendered voice, then concatenate
+// Generate dialog audio: each line with correct gendered voice, then properly concatenate
 export async function textToSpeechArabic(passage: ListeningPassage): Promise<Buffer | null> {
   const apiKey = process.env.ELEVENLABS_API_KEY;
   if (!apiKey) {
@@ -80,21 +124,34 @@ export async function textToSpeechArabic(passage: ListeningPassage): Promise<Buf
 
   const parts: Buffer[] = [];
 
-  for (const line of passage.dialog) {
+  for (let i = 0; i < passage.dialog.length; i++) {
+    const line = passage.dialog[i];
     const voiceId = line.speaker === "M" ? MALE_VOICE_ID : FEMALE_VOICE_ID;
-    const buf = await ttsLine(line.text, voiceId, apiKey);
+    let buf = await ttsLine(line.text, voiceId, apiKey);
+    // Retry once on failure
     if (!buf) {
-      console.warn(`TTS failed for a dialog line — skipping whole audio`);
+      console.warn(`TTS line ${i + 1} failed, retrying...`);
+      await new Promise(r => setTimeout(r, 1000));
+      buf = await ttsLine(line.text, voiceId, apiKey);
+    }
+    if (!buf) {
+      console.warn(`TTS line ${i + 1} failed after retry — aborting audio`);
       return null;
     }
     parts.push(buf);
-    // Small delay between API calls to avoid rate limits
-    await new Promise(r => setTimeout(r, 300));
+    console.log(`✓ TTS line ${i + 1}/${passage.dialog.length} (${line.speaker})`);
+    // Avoid ElevenLabs rate limits
+    if (i < passage.dialog.length - 1) {
+      await new Promise(r => setTimeout(r, 400));
+    }
   }
 
   if (parts.length === 0) return null;
-  // Concatenate all MP3 buffers — MP3 is frame-based, direct concat works
-  return Buffer.concat(parts);
+
+  // Properly concatenate: strip ID3 tags from all but first chunk
+  const combined = concatMp3(parts);
+  console.log(`✓ Dialog audio ready: ${parts.length} lines, ${combined.length} bytes`);
+  return combined;
 }
 
 // ─── Listening Passage Generation ─────────────────────────────────────────────
