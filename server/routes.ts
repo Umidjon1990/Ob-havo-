@@ -391,7 +391,7 @@ export async function registerRoutes(
         chatId,
         title: title || chatId,
         enabled: true,
-        scheduledTime: scheduledTime || "09:00",
+        scheduledTime: scheduledTime || "10:00",
         currentLevel: "A1A2",
       });
       res.json(channel);

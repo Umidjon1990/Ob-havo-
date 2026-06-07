@@ -98,7 +98,7 @@ export const listeningChannels = pgTable("listening_channels", {
   chatId: text("chat_id").notNull().unique(),
   title: text("title"),
   enabled: boolean("enabled").default(true),
-  scheduledTime: text("scheduled_time").default("09:00"),
+  scheduledTime: text("scheduled_time").default("10:00"),
   lastSentAt: timestamp("last_sent_at"),
   currentLevel: text("current_level").default("A1A2"),
   createdAt: timestamp("created_at").defaultNow(),

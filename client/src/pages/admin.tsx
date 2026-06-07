@@ -52,7 +52,7 @@ export default function Admin() {
   const [listeningChannelsList, setListeningChannelsList] = useState<ListeningChannel[]>([]);
   const [newListeningChannelId, setNewListeningChannelId] = useState("");
   const [newListeningChannelTitle, setNewListeningChannelTitle] = useState("");
-  const [newListeningTime, setNewListeningTime] = useState("09:00");
+  const [newListeningTime, setNewListeningTime] = useState("10:00");
   const [sendingListeningNow, setSendingListeningNow] = useState<string | null>(null);
 
   // Check auth on load
@@ -103,7 +103,7 @@ export default function Admin() {
       toast({ title: "Qo'shildi!", description: "Tinglash kanali qo'shildi" });
       setNewListeningChannelId("");
       setNewListeningChannelTitle("");
-      setNewListeningTime("09:00");
+      setNewListeningTime("10:00");
       loadListeningChannels();
     } else {
       toast({ title: "Xatolik", description: "Qo'shishda muammo", variant: "destructive" });

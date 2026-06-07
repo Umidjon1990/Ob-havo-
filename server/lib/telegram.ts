@@ -625,12 +625,8 @@ function getListeningLevelByDate(): ListeningLevel {
 export async function sendDailyListeningToChannel(channelId: string): Promise<void> {
   console.log(`Generating listening content for ${channelId}...`);
 
-  // Level: use stored currentLevel (manual override), fall back to date parity
-  const channels = await storage.getListeningChannels();
-  const ch = channels.find(c => c.chatId === channelId);
-  const level: ListeningLevel = (ch?.currentLevel === "A1A2" || ch?.currentLevel === "B1B2")
-    ? (ch.currentLevel as ListeningLevel)
-    : getListeningLevelByDate();
+  // Level strictly determined by Uzbekistan calendar day parity: odd=A1/A2, even=B1/B2
+  const level: ListeningLevel = getListeningLevelByDate();
   const levelLabel = level === "A1A2" ? "🟢 A1/A2 — Boshlang'ich" : "🔵 B1/B2 — O'rta daraja";
   const levelTag = level === "A1A2" ? "A1/A2" : "B1/B2";
 
@@ -708,7 +704,7 @@ export async function startListeningScheduler() {
       const today = uzTime.toDateString();
 
       for (const channel of channels) {
-        const scheduledTime = channel.scheduledTime || "09:00";
+        const scheduledTime = channel.scheduledTime || "10:00";
         const [targetHour, targetMinute] = scheduledTime.split(":").map(Number);
         if (currentHour === targetHour && currentMinute === targetMinute) {
           const lastSent = channel.lastSentAt;
@@ -741,7 +737,7 @@ export async function startDailyNewsScheduler() {
       const today = uzTime.toDateString();
 
       for (const channel of newsChannels) {
-        const scheduledTime = channel.scheduledTime || "09:00";
+        const scheduledTime = channel.scheduledTime || "10:00";
         const [targetHour, targetMinute] = scheduledTime.split(":").map(Number);
 
         if (currentHour === targetHour && currentMinute === targetMinute) {
