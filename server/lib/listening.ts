@@ -70,13 +70,12 @@ function stripAllId3(buf: Buffer): Buffer {
   return stripId3v1(stripId3v2(buf));
 }
 
-/** Concatenate MP3 chunks properly: keep first file's ID3 header, strip from the rest */
+/** Concatenate MP3 chunks properly: strip ALL ID3 tags from every chunk.
+ *  Without metadata, players calculate duration from raw CBR frame count — always accurate. */
 function concatMp3(parts: Buffer[]): Buffer {
   if (parts.length === 0) return Buffer.alloc(0);
-  if (parts.length === 1) return parts[0];
-  // Keep full first chunk (with its header), strip ID3 from the rest
-  const cleanRest = parts.slice(1).map(p => stripAllId3(p));
-  return Buffer.concat([parts[0], ...cleanRest]);
+  const cleanParts = parts.map(p => stripAllId3(p));
+  return Buffer.concat(cleanParts);
 }
 
 async function ttsLine(text: string, voiceId: string, apiKey: string): Promise<Buffer | null> {
