@@ -135,7 +135,17 @@ function concatMp3(parts: Buffer[]): Buffer {
   return Buffer.concat(cleanParts);
 }
 
+/** Strip all Arabic diacritics (harakat) before sending to ElevenLabs.
+ *  ElevenLabs reads Arabic correctly without them; wrong tashkeel causes mispronunciation. */
+function stripHarakat(text: string): string {
+  // Arabic diacritics: U+064B–U+065F (tanwin, fatha, damma, kasra, shadda, sukun, etc.)
+  // Also U+0610–U+061A (Arabic extended marks) and U+0670 (superscript alef)
+  return text.replace(/[\u064B-\u065F\u0610-\u061A\u0670]/g, "").trim();
+}
+
 async function ttsLine(text: string, voiceId: string, apiKey: string): Promise<Buffer | null> {
+  // Send harakat-free text — ElevenLabs handles Arabic pronunciation natively
+  const cleanText = stripHarakat(text);
   try {
     const response = await fetch(
       `https://api.elevenlabs.io/v1/text-to-speech/${voiceId}`,
@@ -147,7 +157,7 @@ async function ttsLine(text: string, voiceId: string, apiKey: string): Promise<B
           Accept: "audio/mpeg",
         },
         body: JSON.stringify({
-          text,
+          text: cleanText,
           model_id: ELEVENLABS_MODEL,
           voice_settings: {
             stability: 0.5,
@@ -255,8 +265,8 @@ export async function generateListeningPassage(level: ListeningLevel): Promise<L
 ⚠️ المتطلبات الإلزامية:
 - الشخصيتان: رجل اسمه أَحْمَد [M] وامرأة اسمها سَارَة [F]
 - يبدأ كل سطر بـ [M] أو [F]
-- الحوار 16 إلى 20 سطراً — كل سطر جملة طويلة تحتوي على 15-25 كلمة
-- الهدف: مدة الحوار المقروء لا تقل عن دقيقة كاملة عند قراءته بصوت عالٍ
+- الحوار من 12 إلى 16 سطراً — كل سطر جملة تحتوي على 12-18 كلمة بالضبط
+- الهدف: مدة الحوار عند القراءة بصوت عالٍ بين دقيقة وسط ودقيقة ونصف — لا أقل ولا أكثر
 - التشكيل الكامل (الفتحة والضمة والكسرة والشدة والسكون) على كل كلمة بدون استثناء
 - يتضمن الحوار معلومات محددة وقابلة للاختبار:
   * أرقام دقيقة (تواريخ، أسعار، مسافات، أوقات، نسب مئوية)
