@@ -615,19 +615,41 @@ function shuffleQuizOptions(quiz: { question: string; options: [string,string,st
   };
 }
 
+/** Determine listening level from Uzbekistan calendar day parity (odd=A1/A2, even=B1/B2) */
+function getListeningLevelByDate(): ListeningLevel {
+  const now = new Date();
+  const uzDay = new Date(now.getTime() + 5 * 60 * 60 * 1000).getUTCDate();
+  return uzDay % 2 !== 0 ? "A1A2" : "B1B2";
+}
+
 export async function sendDailyListeningToChannel(channelId: string): Promise<void> {
   console.log(`Generating listening content for ${channelId}...`);
 
-  // Get channel to determine current level
-  const channels = await storage.getListeningChannels();
-  const ch = channels.find(c => c.chatId === channelId);
-  const level: ListeningLevel = (ch?.currentLevel === "B1B2") ? "B1B2" : "A1A2";
+  // Level determined by Uzbekistan calendar day parity — odd day = A1/A2, even day = B1/B2
+  const level: ListeningLevel = getListeningLevelByDate();
   const levelLabel = level === "A1A2" ? "🟢 A1/A2 — Boshlang'ich" : "🔵 B1/B2 — O'rta daraja";
-  const nextLevel: ListeningLevel = level === "A1A2" ? "B1B2" : "A1A2";
+  const levelTag = level === "A1A2" ? "A1/A2" : "B1/B2";
 
-  // Generate passage
+  // 1. Generate passage
   const passage = await generateListeningPassage(level);
   if (!passage) throw new Error("Listening passage generation failed");
+
+  // 2. Generate exactly 3 quizzes — retry once if fewer than 3 returned
+  let quizzes = await generateListeningQuizzes(passage, level);
+  if (quizzes.length < 3) {
+    console.warn(`Only ${quizzes.length} quizzes returned, retrying...`);
+    const retry = await generateListeningQuizzes(passage, level);
+    if (retry.length >= quizzes.length) quizzes = retry;
+  }
+  if (quizzes.length < 3) throw new Error(`Could not generate 3 quizzes (got ${quizzes.length})`);
+  quizzes = quizzes.slice(0, 3);
+
+  // 3. Generate audio (ElevenLabs) — skip run entirely if unavailable/failed
+  const audioBuffer = await textToSpeechArabic(passage.arabicText);
+  if (!audioBuffer) {
+    console.warn(`TTS unavailable for ${channelId} — skipping listening run`);
+    throw new Error("ElevenLabs TTS unavailable — listening run skipped");
+  }
 
   const date = getListeningDateString();
   const audioCaption = `🎧 <b>Tinglash Testi | اخْتِبَارُ الاسْتِمَاع</b>
@@ -638,51 +660,35 @@ ${levelLabel}
 🎵 <i>Audioga quloq soling, so'ng savollarga javob bering!</i>
 ⬇️ Quyidagi testlarga javob bering`;
 
-  // 1. Generate audio (ElevenLabs)
-  const audioBuffer = await textToSpeechArabic(passage.arabicText);
+  // 4. Send audio
+  await sendTelegramAudio(channelId, audioBuffer, audioCaption);
+  console.log(`✓ Listening audio sent to ${channelId}`);
 
-  // 2. Send audio (or text fallback if TTS failed)
-  if (audioBuffer) {
-    try {
-      await sendTelegramAudio(channelId, audioBuffer, audioCaption);
-      console.log(`✓ Listening audio sent to ${channelId}`);
-    } catch (audioErr: any) {
-      console.warn("Audio send failed, sending text fallback:", audioErr?.message);
-      await sendTelegramMessage(channelId, audioCaption, "HTML");
-    }
-  } else {
-    // No audio — send the text as fallback so quizzes still work
-    const textCaption = audioCaption + `\n\n📄 <b>Matn:</b>\n${passage.arabicText}`;
-    await sendTelegramMessage(channelId, textCaption, "HTML");
-    console.log(`✓ Listening text fallback sent to ${channelId} (TTS unavailable)`);
-  }
-
-  // 3. Generate quizzes
+  // 5. Send exactly 3 quiz polls (2s delay after audio, 1s between each)
   await new Promise(r => setTimeout(r, 2000));
-  const quizzes = await generateListeningQuizzes(passage, level);
-
-  // 4. Send each quiz poll
-  for (let i = 0; i < quizzes.length; i++) {
+  for (let i = 0; i < 3; i++) {
     const quiz = quizzes[i];
     const { options, correctIndex } = shuffleQuizOptions(quiz);
+    const pollTitle = `🎧 [${levelTag}] | السَّمَاعَة\n🧠 ${quiz.question}`;
     try {
       await sendTelegramQuiz(
         channelId,
-        `🧠 ${quiz.question}`,
+        pollTitle,
         options,
         correctIndex,
         quiz.explanation
       );
-      console.log(`✓ Listening quiz ${i + 1}/${quizzes.length} sent to ${channelId}`);
+      console.log(`✓ Listening quiz ${i + 1}/3 sent to ${channelId}`);
     } catch (qErr: any) {
       console.warn(`Quiz ${i + 1} send failed:`, qErr?.message);
     }
-    if (i < quizzes.length - 1) await new Promise(r => setTimeout(r, 1000));
+    if (i < 2) await new Promise(r => setTimeout(r, 1000));
   }
 
-  // 5. Toggle level and update lastSentAt
+  // 6. Update lastSentAt and currentLevel (stored for reference, not used for scheduling)
+  const nextLevel: ListeningLevel = level === "A1A2" ? "B1B2" : "A1A2";
   await storage.updateListeningChannelAfterSend(channelId, nextLevel);
-  console.log(`✓ Listening done for ${channelId}, next level: ${nextLevel}`);
+  console.log(`✓ Listening done for ${channelId}, level used: ${level}`);
 }
 
 export async function startListeningScheduler() {
@@ -698,7 +704,7 @@ export async function startListeningScheduler() {
       const today = uzTime.toDateString();
 
       for (const channel of channels) {
-        const scheduledTime = channel.scheduledTime || "10:00";
+        const scheduledTime = channel.scheduledTime || "09:00";
         const [targetHour, targetMinute] = scheduledTime.split(":").map(Number);
         if (currentHour === targetHour && currentMinute === targetMinute) {
           const lastSent = channel.lastSentAt;

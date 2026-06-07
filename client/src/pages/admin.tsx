@@ -52,7 +52,7 @@ export default function Admin() {
   const [listeningChannelsList, setListeningChannelsList] = useState<ListeningChannel[]>([]);
   const [newListeningChannelId, setNewListeningChannelId] = useState("");
   const [newListeningChannelTitle, setNewListeningChannelTitle] = useState("");
-  const [newListeningTime, setNewListeningTime] = useState("10:00");
+  const [newListeningTime, setNewListeningTime] = useState("09:00");
   const [sendingListeningNow, setSendingListeningNow] = useState<string | null>(null);
 
   // Check auth on load
@@ -103,7 +103,7 @@ export default function Admin() {
       toast({ title: "Qo'shildi!", description: "Tinglash kanali qo'shildi" });
       setNewListeningChannelId("");
       setNewListeningChannelTitle("");
-      setNewListeningTime("10:00");
+      setNewListeningTime("09:00");
       loadListeningChannels();
     } else {
       toast({ title: "Xatolik", description: "Qo'shishda muammo", variant: "destructive" });
@@ -916,8 +916,8 @@ export default function Admin() {
                           <p className="text-sm font-medium">{ch.title || ch.chatId}</p>
                           <p className="text-xs text-muted-foreground">
                             {ch.chatId} •{" "}
-                            <span className={ch.currentLevel === "B1B2" ? "text-blue-600 font-medium" : "text-green-600 font-medium"}>
-                              Keyingi: {ch.currentLevel === "B1B2" ? "B1/B2" : "A1/A2"}
+                            <span className={new Date().getDate() % 2 !== 0 ? "text-green-600 font-medium" : "text-blue-600 font-medium"}>
+                              Bugun: {new Date().getDate() % 2 !== 0 ? "A1/A2" : "B1/B2"}
                             </span>
                           </p>
                         </div>
