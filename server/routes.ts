@@ -1,7 +1,7 @@
 import type { Express } from "express";
 import { createServer, type Server } from "http";
 import { storage } from "./storage";
-import { handleTelegramUpdate, sendTelegramMessage, setTelegramWebhook, sendDailyNewsToChannel } from "./lib/telegram";
+import { handleTelegramUpdate, sendTelegramMessage, setTelegramWebhook, sendDailyNewsToChannel, sendDailyListeningToChannel } from "./lib/telegram";
 import { generateWeatherAdvice, generateVocabularyExample, generateNewVocabulary } from "./lib/openai";
 import { updateWeatherCache } from "./lib/weather";
 import { regions } from "../client/src/data/regions";
@@ -365,11 +365,80 @@ export async function registerRoutes(
     const { chatId } = req.params;
     try {
       await sendDailyNewsToChannel(chatId);
-      // Only update lastSentAt if sending actually succeeded
       await storage.updateNewsChannelLastSent(chatId);
       res.json({ ok: true });
     } catch (error: any) {
       console.error(`send-now error for ${chatId}:`, error.message);
+      res.status(500).json({ ok: false, error: error.message || "Yuborishda xatolik" });
+    }
+  });
+
+  // ─── Listening channels API ───────────────────────────────────────────────────
+
+  app.get("/api/listening-channels", async (req, res) => {
+    try {
+      const list = await storage.getListeningChannels();
+      res.json(list);
+    } catch (error) {
+      res.status(500).json({ error: "Failed to fetch listening channels" });
+    }
+  });
+
+  app.post("/api/listening-channels", async (req, res) => {
+    try {
+      const { chatId, title, scheduledTime } = req.body;
+      const channel = await storage.addListeningChannel({
+        chatId,
+        title: title || chatId,
+        enabled: true,
+        scheduledTime: scheduledTime || "10:00",
+        currentLevel: "A1A2",
+      });
+      res.json(channel);
+    } catch (error: any) {
+      res.status(500).json({ error: error.message || "Failed to add listening channel" });
+    }
+  });
+
+  app.delete("/api/listening-channels/:chatId", async (req, res) => {
+    try {
+      const { chatId } = req.params;
+      await storage.removeListeningChannel(chatId);
+      res.json({ ok: true });
+    } catch (error) {
+      res.status(500).json({ error: "Failed to remove listening channel" });
+    }
+  });
+
+  app.patch("/api/listening-channels/:chatId", async (req, res) => {
+    try {
+      const { chatId } = req.params;
+      const { enabled } = req.body;
+      const channel = await storage.toggleListeningChannel(chatId, enabled);
+      res.json(channel);
+    } catch (error) {
+      res.status(500).json({ error: "Failed to toggle listening channel" });
+    }
+  });
+
+  app.patch("/api/listening-channels/:chatId/schedule", async (req, res) => {
+    try {
+      const { chatId } = req.params;
+      const { scheduledTime } = req.body;
+      const channel = await storage.updateListeningChannelSchedule(chatId, scheduledTime);
+      res.json(channel);
+    } catch (error) {
+      res.status(500).json({ error: "Failed to update listening schedule" });
+    }
+  });
+
+  app.post("/api/listening-channels/:chatId/send-now", async (req, res) => {
+    const { chatId } = req.params;
+    try {
+      await sendDailyListeningToChannel(chatId);
+      res.json({ ok: true });
+    } catch (error: any) {
+      console.error(`listening send-now error for ${chatId}:`, error.message);
       res.status(500).json({ ok: false, error: error.message || "Yuborishda xatolik" });
     }
   });

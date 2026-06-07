@@ -1,6 +1,7 @@
 import { storage } from "../storage";
 import { generateWeatherAdvice } from "./openai";
 import { generateDailyNews, generateNewsImage, generateNewsQuiz, formatPhotoCaption, formatNewsText, formatNewsCaption, formatVocabMessage } from "./news";
+import { generateListeningPassage, generateListeningQuizzes, textToSpeechArabic, type ListeningLevel } from "./listening";
 
 function getAppBaseUrl(): string {
   if (process.env.APP_URL) {
@@ -573,6 +574,148 @@ export async function sendDailyNewsToChannel(channelId: string): Promise<void> {
   } catch (quizErr: any) {
     console.warn("Quiz send failed (non-fatal):", quizErr?.message || quizErr);
   }
+}
+
+// ─── Listening Channel Sender ──────────────────────────────────────────────────
+
+function getListeningDateString(): string {
+  const t = new Date();
+  const uzTime = new Date(t.getTime() + 5 * 60 * 60 * 1000);
+  const day = uzTime.getUTCDate();
+  const year = uzTime.getUTCFullYear();
+  const monthsUz = ["Yanvar","Fevral","Mart","Aprel","May","Iyun","Iyul","Avgust","Sentabr","Oktabr","Noyabr","Dekabr"];
+  return `${day} ${monthsUz[uzTime.getUTCMonth()]} ${year}`;
+}
+
+async function sendTelegramAudio(chatId: string, audioBuffer: Buffer, caption: string): Promise<void> {
+  if (!BOT_TOKEN) throw new Error("TELEGRAM_BOT_TOKEN not set");
+  const form = new FormData();
+  form.append("chat_id", chatId);
+  form.append("caption", caption);
+  form.append("parse_mode", "HTML");
+  form.append("audio", new Blob([audioBuffer], { type: "audio/mpeg" }), "listening.mp3");
+
+  const response = await fetch(`https://api.telegram.org/bot${BOT_TOKEN}/sendAudio`, {
+    method: "POST",
+    body: form,
+  });
+  const data = await response.json() as any;
+  if (!data.ok) throw new Error(`Telegram sendAudio failed: ${data.description}`);
+}
+
+function shuffleQuizOptions(quiz: { question: string; options: [string,string,string,string]; correctIndex: 0|1|2|3; explanation: string }) {
+  const indexed = quiz.options.map((opt, i) => ({ opt, correct: i === quiz.correctIndex }));
+  for (let i = indexed.length - 1; i > 0; i--) {
+    const j = Math.floor(Math.random() * (i + 1));
+    [indexed[i], indexed[j]] = [indexed[j], indexed[i]];
+  }
+  return {
+    options: indexed.map(x => x.opt) as [string,string,string,string],
+    correctIndex: indexed.findIndex(x => x.correct) as 0|1|2|3,
+  };
+}
+
+export async function sendDailyListeningToChannel(channelId: string): Promise<void> {
+  console.log(`Generating listening content for ${channelId}...`);
+
+  // Get channel to determine current level
+  const channels = await storage.getListeningChannels();
+  const ch = channels.find(c => c.chatId === channelId);
+  const level: ListeningLevel = (ch?.currentLevel === "B1B2") ? "B1B2" : "A1A2";
+  const levelLabel = level === "A1A2" ? "🟢 A1/A2 — Boshlang'ich" : "🔵 B1/B2 — O'rta daraja";
+  const nextLevel: ListeningLevel = level === "A1A2" ? "B1B2" : "A1A2";
+
+  // Generate passage
+  const passage = await generateListeningPassage(level);
+  if (!passage) throw new Error("Listening passage generation failed");
+
+  const date = getListeningDateString();
+  const audioCaption = `🎧 <b>Tinglash Testi | اخْتِبَارُ الاسْتِمَاع</b>
+📅 ${date}
+${levelLabel}
+🏷 <b>${passage.topicUz}</b> | ${passage.topicAr}
+
+🎵 <i>Audioga quloq soling, so'ng savollarga javob bering!</i>
+⬇️ Quyidagi testlarga javob bering`;
+
+  // 1. Generate audio (ElevenLabs)
+  const audioBuffer = await textToSpeechArabic(passage.arabicText);
+
+  // 2. Send audio (or text fallback if TTS failed)
+  if (audioBuffer) {
+    try {
+      await sendTelegramAudio(channelId, audioBuffer, audioCaption);
+      console.log(`✓ Listening audio sent to ${channelId}`);
+    } catch (audioErr: any) {
+      console.warn("Audio send failed, sending text fallback:", audioErr?.message);
+      await sendTelegramMessage(channelId, audioCaption, "HTML");
+    }
+  } else {
+    // No audio — send the text as fallback so quizzes still work
+    const textCaption = audioCaption + `\n\n📄 <b>Matn:</b>\n${passage.arabicText}`;
+    await sendTelegramMessage(channelId, textCaption, "HTML");
+    console.log(`✓ Listening text fallback sent to ${channelId} (TTS unavailable)`);
+  }
+
+  // 3. Generate quizzes
+  await new Promise(r => setTimeout(r, 2000));
+  const quizzes = await generateListeningQuizzes(passage, level);
+
+  // 4. Send each quiz poll
+  for (let i = 0; i < quizzes.length; i++) {
+    const quiz = quizzes[i];
+    const { options, correctIndex } = shuffleQuizOptions(quiz);
+    try {
+      await sendTelegramQuiz(
+        channelId,
+        `🧠 ${quiz.question}`,
+        options,
+        correctIndex,
+        quiz.explanation
+      );
+      console.log(`✓ Listening quiz ${i + 1}/${quizzes.length} sent to ${channelId}`);
+    } catch (qErr: any) {
+      console.warn(`Quiz ${i + 1} send failed:`, qErr?.message);
+    }
+    if (i < quizzes.length - 1) await new Promise(r => setTimeout(r, 1000));
+  }
+
+  // 5. Toggle level and update lastSentAt
+  await storage.updateListeningChannelAfterSend(channelId, nextLevel);
+  console.log(`✓ Listening done for ${channelId}, next level: ${nextLevel}`);
+}
+
+export async function startListeningScheduler() {
+  setInterval(async () => {
+    try {
+      const channels = await storage.getEnabledListeningChannels();
+      if (channels.length === 0) return;
+
+      const now = new Date();
+      const uzTime = new Date(now.getTime() + 5 * 60 * 60 * 1000);
+      const currentHour = uzTime.getUTCHours();
+      const currentMinute = uzTime.getUTCMinutes();
+      const today = uzTime.toDateString();
+
+      for (const channel of channels) {
+        const scheduledTime = channel.scheduledTime || "10:00";
+        const [targetHour, targetMinute] = scheduledTime.split(":").map(Number);
+        if (currentHour === targetHour && currentMinute === targetMinute) {
+          const lastSent = channel.lastSentAt;
+          if (!lastSent || new Date(lastSent).toDateString() !== today) {
+            try {
+              await sendDailyListeningToChannel(channel.chatId);
+              console.log(`Daily listening sent to ${channel.title || channel.chatId}`);
+            } catch (err: any) {
+              console.error(`Listening scheduler error for ${channel.chatId}:`, err?.message);
+            }
+          }
+        }
+      }
+    } catch (error) {
+      console.error("Error in listening scheduler:", error);
+    }
+  }, 60000);
 }
 
 export async function startDailyNewsScheduler() {

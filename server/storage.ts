@@ -1,6 +1,6 @@
 import { db } from "./db";
-import { users, weatherCache, userProgress, botSettings, channels, newsChannels } from "@shared/schema";
-import type { User, InsertUser, WeatherCache, InsertWeatherCache, UserProgress, InsertUserProgress, BotSettings, InsertBotSettings, Channel, InsertChannel, NewsChannel, InsertNewsChannel } from "@shared/schema";
+import { users, weatherCache, userProgress, botSettings, channels, newsChannels, listeningChannels } from "@shared/schema";
+import type { User, InsertUser, WeatherCache, InsertWeatherCache, UserProgress, InsertUserProgress, BotSettings, InsertBotSettings, Channel, InsertChannel, NewsChannel, InsertNewsChannel, ListeningChannel, InsertListeningChannel } from "@shared/schema";
 import { eq } from "drizzle-orm";
 
 export interface IStorage {
@@ -40,6 +40,15 @@ export interface IStorage {
   toggleNewsChannel(chatId: string, enabled: boolean): Promise<NewsChannel | undefined>;
   updateNewsChannelSchedule(chatId: string, scheduledTime: string): Promise<NewsChannel | undefined>;
   updateNewsChannelLastSent(chatId: string): Promise<void>;
+
+  // Listening channel methods
+  getListeningChannels(): Promise<ListeningChannel[]>;
+  getEnabledListeningChannels(): Promise<ListeningChannel[]>;
+  addListeningChannel(channel: InsertListeningChannel): Promise<ListeningChannel>;
+  removeListeningChannel(chatId: string): Promise<void>;
+  toggleListeningChannel(chatId: string, enabled: boolean): Promise<ListeningChannel | undefined>;
+  updateListeningChannelSchedule(chatId: string, scheduledTime: string): Promise<ListeningChannel | undefined>;
+  updateListeningChannelAfterSend(chatId: string, nextLevel: string): Promise<void>;
 }
 
 export class DatabaseStorage implements IStorage {
@@ -211,6 +220,48 @@ export class DatabaseStorage implements IStorage {
       .update(newsChannels)
       .set({ lastSentAt: new Date() })
       .where(eq(newsChannels.chatId, chatId));
+  }
+
+  async getListeningChannels(): Promise<ListeningChannel[]> {
+    return await db.select().from(listeningChannels);
+  }
+
+  async getEnabledListeningChannels(): Promise<ListeningChannel[]> {
+    return await db.select().from(listeningChannels).where(eq(listeningChannels.enabled, true));
+  }
+
+  async addListeningChannel(channel: InsertListeningChannel): Promise<ListeningChannel> {
+    const [inserted] = await db.insert(listeningChannels).values(channel).returning();
+    return inserted;
+  }
+
+  async removeListeningChannel(chatId: string): Promise<void> {
+    await db.delete(listeningChannels).where(eq(listeningChannels.chatId, chatId));
+  }
+
+  async toggleListeningChannel(chatId: string, enabled: boolean): Promise<ListeningChannel | undefined> {
+    const [updated] = await db
+      .update(listeningChannels)
+      .set({ enabled })
+      .where(eq(listeningChannels.chatId, chatId))
+      .returning();
+    return updated;
+  }
+
+  async updateListeningChannelSchedule(chatId: string, scheduledTime: string): Promise<ListeningChannel | undefined> {
+    const [updated] = await db
+      .update(listeningChannels)
+      .set({ scheduledTime })
+      .where(eq(listeningChannels.chatId, chatId))
+      .returning();
+    return updated;
+  }
+
+  async updateListeningChannelAfterSend(chatId: string, nextLevel: string): Promise<void> {
+    await db
+      .update(listeningChannels)
+      .set({ lastSentAt: new Date(), currentLevel: nextLevel })
+      .where(eq(listeningChannels.chatId, chatId));
   }
 }
 

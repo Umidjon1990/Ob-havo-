@@ -291,6 +291,87 @@ export async function sendNewsNow(chatId: string): Promise<{ ok: boolean; error?
   }
 }
 
+// ─── Listening Channels ───────────────────────────────────────────────────────
+
+export interface ListeningChannel {
+  id: string;
+  chatId: string;
+  title: string | null;
+  enabled: boolean | null;
+  scheduledTime: string | null;
+  lastSentAt: string | null;
+  currentLevel: string | null;
+  createdAt: string | null;
+}
+
+export async function getListeningChannels(): Promise<ListeningChannel[]> {
+  try {
+    const response = await fetch('/api/listening-channels');
+    return await response.json();
+  } catch (error) {
+    return [];
+  }
+}
+
+export async function addListeningChannel(chatId: string, title: string, scheduledTime: string): Promise<ListeningChannel | null> {
+  try {
+    const response = await fetch('/api/listening-channels', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ chatId, title, scheduledTime }),
+    });
+    return await response.json();
+  } catch (error) {
+    return null;
+  }
+}
+
+export async function removeListeningChannel(chatId: string): Promise<boolean> {
+  try {
+    const response = await fetch(`/api/listening-channels/${encodeURIComponent(chatId)}`, { method: 'DELETE' });
+    return response.ok;
+  } catch (error) {
+    return false;
+  }
+}
+
+export async function toggleListeningChannel(chatId: string, enabled: boolean): Promise<ListeningChannel | null> {
+  try {
+    const response = await fetch(`/api/listening-channels/${encodeURIComponent(chatId)}`, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ enabled }),
+    });
+    return await response.json();
+  } catch (error) {
+    return null;
+  }
+}
+
+export async function updateListeningChannelSchedule(chatId: string, scheduledTime: string): Promise<ListeningChannel | null> {
+  try {
+    const response = await fetch(`/api/listening-channels/${encodeURIComponent(chatId)}/schedule`, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ scheduledTime }),
+    });
+    return response.ok ? await response.json() : null;
+  } catch (error) {
+    return null;
+  }
+}
+
+export async function sendListeningNow(chatId: string): Promise<{ ok: boolean; error?: string }> {
+  try {
+    const response = await fetch(`/api/listening-channels/${encodeURIComponent(chatId)}/send-now`, { method: 'POST' });
+    const data = await response.json();
+    if (response.ok) return { ok: true };
+    return { ok: false, error: data.error || 'Yuborishda xatolik' };
+  } catch (error) {
+    return { ok: false, error: 'Tarmoq xatosi' };
+  }
+}
+
 // Admin authentication
 export async function adminLogin(username: string, password: string): Promise<{ success: boolean; token?: string; error?: string }> {
   try {

@@ -1,5 +1,5 @@
 import { useState, useEffect } from "react";
-import { ArrowLeft, Save, RefreshCw, Send, Radio, Plus, Trash2, Users, Cloud, LogOut, Lock, Newspaper } from "lucide-react";
+import { ArrowLeft, Save, RefreshCw, Send, Radio, Plus, Trash2, Users, Cloud, LogOut, Lock, Newspaper, Headphones } from "lucide-react";
 import { Link } from "wouter";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -7,7 +7,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { useToast } from "@/hooks/use-toast";
 import { Switch } from "@/components/ui/switch";
-import { setupTelegramWebhook, getBotSettings, updateBotSettings, testChannelMessage, getChannels, addChannel, removeChannel, toggleChannel, updateChannelSchedule, refreshWeatherData, generateNewVocabulary, adminLogin, verifyAdminToken, adminLogout, getNewsChannels, addNewsChannel, removeNewsChannel, toggleNewsChannel, updateNewsChannelSchedule, sendNewsNow, type Channel, type NewsChannel, type GeneratedWord } from "@/lib/api";
+import { setupTelegramWebhook, getBotSettings, updateBotSettings, testChannelMessage, getChannels, addChannel, removeChannel, toggleChannel, updateChannelSchedule, refreshWeatherData, generateNewVocabulary, adminLogin, verifyAdminToken, adminLogout, getNewsChannels, addNewsChannel, removeNewsChannel, toggleNewsChannel, updateNewsChannelSchedule, sendNewsNow, getListeningChannels, addListeningChannel, removeListeningChannel, toggleListeningChannel, updateListeningChannelSchedule, sendListeningNow, type Channel, type NewsChannel, type ListeningChannel, type GeneratedWord } from "@/lib/api";
 import { regions } from "@/data/regions";
 
 export default function Admin() {
@@ -49,6 +49,12 @@ export default function Admin() {
   const [newNewsChannelTitle, setNewNewsChannelTitle] = useState("");
   const [sendingNewsNow, setSendingNewsNow] = useState<string | null>(null);
 
+  const [listeningChannelsList, setListeningChannelsList] = useState<ListeningChannel[]>([]);
+  const [newListeningChannelId, setNewListeningChannelId] = useState("");
+  const [newListeningChannelTitle, setNewListeningChannelTitle] = useState("");
+  const [newListeningTime, setNewListeningTime] = useState("10:00");
+  const [sendingListeningNow, setSendingListeningNow] = useState<string | null>(null);
+
   // Check auth on load
   useEffect(() => {
     const token = localStorage.getItem("admin_token");
@@ -74,11 +80,68 @@ export default function Admin() {
     });
     loadChannels();
     loadNewsChannels();
+    loadListeningChannels();
   };
 
   const loadNewsChannels = async () => {
     const list = await getNewsChannels();
     setNewsChannelsList(list);
+  };
+
+  const loadListeningChannels = async () => {
+    const list = await getListeningChannels();
+    setListeningChannelsList(list);
+  };
+
+  const handleAddListeningChannel = async () => {
+    if (!newListeningChannelId) {
+      toast({ title: "Xatolik", description: "Kanal ID kiriting", variant: "destructive" });
+      return;
+    }
+    const channel = await addListeningChannel(newListeningChannelId, newListeningChannelTitle || newListeningChannelId, newListeningTime);
+    if (channel) {
+      toast({ title: "Qo'shildi!", description: "Tinglash kanali qo'shildi" });
+      setNewListeningChannelId("");
+      setNewListeningChannelTitle("");
+      setNewListeningTime("10:00");
+      loadListeningChannels();
+    } else {
+      toast({ title: "Xatolik", description: "Qo'shishda muammo", variant: "destructive" });
+    }
+  };
+
+  const handleRemoveListeningChannel = async (chatId: string) => {
+    const success = await removeListeningChannel(chatId);
+    if (success) {
+      toast({ title: "O'chirildi!" });
+      loadListeningChannels();
+    }
+  };
+
+  const handleToggleListeningChannel = async (chatId: string, enabled: boolean) => {
+    await toggleListeningChannel(chatId, enabled);
+    loadListeningChannels();
+  };
+
+  const handleListeningScheduleChange = async (chatId: string, time: string) => {
+    const result = await updateListeningChannelSchedule(chatId, time);
+    if (result) {
+      toast({ title: "Saqlandi!", description: `Tinglash vaqti: ${time}` });
+      loadListeningChannels();
+    }
+  };
+
+  const handleSendListeningNow = async (chatId: string) => {
+    setSendingListeningNow(chatId);
+    toast({ title: "Generatsiya...", description: "AI matn yozyapti va audio yaratyapti (1-2 daqiqa)" });
+    const result = await sendListeningNow(chatId);
+    if (result.ok) {
+      toast({ title: "Yuborildi!", description: "Tinglash testi va quiz kanalga yuborildi." });
+      loadListeningChannels();
+    } else {
+      toast({ title: "Xatolik", description: result.error || "Yuborishda muammo.", variant: "destructive" });
+    }
+    setSendingListeningNow(null);
   };
 
   const handleAddNewsChannel = async () => {
@@ -781,6 +844,133 @@ export default function Admin() {
               <div className="text-center py-6 text-muted-foreground">
                 <Newspaper className="w-10 h-10 mx-auto mb-2 opacity-50" />
                 <p className="text-sm">Hali yangiliklar kanali qo'shilmagan</p>
+              </div>
+            )}
+          </CardContent>
+        </Card>
+
+        {/* Listening Channels */}
+        <Card className="glass-panel border-white/20">
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2">
+              <Headphones className="w-5 h-5" /> Tinglash Testi Kanali
+            </CardTitle>
+            <p className="text-xs text-muted-foreground mt-1">
+              Har kuni arabcha audio (ElevenLabs) + 3 ta IELTS uslubidagi anonim quiz. Daraja kunma-kun almashadi: A1/A2 ↔ B1/B2.
+            </p>
+          </CardHeader>
+          <CardContent className="space-y-4">
+            <div className="bg-purple-50 border border-purple-200 rounded-lg p-3">
+              <p className="text-xs text-purple-800">
+                🎧 <b>Format:</b> Audio (arabcha matn) → A1/A2 yoki B1/B2 darajasida 3 ta comprehension savoli (quiz poll)
+              </p>
+              <p className="text-xs text-purple-700 mt-1">
+                ⚠️ ElevenLabs API yo'q bo'lsa, matn ko'rinishida yuboriladi (audio o'rniga)
+              </p>
+            </div>
+
+            <div className="space-y-2">
+              <div className="flex gap-2">
+                <Input
+                  value={newListeningChannelId}
+                  onChange={(e) => setNewListeningChannelId(e.target.value)}
+                  placeholder="@tinglash_kanali"
+                  className="flex-1"
+                  data-testid="input-listening-channel-id"
+                />
+              </div>
+              <div className="flex gap-2">
+                <Input
+                  value={newListeningChannelTitle}
+                  onChange={(e) => setNewListeningChannelTitle(e.target.value)}
+                  placeholder="Kanal nomi (ixtiyoriy)"
+                  className="flex-1"
+                />
+                <Input
+                  type="time"
+                  value={newListeningTime}
+                  onChange={(e) => setNewListeningTime(e.target.value)}
+                  className="w-28"
+                />
+                <Button onClick={handleAddListeningChannel} className="gap-2" data-testid="button-add-listening-channel">
+                  <Plus className="w-4 h-4" /> Qo'shish
+                </Button>
+              </div>
+              <p className="text-xs text-muted-foreground">
+                Botni kanalga admin qilib qo'shing, so'ng @username kiriting
+              </p>
+            </div>
+
+            {listeningChannelsList.length > 0 && (
+              <div className="border-t pt-4 space-y-2">
+                <h4 className="text-sm font-medium">Tinglash kanallari ({listeningChannelsList.length})</h4>
+                {listeningChannelsList.map((ch) => (
+                  <div key={ch.id} className="p-3 bg-muted rounded-lg space-y-2" data-testid={`card-listening-channel-${ch.id}`}>
+                    <div className="flex items-center justify-between">
+                      <div className="flex items-center gap-3">
+                        <Switch
+                          checked={ch.enabled ?? true}
+                          onCheckedChange={(enabled) => handleToggleListeningChannel(ch.chatId, enabled)}
+                        />
+                        <div>
+                          <p className="text-sm font-medium">{ch.title || ch.chatId}</p>
+                          <p className="text-xs text-muted-foreground">
+                            {ch.chatId} •{" "}
+                            <span className={ch.currentLevel === "B1B2" ? "text-blue-600 font-medium" : "text-green-600 font-medium"}>
+                              Keyingi: {ch.currentLevel === "B1B2" ? "B1/B2" : "A1/A2"}
+                            </span>
+                          </p>
+                        </div>
+                      </div>
+                      <Button
+                        variant="ghost"
+                        size="icon"
+                        onClick={() => handleRemoveListeningChannel(ch.chatId)}
+                      >
+                        <Trash2 className="w-4 h-4 text-destructive" />
+                      </Button>
+                    </div>
+                    <div className="flex items-center gap-2 pl-10">
+                      <label className="text-xs text-muted-foreground">Vaqt (O'z):</label>
+                      <Input
+                        type="time"
+                        defaultValue={ch.scheduledTime || "10:00"}
+                        onBlur={(e) => {
+                          if (e.target.value !== ch.scheduledTime) {
+                            handleListeningScheduleChange(ch.chatId, e.target.value);
+                          }
+                        }}
+                        className="w-28 h-8 text-sm"
+                      />
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        className="h-8 text-xs"
+                        disabled={sendingListeningNow === ch.chatId}
+                        onClick={() => handleSendListeningNow(ch.chatId)}
+                        data-testid={`button-send-listening-${ch.id}`}
+                      >
+                        {sendingListeningNow === ch.chatId ? (
+                          <><RefreshCw className="w-3 h-3 mr-1 animate-spin" /> Generatsiya...</>
+                        ) : (
+                          <><Send className="w-3 h-3 mr-1" /> Hozir yuborish</>
+                        )}
+                      </Button>
+                    </div>
+                    {ch.lastSentAt && (
+                      <p className="text-xs text-muted-foreground pl-10">
+                        Oxirgi: {new Date(ch.lastSentAt).toLocaleString('uz-UZ')}
+                      </p>
+                    )}
+                  </div>
+                ))}
+              </div>
+            )}
+
+            {listeningChannelsList.length === 0 && (
+              <div className="text-center py-6 text-muted-foreground">
+                <Headphones className="w-10 h-10 mx-auto mb-2 opacity-50" />
+                <p className="text-sm">Hali tinglash kanali qo'shilmagan</p>
               </div>
             )}
           </CardContent>
