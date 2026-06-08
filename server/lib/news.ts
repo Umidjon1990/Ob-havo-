@@ -19,9 +19,8 @@ interface RssItem {
 }
 
 const RSS_SOURCES = [
-  { url: "https://www.aljazeera.net/rss/science.xml", name: "Al Jazeera" },
   { url: "https://feeds.bbci.co.uk/arabic/science_and_technology/rss.xml", name: "BBC Arabic" },
-  { url: "https://www.aljazeera.net/rss/health.xml", name: "Al Jazeera Salomatlik" },
+  { url: "https://www.aljazeera.net/rss/science.xml", name: "Al Jazeera" },
 ];
 
 // Allowed topic areas: education, medicine, history, culture, science, environment
@@ -111,48 +110,57 @@ export async function generateDailyNews(): Promise<DailyNews | null> {
   let contextLine = "";
   let sourceName = "Texnologiya yangiliklari";
 
+  // Invention history topics — always used as the theme
+  const inventionTopics = [
+    { ar: "اختراع الهاتف — غراهام بيل ١٨٧٦", uz: "Telefon ixtirosi — Graham Bell 1876" },
+    { ar: "اختراع الحاسوب الأول — آلان تورينج", uz: "Birinchi kompyuter ixtirosi — Alan Turing" },
+    { ar: "اختراع الإنترنت وكيف غيّر العالم", uz: "Internet ixtirosi va u dunyoni qanday o'zgartirdi" },
+    { ar: "اختراع الطباعة — غوتنبرغ ١٤٤٠", uz: "Bosma mashina ixtirosi — Gutenberg 1440" },
+    { ar: "اختراع الكهرباء — توماس إديسون", uz: "Elektr lampasi ixtirosi — Thomas Edison" },
+    { ar: "اختراع الطيران — أخوان رايت ١٩٠٣", uz: "Uchish ixtirosi — Wright birodarlar 1903" },
+    { ar: "اختراع التلفاز وتأثيره على البشرية", uz: "Televizor ixtirosi va insoniyatga ta'siri" },
+    { ar: "اختراع السيارة — كارل بنز ١٨٨٥", uz: "Avtomobil ixtirosi — Karl Benz 1885" },
+    { ar: "اختراع البنسلين — فليمنج ١٩٢٨", uz: "Penitsillin kashfiyoti — Fleming 1928" },
+    { ar: "اختراع الكاميرا وتاريخ التصوير", uz: "Kamera ixtirosi va fotografiya tarixi" },
+    { ar: "اختراع الساعة وتأثيرها على الحضارة", uz: "Soat ixtirosi va sivilizatsiyaga ta'siri" },
+    { ar: "اختراع البخار والثورة الصناعية", uz: "Bug' mashinasi va sanoat inqilobi" },
+    { ar: "اختراع الورق قديماً في الصين", uz: "Qog'oz ixtirosi — qadimgi Xitoy" },
+    { ar: "اختراع الراديو — ماركوني ١٨٩٥", uz: "Radio ixtirosi — Marconi 1895" },
+    { ar: "اختراع الثلاجة وكيف أنقذت الملايين", uz: "Muzlatgich ixtirosi va u qanday millionlarni qutqargan" },
+    { ar: "اختراع المصعد وكيف غيّر شكل المدن", uz: "Lift ixtirosi va u shaharlar qiyofasini qanday o'zgartirdi" },
+    { ar: "اختراع اللقاحات — جينر وباستور", uz: "Emlash ixtirosi — Jenner va Paster" },
+    { ar: "اختراع الليزر وتطبيقاته الحديثة", uz: "Lazer ixtirosi va zamonaviy qo'llanilishi" },
+    { ar: "اختراع الهاتف الذكي وكيف بدأت القصة", uz: "Smartfon ixtirosi — qissa qanday boshlandi" },
+    { ar: "اختراع الغواصة وتاريخ السفر تحت الماء", uz: "Suv osti kemasi ixtirosi tarixi" },
+  ];
+  const inv = inventionTopics[Math.floor(Math.random() * inventionTopics.length)];
+
   if (rss) {
-    contextLine = `الخبر الأصلي: "${rss.title}"\nالتفاصيل: "${rss.description}"`;
+    // Use RSS as additional context but keep invention theme as primary
+    contextLine = `الاختراع المحوري: ${inv.ar}\nمعلومة إضافية من الأخبار: "${rss.title}"`;
     sourceName = rss.source;
   } else {
-    // Fallback: educational / medical / historical topics
-    const topics = [
-      { ar: "التَّعْلِيم وَطُرُق التَّدْرِيس الحَدِيثَة", uz: "Zamonaviy ta'lim usullari" },
-      { ar: "الطِّب وَالصِّحَّة الإِنْسَانِيَّة", uz: "Tibbiyot va inson salomatligi" },
-      { ar: "تَارِيخ الحَضَارَة الإِسْلَامِيَّة", uz: "Islom sivilizatsiyasi tarixi" },
-      { ar: "الاكْتِشَافَات العِلْمِيَّة فِي عِلْم الأَحْيَاء", uz: "Biologiyadagi kashfiyotlar" },
-      { ar: "الفَلَك وَاسْتِكْشَاف الفَضَاء", uz: "Astronomiya va kosmosni o'rganish" },
-      { ar: "تَارِيخ اللُّغَة العَرَبِيَّة وَتَطَوُّرُهَا", uz: "Arab tili tarixi va rivojlanishi" },
-      { ar: "الطَّاقَة المُتَجَدِّدَة وَالبِيئَة", uz: "Qayta tiklanadigan energiya va atrof-muhit" },
-      { ar: "عِلْم النَّفْس وَالسُّلُوك البَشَرِي", uz: "Psixologiya va inson xulq-atvori" },
-      { ar: "التَّغَذِيَة وَالصِّحَّة العَامَّة", uz: "Ovqatlanish va umumiy salomatlik" },
-      { ar: "الرِّيَاضِيَّات وَتَطْبِيقَاتُهَا الحَدِيثَة", uz: "Matematika va uning zamonaviy qo'llanilishi" },
-      { ar: "تَارِيخ الطِّب عِنْدَ العَرَب", uz: "Arablarda tibbiyot tarixi" },
-      { ar: "عِلْم الوِرَاثَة وَالجِينَات", uz: "Genetika va irsiyat ilmi" },
-    ];
-    const t = topics[Math.floor(Math.random() * topics.length)];
-    contextLine = `الموضوع: ${t.ar}`;
-    sourceName = "Ta'lim va fan";
+    contextLine = `الاختراع: ${inv.ar}`;
+    sourceName = "Ixtirolar tarixi";
   }
 
-  const prompt = `أنت كاتب محتوى تعليمي متخصص في "هل تعلم؟" للطلاب. مهمتك كتابة حقيقة مذهلة ومفاجئة تجعل القارئ يقول "واو، لم أكن أعلم هذا!".
+  const prompt = `أنت كاتب محتوى تعليمي متخصص في تاريخ الاختراعات للطلاب. مهمتك كتابة قصة مذهلة عن اختراع يجعل القارئ يقول "واو، لم أكن أعلم هذا!".
 
-الموضوع المقترح: ${contextLine}
+الاختراع: ${contextLine}
 
 المطلوب منك:
-1. اكتب حقيقة مذهلة ومثيرة للدهشة بالعربية الفصحى مع الحركات الكاملة (التشكيل).
+1. اكتب فقرة قصيرة ومثيرة بالعربية الفصحى مع الحركات الكاملة (التشكيل) عن هذا الاختراع.
    - الطول: 50-70 كلمة تحديداً (لا أقل ولا أكثر)
-   - الأسلوب: مفاجئ، يثير الفضول، يجعل الطالب يرغب في مشاركته مع أصدقائه
+   - يجب أن تتضمن: سنة الاختراع، اسم المخترع، حقيقة مفاجئة لا يعرفها الناس
+   - الأسلوب: قصصي مثير، يثير الدهشة، يجعل الطالب يرغب في مشاركته مع أصدقائه
    - أمثلة على النوع المطلوب:
-     * "الدماغ البشري يخزن ما يعادل 2.5 مليون غيغابايت من المعلومات"
-     * "النوم لمدة 7 ساعات يزيد من قدرة الحفظ بنسبة 40%"
-     * "العسل لا يفسد أبداً — وُجد عسل في أهرامات مصر عمره 3000 سنة وكان صالحاً للأكل"
-     * "الأخطبوط لديه ثلاثة قلوب وجلده يمكنه التحدث"
-   - المحتوى المسموح: علوم، طب، تاريخ حضارات، عقل بشري، طبيعة، فضاء، لغة، حيوانات
-   - ⚠️ ممنوع تماماً: سياسة، دين طائفي، رياضة، أخبار جارية، شخصيات مشهورة
+     * "اخْتَرَعَ غراهام بيل الهاتف عام ١٨٧٦، لكن أول كلمة نطق بها كانت طلب استغاثة لمساعده لأنه سكب الحامض على ملابسه!"
+     * "صمَّم تشارلز بابيج أول حاسوب في التاريخ عام ١٨٣٧، لكنه لم يكتمل بناؤه إلا بعد مئة وخمسين عاماً من وفاته!"
+     * "اخترع إديسون المصباح الكهربائي بعد ألف محاولة فاشلة — وحين سُئل عن فشله قال: لم أفشل، بل اكتشفت ألف طريقة لا تعمل!"
+   - ⚠️ ممنوع تماماً: سياسة، دين طائفي، رياضة
 2. اكتب ترجمة كاملة ودقيقة إلى الأوزبكية — كل جملة عربية تُترجم بدقة، لا تختصر ولا تضف
 3. اختر 10 مفردات مهمة من النص مع معناها بالأوزبكية (بحركات كاملة)
-4. أعطِ وصفاً بالإنجليزية لصورة جميلة ومثيرة تعبر عن الحقيقة (بدون نص في الصورة)
+4. أعطِ وصفاً بالإنجليزية لصورة فنية جميلة تعبر عن الاختراع في سياقه التاريخي (بدون نص في الصورة)
 5. حدد الموضوع باختصار بالعربية والأوزبكية
 
 أجب بـ JSON فقط:
