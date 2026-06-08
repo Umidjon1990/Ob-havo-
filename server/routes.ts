@@ -1,7 +1,7 @@
 import type { Express } from "express";
 import { createServer, type Server } from "http";
 import { storage } from "./storage";
-import { handleTelegramUpdate, sendTelegramMessage, setTelegramWebhook, sendDailyNewsToChannel, sendDailyListeningToChannel } from "./lib/telegram";
+import { handleTelegramUpdate, sendTelegramMessage, setTelegramWebhook, sendDailyNewsToChannel, sendDailyListeningToChannel, sendDailyReadingToChannel } from "./lib/telegram";
 import { generateWeatherAdvice, generateVocabularyExample, generateNewVocabulary } from "./lib/openai";
 import { updateWeatherCache } from "./lib/weather";
 import { regions } from "../client/src/data/regions";
@@ -453,6 +453,90 @@ export async function registerRoutes(
       res.json({ ok: true });
     } catch (error: any) {
       console.error(`listening send-now error for ${chatId}:`, error.message);
+      res.status(500).json({ ok: false, error: error.message || "Yuborishda xatolik" });
+    }
+  });
+
+  // ─── Reading channels API ─────────────────────────────────────────────────────
+
+  app.get("/api/reading-channels", async (req, res) => {
+    try {
+      const list = await storage.getReadingChannels();
+      res.json(list);
+    } catch (error) {
+      res.status(500).json({ error: "Failed to fetch reading channels" });
+    }
+  });
+
+  app.post("/api/reading-channels", async (req, res) => {
+    try {
+      const { chatId, title, scheduledTime } = req.body;
+      const channel = await storage.addReadingChannel({
+        chatId,
+        title: title || chatId,
+        enabled: true,
+        scheduledTime: scheduledTime || "11:00",
+        currentLevel: "A1A2",
+      });
+      res.json(channel);
+    } catch (error: any) {
+      res.status(500).json({ error: error.message || "Failed to add reading channel" });
+    }
+  });
+
+  app.delete("/api/reading-channels/:chatId", async (req, res) => {
+    try {
+      const { chatId } = req.params;
+      await storage.removeReadingChannel(chatId);
+      res.json({ ok: true });
+    } catch (error) {
+      res.status(500).json({ error: "Failed to remove reading channel" });
+    }
+  });
+
+  app.patch("/api/reading-channels/:chatId", async (req, res) => {
+    try {
+      const { chatId } = req.params;
+      const { enabled } = req.body;
+      const channel = await storage.toggleReadingChannel(chatId, enabled);
+      res.json(channel);
+    } catch (error) {
+      res.status(500).json({ error: "Failed to toggle reading channel" });
+    }
+  });
+
+  app.patch("/api/reading-channels/:chatId/level", async (req, res) => {
+    try {
+      const { chatId } = req.params;
+      const { level } = req.body;
+      if (level !== "A1A2" && level !== "B1B2") {
+        return res.status(400).json({ error: "level must be A1A2 or B1B2" });
+      }
+      const channel = await storage.updateReadingChannelLevel(chatId, level);
+      res.json(channel);
+    } catch (error) {
+      res.status(500).json({ error: "Failed to update reading level" });
+    }
+  });
+
+  app.patch("/api/reading-channels/:chatId/schedule", async (req, res) => {
+    try {
+      const { chatId } = req.params;
+      const { scheduledTime } = req.body;
+      const channel = await storage.updateReadingChannelSchedule(chatId, scheduledTime);
+      res.json(channel);
+    } catch (error) {
+      res.status(500).json({ error: "Failed to update reading schedule" });
+    }
+  });
+
+  app.post("/api/reading-channels/:chatId/send-now", async (req, res) => {
+    const { chatId } = req.params;
+    try {
+      await sendDailyReadingToChannel(chatId);
+      res.json({ ok: true });
+    } catch (error: any) {
+      console.error(`reading send-now error for ${chatId}:`, error.message);
       res.status(500).json({ ok: false, error: error.message || "Yuborishda xatolik" });
     }
   });

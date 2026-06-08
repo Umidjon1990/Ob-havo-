@@ -1,5 +1,5 @@
 import { useState, useEffect } from "react";
-import { ArrowLeft, Save, RefreshCw, Send, Radio, Plus, Trash2, Users, Cloud, LogOut, Lock, Newspaper, Headphones } from "lucide-react";
+import { ArrowLeft, Save, RefreshCw, Send, Radio, Plus, Trash2, Users, Cloud, LogOut, Lock, Newspaper, Headphones, BookOpen } from "lucide-react";
 import { Link } from "wouter";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -7,7 +7,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { useToast } from "@/hooks/use-toast";
 import { Switch } from "@/components/ui/switch";
-import { setupTelegramWebhook, getBotSettings, updateBotSettings, testChannelMessage, getChannels, addChannel, removeChannel, toggleChannel, updateChannelSchedule, refreshWeatherData, generateNewVocabulary, adminLogin, verifyAdminToken, adminLogout, getNewsChannels, addNewsChannel, removeNewsChannel, toggleNewsChannel, updateNewsChannelSchedule, sendNewsNow, getListeningChannels, addListeningChannel, removeListeningChannel, toggleListeningChannel, updateListeningChannelSchedule, updateListeningChannelLevel, sendListeningNow, type Channel, type NewsChannel, type ListeningChannel, type GeneratedWord } from "@/lib/api";
+import { setupTelegramWebhook, getBotSettings, updateBotSettings, testChannelMessage, getChannels, addChannel, removeChannel, toggleChannel, updateChannelSchedule, refreshWeatherData, generateNewVocabulary, adminLogin, verifyAdminToken, adminLogout, getNewsChannels, addNewsChannel, removeNewsChannel, toggleNewsChannel, updateNewsChannelSchedule, sendNewsNow, getListeningChannels, addListeningChannel, removeListeningChannel, toggleListeningChannel, updateListeningChannelSchedule, updateListeningChannelLevel, sendListeningNow, getReadingChannels, addReadingChannel, removeReadingChannel, toggleReadingChannel, updateReadingChannelSchedule, updateReadingChannelLevel, sendReadingNow, type Channel, type NewsChannel, type ListeningChannel, type ReadingChannel, type GeneratedWord } from "@/lib/api";
 import { regions } from "@/data/regions";
 
 export default function Admin() {
@@ -55,6 +55,12 @@ export default function Admin() {
   const [newListeningTime, setNewListeningTime] = useState("10:00");
   const [sendingListeningNow, setSendingListeningNow] = useState<string | null>(null);
 
+  const [readingChannelsList, setReadingChannelsList] = useState<ReadingChannel[]>([]);
+  const [newReadingChannelId, setNewReadingChannelId] = useState("");
+  const [newReadingChannelTitle, setNewReadingChannelTitle] = useState("");
+  const [newReadingTime, setNewReadingTime] = useState("11:00");
+  const [sendingReadingNow, setSendingReadingNow] = useState<string | null>(null);
+
   // Check auth on load
   useEffect(() => {
     const token = localStorage.getItem("admin_token");
@@ -81,6 +87,7 @@ export default function Admin() {
     loadChannels();
     loadNewsChannels();
     loadListeningChannels();
+    loadReadingChannels();
   };
 
   const loadNewsChannels = async () => {
@@ -91,6 +98,70 @@ export default function Admin() {
   const loadListeningChannels = async () => {
     const list = await getListeningChannels();
     setListeningChannelsList(list);
+  };
+
+  const loadReadingChannels = async () => {
+    const list = await getReadingChannels();
+    setReadingChannelsList(list);
+  };
+
+  const handleAddReadingChannel = async () => {
+    if (!newReadingChannelId) {
+      toast({ title: "Xatolik", description: "Kanal ID kiriting", variant: "destructive" });
+      return;
+    }
+    const channel = await addReadingChannel(newReadingChannelId, newReadingChannelTitle || newReadingChannelId, newReadingTime);
+    if (channel) {
+      toast({ title: "Qo'shildi!", description: "O'qib tushunish kanali qo'shildi" });
+      setNewReadingChannelId("");
+      setNewReadingChannelTitle("");
+      setNewReadingTime("11:00");
+      loadReadingChannels();
+    } else {
+      toast({ title: "Xatolik", description: "Qo'shishda muammo", variant: "destructive" });
+    }
+  };
+
+  const handleRemoveReadingChannel = async (chatId: string) => {
+    const success = await removeReadingChannel(chatId);
+    if (success) {
+      toast({ title: "O'chirildi!" });
+      loadReadingChannels();
+    }
+  };
+
+  const handleToggleReadingChannel = async (chatId: string, enabled: boolean) => {
+    await toggleReadingChannel(chatId, enabled);
+    loadReadingChannels();
+  };
+
+  const handleReadingScheduleChange = async (chatId: string, time: string) => {
+    const result = await updateReadingChannelSchedule(chatId, time);
+    if (result) {
+      toast({ title: "Saqlandi!", description: `O'qib tushunish vaqti: ${time}` });
+      loadReadingChannels();
+    }
+  };
+
+  const handleReadingLevelChange = async (chatId: string, level: "A1A2" | "B1B2") => {
+    const result = await updateReadingChannelLevel(chatId, level);
+    if (result) {
+      toast({ title: "Daraja o'zgartirildi!", description: `${level === "A1A2" ? "A1/A2 — Boshlang'ich" : "B1/B2 — O'rta daraja"}` });
+      loadReadingChannels();
+    }
+  };
+
+  const handleSendReadingNow = async (chatId: string) => {
+    setSendingReadingNow(chatId);
+    toast({ title: "Generatsiya...", description: "AI matn yaratyapti va savollar yozyapti (30-60 soniya)" });
+    const result = await sendReadingNow(chatId);
+    if (result.ok) {
+      toast({ title: "Yuborildi!", description: "O'qib tushunish testi kanalga yuborildi." });
+      loadReadingChannels();
+    } else {
+      toast({ title: "Xatolik", description: result.error || "Yuborishda muammo.", variant: "destructive" });
+    }
+    setSendingReadingNow(null);
   };
 
   const handleAddListeningChannel = async () => {
@@ -989,6 +1060,143 @@ export default function Admin() {
               <div className="text-center py-6 text-muted-foreground">
                 <Headphones className="w-10 h-10 mx-auto mb-2 opacity-50" />
                 <p className="text-sm">Hali tinglash kanali qo'shilmagan</p>
+              </div>
+            )}
+          </CardContent>
+        </Card>
+
+        {/* Reading Channels */}
+        <Card className="glass-panel border-white/20">
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2">
+              <BookOpen className="w-5 h-5" /> O'qib Tushunish Kanali
+            </CardTitle>
+            <p className="text-xs text-muted-foreground mt-1">
+              Har kuni arabcha matn (harakat bilan) + o'zbekcha tarjima + 3 ta IELTS uslubidagi quiz. Daraja kunma-kun almashadi: A1/A2 ↔ B1/B2.
+            </p>
+          </CardHeader>
+          <CardContent className="space-y-4">
+            <div className="bg-emerald-50 border border-emerald-200 rounded-lg p-3">
+              <p className="text-xs text-emerald-800">
+                📖 <b>Format:</b> Intro xabar → Arabcha matn (harakat bilan) + O'zbekcha tarjima → 3 ta IELTS quiz poll
+              </p>
+              <p className="text-xs text-emerald-700 mt-1">
+                📝 <b>Savollar:</b> 1) Ko'p tanlov (أ ب ج د) · 2) صواب/غلط/غير معطى · 3) Sarlavha tanlash
+              </p>
+              <p className="text-xs text-emerald-700 mt-1">
+                📅 Daraja kalendar kun paritetiga ko'ra avtomat almashadi (toq kun = A1/A2, juft kun = B1/B2).
+              </p>
+            </div>
+
+            <div className="space-y-2">
+              <div className="flex gap-2">
+                <Input
+                  value={newReadingChannelId}
+                  onChange={(e) => setNewReadingChannelId(e.target.value)}
+                  placeholder="@oqib_tushunish_kanali"
+                  className="flex-1"
+                  data-testid="input-reading-channel-id"
+                />
+              </div>
+              <div className="flex gap-2">
+                <Input
+                  value={newReadingChannelTitle}
+                  onChange={(e) => setNewReadingChannelTitle(e.target.value)}
+                  placeholder="Kanal nomi (ixtiyoriy)"
+                  className="flex-1"
+                />
+                <Input
+                  type="time"
+                  value={newReadingTime}
+                  onChange={(e) => setNewReadingTime(e.target.value)}
+                  className="w-28"
+                />
+                <Button onClick={handleAddReadingChannel} className="gap-2" data-testid="button-add-reading-channel">
+                  <Plus className="w-4 h-4" /> Qo'shish
+                </Button>
+              </div>
+              <p className="text-xs text-muted-foreground">
+                Botni kanalga admin qilib qo'shing, so'ng @username kiriting
+              </p>
+            </div>
+
+            {readingChannelsList.length > 0 && (
+              <div className="border-t pt-4 space-y-2">
+                <h4 className="text-sm font-medium">O'qib tushunish kanallari ({readingChannelsList.length})</h4>
+                {readingChannelsList.map((ch) => (
+                  <div key={ch.id} className="p-3 bg-muted rounded-lg space-y-2" data-testid={`card-reading-channel-${ch.id}`}>
+                    <div className="flex items-center justify-between">
+                      <div className="flex items-center gap-3">
+                        <Switch
+                          checked={ch.enabled ?? true}
+                          onCheckedChange={(enabled) => handleToggleReadingChannel(ch.chatId, enabled)}
+                        />
+                        <div>
+                          <p className="text-sm font-medium">{ch.title || ch.chatId}</p>
+                          <p className="text-xs text-muted-foreground">{ch.chatId}</p>
+                        </div>
+                      </div>
+                      <Button
+                        variant="ghost"
+                        size="icon"
+                        onClick={() => handleRemoveReadingChannel(ch.chatId)}
+                      >
+                        <Trash2 className="w-4 h-4 text-destructive" />
+                      </Button>
+                    </div>
+                    <div className="flex items-center gap-2 pl-10 flex-wrap">
+                      <div className="flex items-center border rounded-md overflow-hidden">
+                        <button
+                          className={`px-2 py-1 text-xs font-medium transition-colors ${ch.currentLevel === "A1A2" ? "bg-green-500 text-white" : "bg-muted text-muted-foreground hover:bg-green-100"}`}
+                          onClick={() => handleReadingLevelChange(ch.chatId, "A1A2")}
+                          data-testid={`button-reading-level-a1a2-${ch.id}`}
+                        >A1/A2</button>
+                        <button
+                          className={`px-2 py-1 text-xs font-medium transition-colors ${ch.currentLevel === "B1B2" ? "bg-blue-500 text-white" : "bg-muted text-muted-foreground hover:bg-blue-100"}`}
+                          onClick={() => handleReadingLevelChange(ch.chatId, "B1B2")}
+                          data-testid={`button-reading-level-b1b2-${ch.id}`}
+                        >B1/B2</button>
+                      </div>
+                      <label className="text-xs text-muted-foreground">Vaqt:</label>
+                      <Input
+                        type="time"
+                        defaultValue={ch.scheduledTime || "11:00"}
+                        onBlur={(e) => {
+                          if (e.target.value !== ch.scheduledTime) {
+                            handleReadingScheduleChange(ch.chatId, e.target.value);
+                          }
+                        }}
+                        className="w-28 h-8 text-sm"
+                      />
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        className="h-8 text-xs"
+                        disabled={sendingReadingNow === ch.chatId}
+                        onClick={() => handleSendReadingNow(ch.chatId)}
+                        data-testid={`button-send-reading-${ch.id}`}
+                      >
+                        {sendingReadingNow === ch.chatId ? (
+                          <><RefreshCw className="w-3 h-3 mr-1 animate-spin" /> Generatsiya...</>
+                        ) : (
+                          <><Send className="w-3 h-3 mr-1" /> Hozir yuborish</>
+                        )}
+                      </Button>
+                    </div>
+                    {ch.lastSentAt && (
+                      <p className="text-xs text-muted-foreground pl-10">
+                        Oxirgi: {new Date(ch.lastSentAt).toLocaleString('uz-UZ')}
+                      </p>
+                    )}
+                  </div>
+                ))}
+              </div>
+            )}
+
+            {readingChannelsList.length === 0 && (
+              <div className="text-center py-6 text-muted-foreground">
+                <BookOpen className="w-10 h-10 mx-auto mb-2 opacity-50" />
+                <p className="text-sm">Hali o'qib tushunish kanali qo'shilmagan</p>
               </div>
             )}
           </CardContent>

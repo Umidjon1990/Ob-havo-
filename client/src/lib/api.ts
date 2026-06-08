@@ -385,6 +385,100 @@ export async function sendListeningNow(chatId: string): Promise<{ ok: boolean; e
   }
 }
 
+// ─── Reading Channels ─────────────────────────────────────────────────────────
+
+export interface ReadingChannel {
+  id: string;
+  chatId: string;
+  title: string | null;
+  enabled: boolean | null;
+  scheduledTime: string | null;
+  lastSentAt: string | null;
+  currentLevel: string | null;
+  createdAt: string | null;
+}
+
+export async function getReadingChannels(): Promise<ReadingChannel[]> {
+  try {
+    const response = await fetch('/api/reading-channels');
+    return await response.json();
+  } catch (error) {
+    return [];
+  }
+}
+
+export async function addReadingChannel(chatId: string, title: string, scheduledTime: string): Promise<ReadingChannel | null> {
+  try {
+    const response = await fetch('/api/reading-channels', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ chatId, title, scheduledTime }),
+    });
+    return await response.json();
+  } catch (error) {
+    return null;
+  }
+}
+
+export async function removeReadingChannel(chatId: string): Promise<boolean> {
+  try {
+    const response = await fetch(`/api/reading-channels/${encodeURIComponent(chatId)}`, { method: 'DELETE' });
+    return response.ok;
+  } catch (error) {
+    return false;
+  }
+}
+
+export async function toggleReadingChannel(chatId: string, enabled: boolean): Promise<ReadingChannel | null> {
+  try {
+    const response = await fetch(`/api/reading-channels/${encodeURIComponent(chatId)}`, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ enabled }),
+    });
+    return await response.json();
+  } catch (error) {
+    return null;
+  }
+}
+
+export async function updateReadingChannelSchedule(chatId: string, scheduledTime: string): Promise<ReadingChannel | null> {
+  try {
+    const response = await fetch(`/api/reading-channels/${encodeURIComponent(chatId)}/schedule`, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ scheduledTime }),
+    });
+    return response.ok ? await response.json() : null;
+  } catch (error) {
+    return null;
+  }
+}
+
+export async function updateReadingChannelLevel(chatId: string, level: "A1A2" | "B1B2"): Promise<ReadingChannel | null> {
+  try {
+    const response = await fetch(`/api/reading-channels/${encodeURIComponent(chatId)}/level`, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ level }),
+    });
+    return response.ok ? await response.json() : null;
+  } catch (error) {
+    return null;
+  }
+}
+
+export async function sendReadingNow(chatId: string): Promise<{ ok: boolean; error?: string }> {
+  try {
+    const response = await fetch(`/api/reading-channels/${encodeURIComponent(chatId)}/send-now`, { method: 'POST' });
+    const data = await response.json();
+    if (response.ok) return { ok: true };
+    return { ok: false, error: data.error || 'Yuborishda xatolik' };
+  } catch (error) {
+    return { ok: false, error: 'Tarmoq xatosi' };
+  }
+}
+
 // Admin authentication
 export async function adminLogin(username: string, password: string): Promise<{ success: boolean; token?: string; error?: string }> {
   try {

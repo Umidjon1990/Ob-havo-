@@ -109,6 +109,22 @@ export const insertListeningChannelSchema = createInsertSchema(listeningChannels
   createdAt: true,
 });
 
+export const readingChannels = pgTable("reading_channels", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  chatId: text("chat_id").notNull().unique(),
+  title: text("title"),
+  enabled: boolean("enabled").default(true),
+  scheduledTime: text("scheduled_time").default("11:00"),
+  lastSentAt: timestamp("last_sent_at"),
+  currentLevel: text("current_level").default("A1A2"),
+  createdAt: timestamp("created_at").defaultNow(),
+});
+
+export const insertReadingChannelSchema = createInsertSchema(readingChannels).omit({
+  id: true,
+  createdAt: true,
+});
+
 export type InsertUser = z.infer<typeof insertUserSchema>;
 export type User = typeof users.$inferSelect;
 export type InsertUserProgress = z.infer<typeof insertUserProgressSchema>;
@@ -123,3 +139,5 @@ export type InsertNewsChannel = z.infer<typeof insertNewsChannelSchema>;
 export type NewsChannel = typeof newsChannels.$inferSelect;
 export type InsertListeningChannel = z.infer<typeof insertListeningChannelSchema>;
 export type ListeningChannel = typeof listeningChannels.$inferSelect;
+export type InsertReadingChannel = z.infer<typeof insertReadingChannelSchema>;
+export type ReadingChannel = typeof readingChannels.$inferSelect;

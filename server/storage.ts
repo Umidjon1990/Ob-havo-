@@ -1,6 +1,6 @@
 import { db } from "./db";
-import { users, weatherCache, userProgress, botSettings, channels, newsChannels, listeningChannels } from "@shared/schema";
-import type { User, InsertUser, WeatherCache, InsertWeatherCache, UserProgress, InsertUserProgress, BotSettings, InsertBotSettings, Channel, InsertChannel, NewsChannel, InsertNewsChannel, ListeningChannel, InsertListeningChannel } from "@shared/schema";
+import { users, weatherCache, userProgress, botSettings, channels, newsChannels, listeningChannels, readingChannels } from "@shared/schema";
+import type { User, InsertUser, WeatherCache, InsertWeatherCache, UserProgress, InsertUserProgress, BotSettings, InsertBotSettings, Channel, InsertChannel, NewsChannel, InsertNewsChannel, ListeningChannel, InsertListeningChannel, ReadingChannel, InsertReadingChannel } from "@shared/schema";
 import { eq } from "drizzle-orm";
 
 export interface IStorage {
@@ -50,6 +50,16 @@ export interface IStorage {
   updateListeningChannelSchedule(chatId: string, scheduledTime: string): Promise<ListeningChannel | undefined>;
   updateListeningChannelAfterSend(chatId: string, nextLevel: string): Promise<void>;
   updateListeningChannelLevel(chatId: string, level: string): Promise<ListeningChannel | undefined>;
+
+  // Reading channel methods
+  getReadingChannels(): Promise<ReadingChannel[]>;
+  getEnabledReadingChannels(): Promise<ReadingChannel[]>;
+  addReadingChannel(channel: InsertReadingChannel): Promise<ReadingChannel>;
+  removeReadingChannel(chatId: string): Promise<void>;
+  toggleReadingChannel(chatId: string, enabled: boolean): Promise<ReadingChannel | undefined>;
+  updateReadingChannelSchedule(chatId: string, scheduledTime: string): Promise<ReadingChannel | undefined>;
+  updateReadingChannelAfterSend(chatId: string, nextLevel: string): Promise<void>;
+  updateReadingChannelLevel(chatId: string, level: string): Promise<ReadingChannel | undefined>;
 }
 
 export class DatabaseStorage implements IStorage {
@@ -270,6 +280,57 @@ export class DatabaseStorage implements IStorage {
       .update(listeningChannels)
       .set({ currentLevel: level })
       .where(eq(listeningChannels.chatId, chatId))
+      .returning();
+    return updated;
+  }
+
+  async getReadingChannels(): Promise<ReadingChannel[]> {
+    return await db.select().from(readingChannels);
+  }
+
+  async getEnabledReadingChannels(): Promise<ReadingChannel[]> {
+    return await db.select().from(readingChannels).where(eq(readingChannels.enabled, true));
+  }
+
+  async addReadingChannel(channel: InsertReadingChannel): Promise<ReadingChannel> {
+    const [inserted] = await db.insert(readingChannels).values(channel).returning();
+    return inserted;
+  }
+
+  async removeReadingChannel(chatId: string): Promise<void> {
+    await db.delete(readingChannels).where(eq(readingChannels.chatId, chatId));
+  }
+
+  async toggleReadingChannel(chatId: string, enabled: boolean): Promise<ReadingChannel | undefined> {
+    const [updated] = await db
+      .update(readingChannels)
+      .set({ enabled })
+      .where(eq(readingChannels.chatId, chatId))
+      .returning();
+    return updated;
+  }
+
+  async updateReadingChannelSchedule(chatId: string, scheduledTime: string): Promise<ReadingChannel | undefined> {
+    const [updated] = await db
+      .update(readingChannels)
+      .set({ scheduledTime })
+      .where(eq(readingChannels.chatId, chatId))
+      .returning();
+    return updated;
+  }
+
+  async updateReadingChannelAfterSend(chatId: string, nextLevel: string): Promise<void> {
+    await db
+      .update(readingChannels)
+      .set({ lastSentAt: new Date(), currentLevel: nextLevel })
+      .where(eq(readingChannels.chatId, chatId));
+  }
+
+  async updateReadingChannelLevel(chatId: string, level: string): Promise<ReadingChannel | undefined> {
+    const [updated] = await db
+      .update(readingChannels)
+      .set({ currentLevel: level })
+      .where(eq(readingChannels.chatId, chatId))
       .returning();
     return updated;
   }

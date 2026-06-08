@@ -2,6 +2,7 @@ import { storage } from "../storage";
 import { generateWeatherAdvice } from "./openai";
 import { generateDailyNews, generateNewsImage, generateNewsQuiz, formatPhotoCaption, formatNewsText, formatNewsCaption, formatVocabMessage } from "./news";
 import { generateListeningPassage, generateListeningQuizzes, textToSpeechArabic, type ListeningLevel } from "./listening";
+import { generateReadingPassage, generateReadingQuizzes, shuffleReadingOptions, getReadingDateString, getReadingLevelByDate, type ReadingLevel } from "./reading";
 
 function getAppBaseUrl(): string {
   if (process.env.APP_URL) {
@@ -622,6 +623,44 @@ function getListeningLevelByDate(): ListeningLevel {
   return uzDay % 2 !== 0 ? "A1A2" : "B1B2";
 }
 
+/** Flexible quiz poll — supports 3 or 4 options (for T/F/NG and MC polls) */
+async function sendTelegramFlexQuiz(
+  chatId: string,
+  question: string,
+  options: string[],
+  correctOptionId: number,
+  explanation: string
+): Promise<void> {
+  if (!BOT_TOKEN) throw new Error("TELEGRAM_BOT_TOKEN not set");
+  if (!question || question.trim().length < 3) throw new Error("Quiz question too short");
+  if (!Array.isArray(options) || options.length < 2 || options.some(o => !o || typeof o !== "string"))
+    throw new Error("Quiz options invalid");
+  if (correctOptionId < 0 || correctOptionId >= options.length)
+    throw new Error(`Invalid correctOptionId: ${correctOptionId}`);
+
+  const response = await fetch(
+    `https://api.telegram.org/bot${BOT_TOKEN}/sendPoll`,
+    {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        chat_id: chatId,
+        question,
+        options,
+        type: "quiz",
+        correct_option_id: correctOptionId,
+        explanation: explanation || undefined,
+        is_anonymous: true,
+      }),
+    }
+  );
+  const result = await response.json() as any;
+  if (!result.ok) {
+    console.error("Telegram sendPoll (flex) error:", result);
+    throw new Error(result.description || "Telegram sendPoll error");
+  }
+}
+
 export async function sendDailyListeningToChannel(channelId: string): Promise<void> {
   console.log(`Generating listening content for ${channelId}...`);
 
@@ -721,6 +760,130 @@ export async function startListeningScheduler() {
       }
     } catch (error) {
       console.error("Error in listening scheduler:", error);
+    }
+  }, 60000);
+}
+
+// ─── Reading Channel Sender ────────────────────────────────────────────────────
+
+export async function sendDailyReadingToChannel(channelId: string): Promise<void> {
+  console.log(`Generating reading content for ${channelId}...`);
+
+  const level: ReadingLevel = getReadingLevelByDate();
+  const levelLabel = level === "A1A2" ? "🟢 A1/A2 — Boshlang'ich" : "🔵 B1/B2 — O'rta daraja";
+  const levelTag = level === "A1A2" ? "A1/A2" : "B1/B2";
+
+  // 1. Generate passage
+  const passage = await generateReadingPassage(level);
+  if (!passage) throw new Error("Reading passage generation failed");
+
+  // 2. Generate quizzes — retry once if fewer than 3 returned
+  let quizzes = await generateReadingQuizzes(passage, level);
+  if (quizzes.length < 3) {
+    console.warn(`Only ${quizzes.length} reading quizzes, retrying...`);
+    const retry = await generateReadingQuizzes(passage, level);
+    if (retry.length >= quizzes.length) quizzes = retry;
+  }
+  if (quizzes.length < 3) throw new Error(`Could not generate 3 reading quizzes (got ${quizzes.length})`);
+  quizzes = quizzes.slice(0, 3);
+
+  const date = getReadingDateString();
+
+  // 3. Send intro message
+  const introText = `📖 <b>O'qib Tushunish | اخْتِبَارُ القِرَاءَة</b>
+📅 ${date}
+${levelLabel}
+🏷 <b>${passage.topicUz}</b> | ${passage.topicAr}
+
+📌 Quyidagi arabcha matnni diqqat bilan o'qing, so'ng 3 ta savolga javob bering!
+⬇️ <i>Matn quydagi xabar orqali keladi</i>`;
+
+  await sendTelegramMessage(channelId, introText, "HTML");
+  console.log(`✓ Reading intro sent to ${channelId}`);
+
+  // 4. Send passage text (split if > 4000 chars)
+  const passageText = `📄 <b>${passage.titleAr}</b>
+
+${passage.fullAr}
+
+━━━━━━━━━━━━━━━━━━
+📝 <i>Tarjima | الترجمة:</i>
+<b>${passage.titleUz}</b>
+
+${passage.fullUz}`;
+
+  if (passageText.length <= 4000) {
+    await sendTelegramMessage(channelId, passageText, "HTML");
+  } else {
+    // Split: Arabic part first, then Uzbek translation
+    const arPart = `📄 <b>${passage.titleAr}</b>\n\n${passage.fullAr}`;
+    await sendTelegramMessage(channelId, arPart, "HTML");
+    await new Promise(r => setTimeout(r, 1000));
+    const uzPart = `📝 <b>Tarjima:</b> <b>${passage.titleUz}</b>\n\n${passage.fullUz}`;
+    await sendTelegramMessage(channelId, uzPart, "HTML");
+  }
+  console.log(`✓ Reading passage sent to ${channelId}`);
+
+  // 5. Send 3 quiz polls (2s delay after passage, 1s between each)
+  await new Promise(r => setTimeout(r, 2000));
+
+  const quizLabels = ["1️⃣ اختيار من متعدد", "2️⃣ صواب / غلط / غير معطى", "3️⃣ اختر العنوان"];
+
+  for (let i = 0; i < 3; i++) {
+    const quiz = quizzes[i];
+    const { options, correctIndex } = shuffleReadingOptions(quiz);
+    const pollQuestion = `📖 [${levelTag}] ${quizLabels[i]}\n❓ ${quiz.question}`;
+
+    try {
+      await sendTelegramFlexQuiz(
+        channelId,
+        pollQuestion,
+        options,
+        correctIndex,
+        quiz.explanation
+      );
+      console.log(`✓ Reading quiz ${i + 1}/3 sent to ${channelId}`);
+    } catch (qErr: any) {
+      console.warn(`Reading quiz ${i + 1} send failed:`, qErr?.message);
+    }
+    if (i < 2) await new Promise(r => setTimeout(r, 1000));
+  }
+
+  // 6. Update lastSentAt and currentLevel
+  const nextLevel: ReadingLevel = level === "A1A2" ? "B1B2" : "A1A2";
+  await storage.updateReadingChannelAfterSend(channelId, nextLevel);
+  console.log(`✓ Reading done for ${channelId}, level used: ${level}`);
+}
+
+export async function startReadingScheduler() {
+  setInterval(async () => {
+    try {
+      const channels = await storage.getEnabledReadingChannels();
+      if (channels.length === 0) return;
+
+      const now = new Date();
+      const uzTime = new Date(now.getTime() + 5 * 60 * 60 * 1000);
+      const currentHour = uzTime.getUTCHours();
+      const currentMinute = uzTime.getUTCMinutes();
+      const today = uzTime.toDateString();
+
+      for (const channel of channels) {
+        const scheduledTime = channel.scheduledTime || "11:00";
+        const [targetHour, targetMinute] = scheduledTime.split(":").map(Number);
+        if (currentHour === targetHour && currentMinute === targetMinute) {
+          const lastSent = channel.lastSentAt;
+          if (!lastSent || new Date(lastSent).toDateString() !== today) {
+            try {
+              await sendDailyReadingToChannel(channel.chatId);
+              console.log(`Daily reading sent to ${channel.title || channel.chatId}`);
+            } catch (err: any) {
+              console.error(`Reading scheduler error for ${channel.chatId}:`, err?.message);
+            }
+          }
+        }
+      }
+    } catch (error) {
+      console.error("Error in reading scheduler:", error);
     }
   }, 60000);
 }

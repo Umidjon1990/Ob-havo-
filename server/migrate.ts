@@ -151,6 +151,19 @@ async function migrate() {
       created_at TIMESTAMP DEFAULT NOW()
     );
   `);
+
+  await client.query(`
+    CREATE TABLE IF NOT EXISTS reading_channels (
+      id VARCHAR(255) PRIMARY KEY DEFAULT gen_random_uuid()::text,
+      chat_id TEXT NOT NULL UNIQUE,
+      title TEXT,
+      enabled BOOLEAN DEFAULT true,
+      scheduled_time TEXT DEFAULT '11:00',
+      last_sent_at TIMESTAMP,
+      current_level TEXT DEFAULT 'A1A2',
+      created_at TIMESTAMP DEFAULT NOW()
+    );
+  `);
   
   // Insert default bot settings if not exists
   const result = await client.query(`SELECT COUNT(*) FROM bot_settings`);
