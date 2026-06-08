@@ -801,26 +801,17 @@ ${levelLabel}
   await sendTelegramMessage(channelId, introText, "HTML");
   console.log(`✓ Reading intro sent to ${channelId}`);
 
-  // 4. Send passage text (split if > 4000 chars)
-  const passageText = `📄 <b>${passage.titleAr}</b>
-
-${passage.fullAr}
-
-━━━━━━━━━━━━━━━━━━
-📝 <i>Tarjima | الترجمة:</i>
-<b>${passage.titleUz}</b>
-
-${passage.fullUz}`;
+  // 4. Send Arabic passage only (no translation)
+  const passageText = `📄 <b>${passage.titleAr}</b>\n\n${passage.fullAr}`;
 
   if (passageText.length <= 4000) {
     await sendTelegramMessage(channelId, passageText, "HTML");
   } else {
-    // Split: Arabic part first, then Uzbek translation
-    const arPart = `📄 <b>${passage.titleAr}</b>\n\n${passage.fullAr}`;
-    await sendTelegramMessage(channelId, arPart, "HTML");
-    await new Promise(r => setTimeout(r, 1000));
-    const uzPart = `📝 <b>Tarjima:</b> <b>${passage.titleUz}</b>\n\n${passage.fullUz}`;
-    await sendTelegramMessage(channelId, uzPart, "HTML");
+    const chunks = passageText.match(/.{1,4000}/gs) || [passageText];
+    for (const chunk of chunks) {
+      await sendTelegramMessage(channelId, chunk, "HTML");
+      await new Promise(r => setTimeout(r, 800));
+    }
   }
   console.log(`✓ Reading passage sent to ${channelId}`);
 
