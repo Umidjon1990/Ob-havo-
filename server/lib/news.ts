@@ -131,18 +131,20 @@ export async function generateDailyNews(): Promise<DailyNews | null> {
     { ar: "اختراع اللقاحات — جينر وباستور", uz: "Emlash ixtirosi — Jenner va Paster" },
     { ar: "اختراع الليزر وتطبيقاته الحديثة", uz: "Lazer ixtirosi va zamonaviy qo'llanilishi" },
     { ar: "اختراع الهاتف الذكي وكيف بدأت القصة", uz: "Smartfon ixtirosi — qissa qanday boshlandi" },
-    { ar: "اختراع الغواصة وتاريخ السفر تحت الماء", uz: "Suv osti kemasi ixtirosi tarixi" },
+    { ar: "اختراع الطابعة ثلاثية الأبعاد", uz: "3D printer ixtirosi" },
+    { ar: "اختراع الميكروسكوب — ليفنهوك ١٦٧٤", uz: "Mikroskop ixtirosi — Leeuwenhoek 1674" },
+    { ar: "اختراع البارود وتأثيره على التاريخ", uz: "Porox ixtirosi va tarixga ta'siri" },
+    { ar: "اختراع الأسبرين وقصة الدواء العجيب", uz: "Aspirin ixtirosi va mo'jizaviy dori hikoyasi" },
+    { ar: "اختراع الكمبيوتر الشخصي — شركة آبل وآي بي إم", uz: "Shaxsiy kompyuter ixtirosi — Apple va IBM" },
+    { ar: "اختراع البطارية — فولتا ١٨٠٠", uz: "Batareya ixtirosi — Volta 1800" },
   ];
   const inv = inventionTopics[Math.floor(Math.random() * inventionTopics.length)];
 
+  // RSS used only for logging; invention topic is always the sole theme
   if (rss) {
-    // Use RSS as additional context but keep invention theme as primary
-    contextLine = `الاختراع المحوري: ${inv.ar}\nمعلومة إضافية من الأخبار: "${rss.title}"`;
     sourceName = rss.source;
-  } else {
-    contextLine = `الاختراع: ${inv.ar}`;
-    sourceName = "Ixtirolar tarixi";
   }
+  contextLine = `الاختراع: ${inv.ar}`;
 
   const prompt = `أنت كاتب محتوى تعليمي متخصص في تاريخ الاختراعات للطلاب. مهمتك كتابة قصة مذهلة عن اختراع يجعل القارئ يقول "واو، لم أكن أعلم هذا!".
 
