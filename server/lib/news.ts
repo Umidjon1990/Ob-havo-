@@ -110,35 +110,44 @@ export async function generateDailyNews(): Promise<DailyNews | null> {
   let contextLine = "";
   let sourceName = "Texnologiya yangiliklari";
 
-  // Invention history topics — always used as the theme
+  // 30 invention topics — one per day of the month, selected by day-of-month index
   const inventionTopics = [
-    { ar: "اختراع الهاتف — غراهام بيل ١٨٧٦", uz: "Telefon ixtirosi — Graham Bell 1876" },
-    { ar: "اختراع الحاسوب الأول — آلان تورينج", uz: "Birinchi kompyuter ixtirosi — Alan Turing" },
-    { ar: "اختراع الإنترنت وكيف غيّر العالم", uz: "Internet ixtirosi va u dunyoni qanday o'zgartirdi" },
-    { ar: "اختراع الطباعة — غوتنبرغ ١٤٤٠", uz: "Bosma mashina ixtirosi — Gutenberg 1440" },
-    { ar: "اختراع الكهرباء — توماس إديسون", uz: "Elektr lampasi ixtirosi — Thomas Edison" },
-    { ar: "اختراع الطيران — أخوان رايت ١٩٠٣", uz: "Uchish ixtirosi — Wright birodarlar 1903" },
-    { ar: "اختراع التلفاز وتأثيره على البشرية", uz: "Televizor ixtirosi va insoniyatga ta'siri" },
-    { ar: "اختراع السيارة — كارل بنز ١٨٨٥", uz: "Avtomobil ixtirosi — Karl Benz 1885" },
-    { ar: "اختراع البنسلين — فليمنج ١٩٢٨", uz: "Penitsillin kashfiyoti — Fleming 1928" },
-    { ar: "اختراع الكاميرا وتاريخ التصوير", uz: "Kamera ixtirosi va fotografiya tarixi" },
-    { ar: "اختراع الساعة وتأثيرها على الحضارة", uz: "Soat ixtirosi va sivilizatsiyaga ta'siri" },
-    { ar: "اختراع البخار والثورة الصناعية", uz: "Bug' mashinasi va sanoat inqilobi" },
-    { ar: "اختراع الورق قديماً في الصين", uz: "Qog'oz ixtirosi — qadimgi Xitoy" },
-    { ar: "اختراع الراديو — ماركوني ١٨٩٥", uz: "Radio ixtirosi — Marconi 1895" },
-    { ar: "اختراع الثلاجة وكيف أنقذت الملايين", uz: "Muzlatgich ixtirosi va u qanday millionlarni qutqargan" },
-    { ar: "اختراع المصعد وكيف غيّر شكل المدن", uz: "Lift ixtirosi va u shaharlar qiyofasini qanday o'zgartirdi" },
-    { ar: "اختراع اللقاحات — جينر وباستور", uz: "Emlash ixtirosi — Jenner va Paster" },
-    { ar: "اختراع الليزر وتطبيقاته الحديثة", uz: "Lazer ixtirosi va zamonaviy qo'llanilishi" },
-    { ar: "اختراع الهاتف الذكي وكيف بدأت القصة", uz: "Smartfon ixtirosi — qissa qanday boshlandi" },
-    { ar: "اختراع الطابعة ثلاثية الأبعاد", uz: "3D printer ixtirosi" },
-    { ar: "اختراع الميكروسكوب — ليفنهوك ١٦٧٤", uz: "Mikroskop ixtirosi — Leeuwenhoek 1674" },
-    { ar: "اختراع البارود وتأثيره على التاريخ", uz: "Porox ixtirosi va tarixga ta'siri" },
-    { ar: "اختراع الأسبرين وقصة الدواء العجيب", uz: "Aspirin ixtirosi va mo'jizaviy dori hikoyasi" },
-    { ar: "اختراع الكمبيوتر الشخصي — شركة آبل وآي بي إم", uz: "Shaxsiy kompyuter ixtirosi — Apple va IBM" },
-    { ar: "اختراع البطارية — فولتا ١٨٠٠", uz: "Batareya ixtirosi — Volta 1800" },
+    { ar: "اختراع الهاتف — غراهام بيل ١٨٧٦",                  uz: "Telefon ixtirosi — Graham Bell 1876" },
+    { ar: "اختراع الكهرباء — توماس إديسون ١٨٧٩",              uz: "Elektr lampasi ixtirosi — Thomas Edison 1879" },
+    { ar: "اختراع الطيران — أخوان رايت ١٩٠٣",                 uz: "Uchish ixtirosi — Wright birodarlar 1903" },
+    { ar: "اختراع الحاسوب الأول — آلان تورينج ١٩٣٦",          uz: "Birinchi kompyuter ixtirosi — Alan Turing 1936" },
+    { ar: "اختراع الإنترنت وكيف غيّر العالم",                  uz: "Internet ixtirosi va u dunyoni qanday o'zgartirdi" },
+    { ar: "اختراع الطباعة — غوتنبرغ ١٤٤٠",                    uz: "Bosma mashina ixtirosi — Gutenberg 1440" },
+    { ar: "اختراع السيارة — كارل بنز ١٨٨٥",                   uz: "Avtomobil ixtirosi — Karl Benz 1885" },
+    { ar: "اختراع البنسلين — فليمنج ١٩٢٨",                    uz: "Penitsillin kashfiyoti — Fleming 1928" },
+    { ar: "اختراع التلفاز وتأثيره على البشرية",                uz: "Televizor ixtirosi va insoniyatga ta'siri" },
+    { ar: "اختراع البخار والثورة الصناعية — واط ١٧٦٩",        uz: "Bug' mashinasi va sanoat inqilobi — Watt 1769" },
+    { ar: "اختراع الراديو — ماركوني ١٨٩٥",                    uz: "Radio ixtirosi — Marconi 1895" },
+    { ar: "اختراع الكاميرا وتاريخ التصوير",                   uz: "Kamera ixtirosi va fotografiya tarixi" },
+    { ar: "اختراع الثلاجة وكيف أنقذت الملايين",               uz: "Muzlatgich ixtirosi va u qanday millionlarni qutqargan" },
+    { ar: "اختراع الورق قديماً في الصين — تساي لون ١٠٥م",    uz: "Qog'oz ixtirosi — Tsai Lun, Xitoy 105 m." },
+    { ar: "اختراع المصعد — إليشا أوتيس ١٨٥٢",                uz: "Lift ixtirosi — Elisha Otis 1852" },
+    { ar: "اختراع الساعة الميكانيكية وتأثيرها على الحضارة",   uz: "Mexanik soat ixtirosi va sivilizatsiyaga ta'siri" },
+    { ar: "اختراع اللقاحات — جينر وباستور",                   uz: "Emlash ixtirosi — Jenner va Paster" },
+    { ar: "اختراع الليزر وتطبيقاته الحديثة",                  uz: "Lazer ixtirosi va zamonaviy qo'llanilishi" },
+    { ar: "اختراع الهاتف الذكي — كيف بدأت القصة ٢٠٠٧",       uz: "Smartfon ixtirosi — qissa qanday boshlandi 2007" },
+    { ar: "اختراع الطابعة ثلاثية الأبعاد — هال ١٩٨٣",         uz: "3D printer ixtirosi — Chuck Hull 1983" },
+    { ar: "اختراع الميكروسكوب — ليفنهوك ١٦٧٤",               uz: "Mikroskop ixtirosi — Leeuwenhoek 1674" },
+    { ar: "اختراع الأسبرين وقصة الدواء العجيب",               uz: "Aspirin ixtirosi va mo'jizaviy dori hikoyasi" },
+    { ar: "اختراع البطارية — أليساندرو فولتا ١٨٠٠",           uz: "Batareya ixtirosi — Alessandro Volta 1800" },
+    { ar: "اختراع التلغراف — صموئيل مورس ١٨٣٧",              uz: "Telegraf ixtirosi — Samuel Morse 1837" },
+    { ar: "اختراع المضاد الحيوي — الستربتومايسين ١٩٤٣",       uz: "Antibiotik ixtirosi — Streptomisin 1943" },
+    { ar: "اختراع الفضاء — أول قمر صناعي سبوتنيك ١٩٥٧",      uz: "Birinchi sun'iy yo'ldosh Sputnik 1957" },
+    { ar: "اختراع الطاقة الشمسية والخلايا الكهروضوئية",       uz: "Quyosh energiyasi va fotoelektrik hujayralar ixtirosi" },
+    { ar: "اختراع الذكاء الاصطناعي — من الفكرة إلى الواقع",  uz: "Sun'iy intellekt ixtirosi — fikrdan voqelikka" },
+    { ar: "اختراع الكمبيوتر الشخصي — آبل وآي بي إم ١٩٧٠",    uz: "Shaxsiy kompyuter ixtirosi — Apple va IBM 1970" },
+    { ar: "اختراع الطائرة بدون طيار وتطبيقاتها المدنية",      uz: "Dron ixtirosi va fuqarolik sohasidagi qo'llanilishi" },
   ];
-  const inv = inventionTopics[Math.floor(Math.random() * inventionTopics.length)];
+
+  // Pick by Uzbekistan calendar day-of-month (1-indexed → 0-indexed), wraps for months > 30
+  const now = new Date();
+  const uzDay = new Date(now.getTime() + 5 * 60 * 60 * 1000).getUTCDate();
+  const inv = inventionTopics[(uzDay - 1) % inventionTopics.length];
 
   // RSS used only for logging; invention topic is always the sole theme
   if (rss) {
