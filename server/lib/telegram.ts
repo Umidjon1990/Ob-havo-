@@ -743,21 +743,20 @@ export async function startListeningScheduler() {
       const currentMinute = uzTime.getUTCMinutes();
       const today = uzTime.toDateString();
 
-      for (const channel of channels) {
-        const scheduledTime = channel.scheduledTime || "10:00";
-        const [targetHour, targetMinute] = scheduledTime.split(":").map(Number);
-        if (currentHour === targetHour && currentMinute === targetMinute) {
-          const lastSent = channel.lastSentAt;
-          if (!lastSent || new Date(lastSent).toDateString() !== today) {
-            try {
-              await sendDailyListeningToChannel(channel.chatId);
-              console.log(`Daily listening sent to ${channel.title || channel.chatId}`);
-            } catch (err: any) {
-              console.error(`Listening scheduler error for ${channel.chatId}:`, err?.message);
-            }
-          }
-        }
-      }
+      const due = channels.filter(ch => {
+        const [h, m] = (ch.scheduledTime || "10:00").split(":").map(Number);
+        if (currentHour !== h || currentMinute !== m) return false;
+        const lastSent = ch.lastSentAt;
+        return !lastSent || new Date(lastSent).toDateString() !== today;
+      });
+
+      await Promise.allSettled(
+        due.map(ch =>
+          sendDailyListeningToChannel(ch.chatId)
+            .then(() => console.log(`✓ Listening sent to ${ch.title || ch.chatId}`))
+            .catch((err: any) => console.error(`✗ Listening error [${ch.chatId}]:`, err?.message))
+        )
+      );
     } catch (error) {
       console.error("Error in listening scheduler:", error);
     }
@@ -858,21 +857,20 @@ export async function startReadingScheduler() {
       const currentMinute = uzTime.getUTCMinutes();
       const today = uzTime.toDateString();
 
-      for (const channel of channels) {
-        const scheduledTime = channel.scheduledTime || "11:00";
-        const [targetHour, targetMinute] = scheduledTime.split(":").map(Number);
-        if (currentHour === targetHour && currentMinute === targetMinute) {
-          const lastSent = channel.lastSentAt;
-          if (!lastSent || new Date(lastSent).toDateString() !== today) {
-            try {
-              await sendDailyReadingToChannel(channel.chatId);
-              console.log(`Daily reading sent to ${channel.title || channel.chatId}`);
-            } catch (err: any) {
-              console.error(`Reading scheduler error for ${channel.chatId}:`, err?.message);
-            }
-          }
-        }
-      }
+      const due = channels.filter(ch => {
+        const [h, m] = (ch.scheduledTime || "11:00").split(":").map(Number);
+        if (currentHour !== h || currentMinute !== m) return false;
+        const lastSent = ch.lastSentAt;
+        return !lastSent || new Date(lastSent).toDateString() !== today;
+      });
+
+      await Promise.allSettled(
+        due.map(ch =>
+          sendDailyReadingToChannel(ch.chatId)
+            .then(() => console.log(`✓ Reading sent to ${ch.title || ch.chatId}`))
+            .catch((err: any) => console.error(`✗ Reading error [${ch.chatId}]:`, err?.message))
+        )
+      );
     } catch (error) {
       console.error("Error in reading scheduler:", error);
     }
@@ -891,19 +889,21 @@ export async function startDailyNewsScheduler() {
       const currentMinute = uzTime.getUTCMinutes();
       const today = uzTime.toDateString();
 
-      for (const channel of newsChannels) {
-        const scheduledTime = channel.scheduledTime || "10:00";
-        const [targetHour, targetMinute] = scheduledTime.split(":").map(Number);
+      const due = newsChannels.filter(ch => {
+        const [h, m] = (ch.scheduledTime || "10:00").split(":").map(Number);
+        if (currentHour !== h || currentMinute !== m) return false;
+        const lastSent = ch.lastSentAt;
+        return !lastSent || new Date(lastSent).toDateString() !== today;
+      });
 
-        if (currentHour === targetHour && currentMinute === targetMinute) {
-          const lastSent = channel.lastSentAt;
-          if (!lastSent || new Date(lastSent).toDateString() !== today) {
-            await sendDailyNewsToChannel(channel.chatId);
-            await storage.updateNewsChannelLastSent(channel.chatId);
-            console.log(`Daily news sent to ${channel.title || channel.chatId}`);
-          }
-        }
-      }
+      await Promise.allSettled(
+        due.map(ch =>
+          sendDailyNewsToChannel(ch.chatId)
+            .then(() => storage.updateNewsChannelLastSent(ch.chatId))
+            .then(() => console.log(`✓ News sent to ${ch.title || ch.chatId}`))
+            .catch((err: any) => console.error(`✗ News error [${ch.chatId}]:`, err?.message))
+        )
+      );
     } catch (error) {
       console.error("Error in daily news scheduler:", error);
     }
