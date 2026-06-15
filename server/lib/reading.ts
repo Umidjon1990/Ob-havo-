@@ -297,38 +297,39 @@ ${passage.fullAr}
       const parsed: any[] = JSON.parse(sanitized);
 
       const EXPECTED_TYPES = ["multiple_choice", "true_false_ng", "best_title"];
-      const EXPECTED_COUNTS = [4, 3, 4];
+      // min/max accepted option counts per type
+      const OPTION_RANGE: [number, number][] = [[4, 4], [3, 3], [3, 4]]; // best_title accepts 3 or 4
 
       const valid: ReadingQuiz[] = [];
       for (let i = 0; i < Math.min(3, parsed.length); i++) {
         const q = parsed[i];
         const expectedType = EXPECTED_TYPES[i];
-        const expectedCount = EXPECTED_COUNTS[i];
-        if (
-          q.type === expectedType &&
-          q.question?.trim() &&
-          Array.isArray(q.options) &&
-          q.options.length === expectedCount &&
-          q.options.every((o: unknown) => typeof o === "string" && (o as string).trim()) &&
-          typeof q.correctIndex === "number" &&
-          q.correctIndex >= 0 &&
-          q.correctIndex < expectedCount
-        ) {
-          valid.push({
-            type: q.type,
-            question: stripHarakat(q.question.trim()),
-            options: q.options.map((o: string) => stripHarakat(o.trim()).slice(0, 100)),
-            correctIndex: q.correctIndex,
-            explanation: stripHarakat((q.explanation || "").trim()).slice(0, 250),
-          });
+        const [minOpts, maxOpts] = OPTION_RANGE[i];
+        const optCount = Array.isArray(q.options) ? q.options.length : 0;
+        const typeMatch = q.type === expectedType;
+        const optsOk = optCount >= minOpts && optCount <= maxOpts &&
+          q.options.every((o: unknown) => typeof o === "string" && (o as string).trim());
+        const idxOk = typeof q.correctIndex === "number" &&
+          q.correctIndex >= 0 && q.correctIndex < optCount;
+
+        if (!typeMatch || !q.question?.trim() || !optsOk || !idxOk) {
+          console.warn(`Reading quiz ${i + 1} validation failed (${model}): type=${q.type} opts=${optCount} idx=${q.correctIndex}`);
+          continue;
         }
+        valid.push({
+          type: q.type,
+          question: stripHarakat(q.question.trim()),
+          options: q.options.map((o: string) => stripHarakat(o.trim()).slice(0, 100)),
+          correctIndex: q.correctIndex,
+          explanation: stripHarakat((q.explanation || "").trim()).slice(0, 190),
+        });
       }
 
       if (valid.length === 3) {
         console.log(`✓ 3 reading quizzes generated (${model})`);
         return valid;
       }
-      console.warn(`Reading quiz model ${model}: only ${valid.length} valid quizzes, retrying...`);
+      console.warn(`Reading quiz model ${model}: only ${valid.length}/3 valid quizzes, retrying...`);
     } catch (e: any) {
       console.warn(`Reading quiz model ${model} failed:`, e?.message || e);
     }

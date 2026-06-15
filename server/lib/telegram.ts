@@ -638,6 +638,11 @@ async function sendTelegramFlexQuiz(
   if (correctOptionId < 0 || correctOptionId >= options.length)
     throw new Error(`Invalid correctOptionId: ${correctOptionId}`);
 
+  // Telegram API hard limits: question≤300, each option≤100, explanation≤200
+  const safeQuestion = question.slice(0, 300);
+  const safeOptions = options.map(o => o.slice(0, 100));
+  const safeExplanation = explanation ? explanation.slice(0, 190) : undefined;
+
   const response = await fetch(
     `https://api.telegram.org/bot${BOT_TOKEN}/sendPoll`,
     {
@@ -645,11 +650,11 @@ async function sendTelegramFlexQuiz(
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
         chat_id: chatId,
-        question,
-        options,
+        question: safeQuestion,
+        options: safeOptions,
         type: "quiz",
         correct_option_id: correctOptionId,
-        explanation: explanation || undefined,
+        explanation: safeExplanation,
         is_anonymous: true,
       }),
     }
@@ -821,6 +826,10 @@ ${levelLabel}
 
   for (let i = 0; i < 3; i++) {
     const quiz = quizzes[i];
+    if (!quiz) {
+      console.warn(`Reading quiz ${i + 1} missing — skipping`);
+      continue;
+    }
     const { options, correctIndex } = shuffleReadingOptions(quiz);
     const pollQuestion = `📖 [${levelTag}] ${quizLabels[i]}\n❓ ${quiz.question}`;
 
@@ -834,7 +843,8 @@ ${levelLabel}
       );
       console.log(`✓ Reading quiz ${i + 1}/3 sent to ${channelId}`);
     } catch (qErr: any) {
-      console.warn(`Reading quiz ${i + 1} send failed:`, qErr?.message);
+      console.error(`✗ Reading quiz ${i + 1} send failed [${channelId}]:`, qErr?.message);
+      console.error(`  question length: ${pollQuestion.length}, options: ${options.map(o => o.length).join(',')}, expl: ${quiz.explanation?.length}`);
     }
     if (i < 2) await new Promise(r => setTimeout(r, 1000));
   }
