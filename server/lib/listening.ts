@@ -138,14 +138,86 @@ function concatMp3(parts: Buffer[]): Buffer {
 /** Strip all Arabic diacritics (harakat) before sending to ElevenLabs.
  *  ElevenLabs reads Arabic correctly without them; wrong tashkeel causes mispronunciation. */
 function stripHarakat(text: string): string {
-  // Arabic diacritics: U+064B–U+065F (tanwin, fatha, damma, kasra, shadda, sukun, etc.)
-  // Also U+0610–U+061A (Arabic extended marks) and U+0670 (superscript alef)
   return text.replace(/[\u064B-\u065F\u0610-\u061A\u0670]/g, "").trim();
 }
 
+/**
+ * Convert a non-negative integer (0–9 999 999) to Arabic words.
+ * Used so ElevenLabs reads numbers correctly in Arabic instead of switching to English.
+ */
+function numToAr(n: number): string {
+  if (n === 0) return "صفر";
+
+  const units  = ["", "واحد", "اثنان", "ثلاثة", "أربعة", "خمسة", "ستة", "سبعة", "ثمانية", "تسعة"];
+  const teens  = ["عشرة", "أحد عشر", "اثنا عشر", "ثلاثة عشر", "أربعة عشر",
+                  "خمسة عشر", "ستة عشر", "سبعة عشر", "ثمانية عشر", "تسعة عشر"];
+  const tens   = ["", "عشرة", "عشرون", "ثلاثون", "أربعون", "خمسون", "ستون", "سبعون", "ثمانون", "تسعون"];
+  const hunds  = ["", "مائة", "مائتان", "ثلاثمائة", "أربعمائة", "خمسمائة",
+                  "ستمائة", "سبعمائة", "ثمانمائة", "تسعمائة"];
+
+  const parts: string[] = [];
+
+  if (n >= 1_000_000) {
+    const m = Math.floor(n / 1_000_000);
+    parts.push(m === 1 ? "مليون" : m === 2 ? "مليونان" : numToAr(m) + " ملايين");
+    n %= 1_000_000;
+  }
+
+  if (n >= 1_000) {
+    const k = Math.floor(n / 1_000);
+    if      (k === 1) parts.push("ألف");
+    else if (k === 2) parts.push("ألفان");
+    else if (k <= 10) parts.push(units[k] + " آلاف");
+    else              parts.push(numToAr(k) + " ألف");
+    n %= 1_000;
+  }
+
+  if (n >= 100) {
+    parts.push(hunds[Math.floor(n / 100)]);
+    n %= 100;
+  }
+
+  if (n >= 10) {
+    if (n < 20) {
+      parts.push(teens[n - 10]);
+      n = 0;
+    } else {
+      const u = n % 10;
+      parts.push(u > 0 ? units[u] + " و" + tens[Math.floor(n / 10)] : tens[Math.floor(n / 10)]);
+      n = 0;
+    }
+  } else if (n > 0) {
+    parts.push(units[n]);
+  }
+
+  return parts.join(" و");
+}
+
+/**
+ * Replace all numerals in Arabic text with Arabic words so ElevenLabs
+ * does not switch to English pronunciation.
+ *  ١٨٧٦  →  ألف وثمانمائة وستة وسبعون
+ *  75%   →  خمسة وسبعون بالمئة
+ */
+function replaceNumerals(text: string): string {
+  // 1) Arabic-Indic digits → Western digits
+  text = text.replace(/[٠١٢٣٤٥٦٧٨٩]/g,
+    d => String("٠١٢٣٤٥٦٧٨٩".indexOf(d)));
+
+  // 2) Percentages:  75%  →  خمسة وسبعون بالمئة
+  text = text.replace(/(\d+)\s*%/g,
+    (_, n) => numToAr(parseInt(n)) + " بالمئة");
+
+  // 3) All remaining digit sequences
+  text = text.replace(/\d+/g,
+    n => numToAr(parseInt(n)));
+
+  return text;
+}
+
 async function ttsLine(text: string, voiceId: string, apiKey: string): Promise<Buffer | null> {
-  // Send harakat-free text — ElevenLabs handles Arabic pronunciation natively
-  const cleanText = stripHarakat(text);
+  // 1. Strip harakat  2. Convert numerals to Arabic words  → clean text for ElevenLabs
+  const cleanText = replaceNumerals(stripHarakat(text));
   try {
     const response = await fetch(
       `https://api.elevenlabs.io/v1/text-to-speech/${voiceId}`,
