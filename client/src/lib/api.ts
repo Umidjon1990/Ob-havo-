@@ -293,32 +293,77 @@ export async function sendNewsNow(chatId: string): Promise<{ ok: boolean; error?
 
 // ─── Listening Channels ───────────────────────────────────────────────────────
 
+function adminHeaders(headers: Record<string, string> = {}): Record<string, string> {
+  const token = localStorage.getItem("admin_token");
+  return token ? { ...headers, Authorization: `Bearer ${token}` } : headers;
+}
+
 export interface ListeningChannel {
   id: string;
   chatId: string;
   title: string | null;
   enabled: boolean | null;
   scheduledTime: string | null;
+  scheduledDays: string | null;
   lastSentAt: string | null;
   currentLevel: string | null;
+  maleVoiceId: string | null;
+  femaleVoiceId: string | null;
   createdAt: string | null;
+}
+
+export interface VoiceProfile {
+  voiceId: string;
+  label: string;
+  gender: "male" | "female" | "unknown";
+}
+
+export async function getListeningVoices(): Promise<VoiceProfile[]> {
+  try {
+    const response = await fetch('/api/listening-voices', { headers: adminHeaders() });
+    return response.ok ? await response.json() : [];
+  } catch {
+    return [];
+  }
+}
+
+export async function updateListeningVoice(voiceId: string, label: string, gender: VoiceProfile["gender"]): Promise<VoiceProfile | null> {
+  try {
+    const response = await fetch(`/api/listening-voices/${encodeURIComponent(voiceId)}`, {
+      method: 'PATCH',
+      headers: adminHeaders({ 'Content-Type': 'application/json' }),
+      body: JSON.stringify({ label, gender }),
+    });
+    return response.ok ? await response.json() : null;
+  } catch {
+    return null;
+  }
+}
+
+export async function previewListeningVoice(voiceId: string): Promise<Blob | null> {
+  try {
+    const response = await fetch(`/api/listening-voices/${encodeURIComponent(voiceId)}/preview`, { method: 'POST', headers: adminHeaders() });
+    return response.ok ? await response.blob() : null;
+  } catch {
+    return null;
+  }
 }
 
 export async function getListeningChannels(): Promise<ListeningChannel[]> {
   try {
-    const response = await fetch('/api/listening-channels');
+    const response = await fetch('/api/listening-channels', { headers: adminHeaders() });
     return await response.json();
   } catch (error) {
     return [];
   }
 }
 
-export async function addListeningChannel(chatId: string, title: string, scheduledTime: string): Promise<ListeningChannel | null> {
+export async function addListeningChannel(chatId: string, title: string, scheduledTime: string, scheduledDays: number[] = [0, 1, 2, 3, 4, 5, 6]): Promise<ListeningChannel | null> {
   try {
     const response = await fetch('/api/listening-channels', {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ chatId, title, scheduledTime }),
+      headers: adminHeaders({ 'Content-Type': 'application/json' }),
+      body: JSON.stringify({ chatId, title, scheduledTime, scheduledDays }),
     });
     return await response.json();
   } catch (error) {
@@ -328,7 +373,7 @@ export async function addListeningChannel(chatId: string, title: string, schedul
 
 export async function removeListeningChannel(chatId: string): Promise<boolean> {
   try {
-    const response = await fetch(`/api/listening-channels/${encodeURIComponent(chatId)}`, { method: 'DELETE' });
+    const response = await fetch(`/api/listening-channels/${encodeURIComponent(chatId)}`, { method: 'DELETE', headers: adminHeaders() });
     return response.ok;
   } catch (error) {
     return false;
@@ -339,7 +384,7 @@ export async function toggleListeningChannel(chatId: string, enabled: boolean): 
   try {
     const response = await fetch(`/api/listening-channels/${encodeURIComponent(chatId)}`, {
       method: 'PATCH',
-      headers: { 'Content-Type': 'application/json' },
+      headers: adminHeaders({ 'Content-Type': 'application/json' }),
       body: JSON.stringify({ enabled }),
     });
     return await response.json();
@@ -348,15 +393,28 @@ export async function toggleListeningChannel(chatId: string, enabled: boolean): 
   }
 }
 
-export async function updateListeningChannelSchedule(chatId: string, scheduledTime: string): Promise<ListeningChannel | null> {
+export async function updateListeningChannelSchedule(chatId: string, scheduledTime: string, scheduledDays: number[]): Promise<ListeningChannel | null> {
   try {
     const response = await fetch(`/api/listening-channels/${encodeURIComponent(chatId)}/schedule`, {
       method: 'PATCH',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ scheduledTime }),
+      headers: adminHeaders({ 'Content-Type': 'application/json' }),
+      body: JSON.stringify({ scheduledTime, scheduledDays }),
     });
     return response.ok ? await response.json() : null;
   } catch (error) {
+    return null;
+  }
+}
+
+export async function updateListeningChannelVoices(chatId: string, maleVoiceId: string | null, femaleVoiceId: string | null): Promise<ListeningChannel | null> {
+  try {
+    const response = await fetch(`/api/listening-channels/${encodeURIComponent(chatId)}/voices`, {
+      method: 'PATCH',
+      headers: adminHeaders({ 'Content-Type': 'application/json' }),
+      body: JSON.stringify({ maleVoiceId, femaleVoiceId }),
+    });
+    return response.ok ? await response.json() : null;
+  } catch {
     return null;
   }
 }
@@ -365,7 +423,7 @@ export async function updateListeningChannelLevel(chatId: string, level: "A1A2" 
   try {
     const response = await fetch(`/api/listening-channels/${encodeURIComponent(chatId)}/level`, {
       method: 'PATCH',
-      headers: { 'Content-Type': 'application/json' },
+      headers: adminHeaders({ 'Content-Type': 'application/json' }),
       body: JSON.stringify({ level }),
     });
     return response.ok ? await response.json() : null;
@@ -376,7 +434,7 @@ export async function updateListeningChannelLevel(chatId: string, level: "A1A2" 
 
 export async function sendListeningNow(chatId: string): Promise<{ ok: boolean; error?: string }> {
   try {
-    const response = await fetch(`/api/listening-channels/${encodeURIComponent(chatId)}/send-now`, { method: 'POST' });
+    const response = await fetch(`/api/listening-channels/${encodeURIComponent(chatId)}/send-now`, { method: 'POST', headers: adminHeaders() });
     const data = await response.json();
     if (response.ok) return { ok: true };
     return { ok: false, error: data.error || 'Yuborishda xatolik' };
@@ -393,6 +451,7 @@ export interface ReadingChannel {
   title: string | null;
   enabled: boolean | null;
   scheduledTime: string | null;
+  scheduledDays: string | null;
   lastSentAt: string | null;
   currentLevel: string | null;
   createdAt: string | null;
@@ -400,19 +459,19 @@ export interface ReadingChannel {
 
 export async function getReadingChannels(): Promise<ReadingChannel[]> {
   try {
-    const response = await fetch('/api/reading-channels');
+    const response = await fetch('/api/reading-channels', { headers: adminHeaders() });
     return await response.json();
   } catch (error) {
     return [];
   }
 }
 
-export async function addReadingChannel(chatId: string, title: string, scheduledTime: string): Promise<ReadingChannel | null> {
+export async function addReadingChannel(chatId: string, title: string, scheduledTime: string, scheduledDays: number[] = [0, 1, 2, 3, 4, 5, 6]): Promise<ReadingChannel | null> {
   try {
     const response = await fetch('/api/reading-channels', {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ chatId, title, scheduledTime }),
+      headers: adminHeaders({ 'Content-Type': 'application/json' }),
+      body: JSON.stringify({ chatId, title, scheduledTime, scheduledDays }),
     });
     return await response.json();
   } catch (error) {
@@ -422,7 +481,7 @@ export async function addReadingChannel(chatId: string, title: string, scheduled
 
 export async function removeReadingChannel(chatId: string): Promise<boolean> {
   try {
-    const response = await fetch(`/api/reading-channels/${encodeURIComponent(chatId)}`, { method: 'DELETE' });
+    const response = await fetch(`/api/reading-channels/${encodeURIComponent(chatId)}`, { method: 'DELETE', headers: adminHeaders() });
     return response.ok;
   } catch (error) {
     return false;
@@ -433,7 +492,7 @@ export async function toggleReadingChannel(chatId: string, enabled: boolean): Pr
   try {
     const response = await fetch(`/api/reading-channels/${encodeURIComponent(chatId)}`, {
       method: 'PATCH',
-      headers: { 'Content-Type': 'application/json' },
+      headers: adminHeaders({ 'Content-Type': 'application/json' }),
       body: JSON.stringify({ enabled }),
     });
     return await response.json();
@@ -442,12 +501,12 @@ export async function toggleReadingChannel(chatId: string, enabled: boolean): Pr
   }
 }
 
-export async function updateReadingChannelSchedule(chatId: string, scheduledTime: string): Promise<ReadingChannel | null> {
+export async function updateReadingChannelSchedule(chatId: string, scheduledTime: string, scheduledDays: number[]): Promise<ReadingChannel | null> {
   try {
     const response = await fetch(`/api/reading-channels/${encodeURIComponent(chatId)}/schedule`, {
       method: 'PATCH',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ scheduledTime }),
+      headers: adminHeaders({ 'Content-Type': 'application/json' }),
+      body: JSON.stringify({ scheduledTime, scheduledDays }),
     });
     return response.ok ? await response.json() : null;
   } catch (error) {
@@ -459,7 +518,7 @@ export async function updateReadingChannelLevel(chatId: string, level: "A1A2" | 
   try {
     const response = await fetch(`/api/reading-channels/${encodeURIComponent(chatId)}/level`, {
       method: 'PATCH',
-      headers: { 'Content-Type': 'application/json' },
+      headers: adminHeaders({ 'Content-Type': 'application/json' }),
       body: JSON.stringify({ level }),
     });
     return response.ok ? await response.json() : null;
@@ -470,7 +529,7 @@ export async function updateReadingChannelLevel(chatId: string, level: "A1A2" | 
 
 export async function sendReadingNow(chatId: string): Promise<{ ok: boolean; error?: string }> {
   try {
-    const response = await fetch(`/api/reading-channels/${encodeURIComponent(chatId)}/send-now`, { method: 'POST' });
+    const response = await fetch(`/api/reading-channels/${encodeURIComponent(chatId)}/send-now`, { method: 'POST', headers: adminHeaders() });
     const data = await response.json();
     if (response.ok) return { ok: true };
     return { ok: false, error: data.error || 'Yuborishda xatolik' };

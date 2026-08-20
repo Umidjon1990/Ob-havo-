@@ -29,11 +29,14 @@ export interface ListeningQuiz {
 }
 
 // ─── ElevenLabs Voices ────────────────────────────────────────────────────────
-// Male: Daniel (multilingual Arabic)
-// Female: Aria (multilingual) — good Arabic pronunciation
-const MALE_VOICE_ID   = process.env.ELEVENLABS_VOICE_ID        || "onwK4e9ZLuTAKqWW03F9";
-const FEMALE_VOICE_ID = process.env.ELEVENLABS_FEMALE_VOICE_ID || "9BWtsMINqrJLrRacOk9x";
+const DEFAULT_MALE_VOICE_ID = process.env.ELEVENLABS_VOICE_ID || "onwK4e9ZLuTAKqWW03F9";
+const DEFAULT_FEMALE_VOICE_ID = process.env.ELEVENLABS_FEMALE_VOICE_ID || "9BWtsMINqrJLrRacOk9x";
 const ELEVENLABS_MODEL = "eleven_multilingual_v2";
+
+export interface SpeakerVoices {
+  maleVoiceId?: string | null;
+  femaleVoiceId?: string | null;
+}
 
 // ─── MP3 helpers ──────────────────────────────────────────────────────────────
 
@@ -253,7 +256,13 @@ async function ttsLine(text: string, voiceId: string, apiKey: string): Promise<B
 }
 
 // Generate dialog audio: each line with correct gendered voice, then properly concatenate
-export async function textToSpeechArabic(passage: ListeningPassage): Promise<Buffer | null> {
+export async function generateVoicePreview(voiceId: string): Promise<Buffer | null> {
+  const apiKey = process.env.ELEVENLABS_API_KEY;
+  if (!apiKey) throw new Error("ELEVENLABS_API_KEY not set");
+  return ttsLine("مرحباً، هذا نموذج قصير للاستماع إلى الصوت العربي.", voiceId, apiKey);
+}
+
+export async function textToSpeechArabic(passage: ListeningPassage, voices: SpeakerVoices = {}): Promise<Buffer | null> {
   const apiKey = process.env.ELEVENLABS_API_KEY;
   if (!apiKey) {
     console.warn("ELEVENLABS_API_KEY not set — skipping TTS");
@@ -264,7 +273,9 @@ export async function textToSpeechArabic(passage: ListeningPassage): Promise<Buf
 
   for (let i = 0; i < passage.dialog.length; i++) {
     const line = passage.dialog[i];
-    const voiceId = line.speaker === "M" ? MALE_VOICE_ID : FEMALE_VOICE_ID;
+    const voiceId = line.speaker === "M"
+      ? voices.maleVoiceId || DEFAULT_MALE_VOICE_ID
+      : voices.femaleVoiceId || DEFAULT_FEMALE_VOICE_ID;
     let buf = await ttsLine(line.text, voiceId, apiKey);
     // Retry once on failure
     if (!buf) {
@@ -362,47 +373,112 @@ const TOPICS_B1B2 = [
   "التاريخ الحضاري للعالم العربي",
 ];
 
-export async function generateListeningPassage(level: ListeningLevel): Promise<ListeningPassage | null> {
+function getArabicWordCount(text: string): number {
+  return text.match(/[\u0600-\u06FF]+/g)?.length || 0;
+}
+
+function hasEnoughArabic(text: string): boolean {
+  const visible = text.replace(/[^A-Za-z\u0600-\u06FF]/g, "");
+  const arabic = text.match(/[\u0600-\u06FF]/g)?.length || 0;
+  return visible.length > 0 && arabic / visible.length >= 0.82;
+}
+
+function containsPersonalName(text: string): boolean {
+  const likelyNames = new Set([
+    "أحمد", "سارة", "محمد", "فاطمة", "علي", "خالد", "يوسف", "عمر", "عبد", "الله",
+    "إبراهيم", "إسماعيل", "موسى", "عيسى", "آدم", "أيمن", "أمين", "أنس", "بدر", "بشير",
+    "جمال", "حسن", "حسين", "حمزة", "داود", "رامي", "سالم", "سعيد", "سلمان", "سامي",
+    "طارق", "عثمان", "فارس", "كمال", "مازن", "مالك", "منصور", "ناصر", "وليد", "ياسر",
+    "يحيى", "يونس", "زين", "زينب", "آمنة", "أمل", "أميرة", "إيمان", "بشرى", "حياة",
+    "خديجة", "دينا", "رنا", "ريم", "رزان", "سلمى", "سناء", "شيماء", "صفاء", "عائشة",
+    "غادة", "فرح", "لبنى", "ليلى", "مريم", "منى", "ناديا", "ندى", "نورا", "نور", "هند",
+    "هدى", "ياسمين", "دانيال", "آريا",
+  ]);
+  const tokens = text.match(/[\u0621-\u064A]+/g) || [];
+  const namingCues = new Set(["اسمي", "اسمه", "اسمها", "يدعى", "تدعى"]);
+  return tokens.some(token => likelyNames.has(token) || namingCues.has(token)) ||
+    /يا\s+[\u0621-\u064A]+/.test(text);
+}
+
+async function failsPersonalNameAudit(text: string): Promise<boolean> {
+  try {
+    const response = await openai.chat.completions.create({
+      model: "gpt-4o-mini",
+      messages: [{
+        role: "user",
+        content: `Review this educational listening dialog. Does it contain any personal name, person reference by name, greeting addressed to a named person, or title that includes a person's name in Arabic or Uzbek? Speaker markers [M] and [F] are allowed. Reply with exactly YES if it contains any name; otherwise reply with exactly NO.\n\n${text}`,
+      }],
+      max_tokens: 4,
+    });
+    return response.choices[0]?.message?.content?.trim().toUpperCase() !== "NO";
+  } catch (error) {
+    // A failed audit must reject the candidate rather than risking named speaker content.
+    return true;
+  }
+}
+
+function pickFreshTopic(topics: string[], excludedTopics: string[]): string {
+  const excluded = new Set(excludedTopics.map(topic => topic.trim()));
+  const available = topics.filter(topic => !excluded.has(topic));
+  const pool = available.length > 0 ? available : topics;
+  return pool[Math.floor(Math.random() * pool.length)];
+}
+
+function isProfessionalDialog(dialog: unknown, level: ListeningLevel): dialog is DialogLine[] {
+  if (!Array.isArray(dialog) || dialog.length < 12 || dialog.length > 16) return false;
+  const [minWords, maxWords, minTotal, maxTotal] = level === "A1A2"
+    ? [7, 16, 100, 205]
+    : [12, 23, 175, 330];
+  const maleLines = dialog.filter(line => line?.speaker === "M").length;
+  const femaleLines = dialog.filter(line => line?.speaker === "F").length;
+  const totalWords = dialog.reduce((total, line) => total + getArabicWordCount(String(line?.text || "")), 0);
+
+  return maleLines >= 4 && femaleLines >= 4 &&
+    totalWords >= minTotal && totalWords <= maxTotal &&
+    dialog.every(line => {
+      const text = typeof line?.text === "string" ? line.text.trim() : "";
+      const words = getArabicWordCount(text);
+      return (line?.speaker === "M" || line?.speaker === "F") &&
+        words >= minWords && words <= maxWords &&
+        hasEnoughArabic(text) &&
+        !containsPersonalName(text);
+    });
+}
+
+export async function generateListeningPassage(
+  level: ListeningLevel,
+  excludedTopics: string[] = [],
+): Promise<ListeningPassage | null> {
   const topics = level === "A1A2" ? TOPICS_A1A2 : TOPICS_B1B2;
-  // Deterministic by Uzbekistan day-of-month so each day has a unique topic
-  const now = new Date();
-  const uzDay = new Date(now.getTime() + 5 * 60 * 60 * 1000).getUTCDate();
-  const topic = topics[(uzDay - 1) % topics.length];
+  const topic = pickFreshTopic(topics, excludedTopics);
+  const levelDesc = level === "A1A2"
+    ? "A1/A2: حوار عملي واضح، مفردات عالية التكرار، معلومات صريحة وتسلسل بسيط"
+    : "B1/B2: نقاش شبه رسمي، مفردات أدق، إعادة صياغة، موقف شخصي واستنتاج محدود";
 
-  const levelDesc =
-    level === "A1A2"
-      ? "A1/A2 (مستوى مبتدئ: جمل قصيرة، مفردات أساسية)"
-      : "B1/B2 (مستوى متوسط-متقدم: جمل معقدة، مفردات أكاديمية، أسلوب IELTS)";
-
-  const prompt = `أنت خبير في إعداد اختبارات IELTS Listening Section 3. اكتب حواراً طويلاً وغنياً بالمعلومات بين شخصين باللغة العربية الفصحى.
+  const prompt = `أنت مؤلف محترف لاختبارات الاستماع العربية وفق CEFR، ومراجع جودة صارم.
+اكتب حواراً أصلياً وطبيعياً باللغة العربية الفصحى فقط.
 
 الموضوع: ${topic}
 المستوى: ${levelDesc}
 
-⚠️ المتطلبات الإلزامية:
-- الشخصيتان: رجل [M] وامرأة [F] — لا تذكر أسماءهما أبداً داخل نص الحوار (لا أحمد، لا سارة، لا أي اسم)
-- يبدأ كل سطر بـ [M] أو [F] فقط
-- الحوار من 12 إلى 16 سطراً — كل سطر جملة من 12 إلى 18 كلمة بالضبط
-- الهدف: مدة الحوار عند القراءة بصوت عالٍ بين دقيقة وسط ودقيقة ونصف
-- التشكيل الكامل (الفتحة والضمة والكسرة والشدة والسكون) على كل كلمة بدون استثناء
-- الحوار طبيعي تماماً: كأنك تسمع محادثة حقيقية — لا يقول أحد اسم الآخر، بل يقول "أظن"، "وافقت"، "سمعت أن..."
-- يتضمن الحوار معلومات محددة وقابلة للاختبار:
-  * أرقام دقيقة (تواريخ، أسعار، مسافات، أوقات، نسب مئوية)
-  * أسماء أماكن ومؤسسات (لكن ليس أسماء المتحدثَين)
-  * أحداث متسلسلة بترتيب زمني
-  * مقارنات بين خيارين أو أكثر
-  * آراء شخصية تختلف عن الحقائق الواردة
-- الأسلوب: حوار طبيعي وواقعي — تعليقات، استفسارات، توضيحات، موافقات واعتراضات
-- ⚠️ ممنوع: السياسة، الطائفية، الرياضة، ذكر أسماء المتحدثَين في النص
+شروط لا تقبل الاستثناء:
+- الحوار موقف واقعي مكتمل، وليس درساً أو قائمة معلومات.
+- المتحدثان رجل [M] وامرأة [F]. لا تذكر أي اسم شخص داخل الحوار أو العنوان.
+- اكتب 12 إلى 16 مداخلة متوازنة؛ لكل متحدث أربع مداخلات على الأقل.
+- ${level === "A1A2" ? "كل مداخلة من 7 إلى 16 كلمة." : "كل مداخلة من 12 إلى 23 كلمة."}
+- اجعل الحقائق الداخلية متسقة تماماً. لا تخترع أخباراً أو إحصاءات واقعية حديثة؛ استخدم سيناريو تعليمياً واضحاً عند الحاجة إلى أرقام.
+- تضمّن تفاصيل قابلة للاختبار: وقتاً أو رقماً، مكاناً أو خدمة، ترتيباً زمنياً، مقارنة، ورأياً منسوباً بوضوح لأحد المتحدثين.
+- الحوار عفوي: سؤال، توضيح، تردد أو تصحيح، اتفاق أو اختلاف مهذب.
+- ممنوع: السياسة، الطائفية، الرياضة، الأسماء الشخصية، الإنجليزية، والمعلومات المتناقضة.
 
-أجب بـ JSON فقط:
+أجب بـ JSON صالح فقط:
 {
   "dialog": [
-    {"speaker": "M", "text": "نَصُّ الرَّجُلِ الطَّوِيل بِدُونِ اسْمٍ..."},
-    {"speaker": "F", "text": "نَصُّ الْمَرْأَةِ الطَّوِيل بِدُونِ اسْمٍ..."}
+    {"speaker": "M", "text": "نص عربي طبيعي بلا اسم شخص"},
+    {"speaker": "F", "text": "نص عربي طبيعي بلا اسم شخص"}
   ],
-  "topicAr": "عنوان قصير بالعربية",
-  "topicUz": "Mavzu o'zbekcha"
+  "topicAr": "عنوان عربي قصير بلا اسم شخص",
+  "topicUz": "Mavzu o‘zbekcha qisqa"
 }`;
 
   const models = ["gpt-5", "gpt-4o", "gpt-4-turbo"];
@@ -421,18 +497,19 @@ export async function generateListeningPassage(level: ListeningLevel): Promise<L
         const sanitized = jsonMatch[0].replace(/[\x00-\x08\x0b\x0c\x0e-\x1f]/g, " ");
         const parsed = JSON.parse(sanitized);
         if (
-          Array.isArray(parsed.dialog) &&
-          parsed.dialog.length >= 12 &&
-          parsed.dialog.every((l: any) => (l.speaker === "M" || l.speaker === "F") && l.text?.trim()) &&
-          parsed.topicAr &&
-          parsed.topicUz
+          isProfessionalDialog(parsed.dialog, level) &&
+          typeof parsed.topicAr === "string" && hasEnoughArabic(parsed.topicAr) && !containsPersonalName(parsed.topicAr) &&
+          typeof parsed.topicUz === "string" && parsed.topicUz.trim().length >= 3
         ) {
           const dialog: DialogLine[] = parsed.dialog.map((l: any) => ({
             speaker: l.speaker as "M" | "F",
             text: l.text.trim(),
           }));
-          // Full text for reference (joining dialog lines)
-          const arabicText = dialog.map(l => `${l.speaker === "M" ? "أَحْمَد" : "سَارَة"}: ${l.text}`).join("\n");
+          const arabicText = dialog.map(l => `[${l.speaker}] ${l.text}`).join("\n");
+          if (await failsPersonalNameAudit(`${arabicText}\n${parsed.topicAr}\n${parsed.topicUz}`)) {
+            console.warn(`Listening passage model ${model} returned a personal name or failed name audit`);
+            continue;
+          }
           console.log(`✓ Dialog generated (${model}), ${dialog.length} lines`);
           return {
             arabicText,
@@ -457,40 +534,31 @@ export async function generateListeningQuizzes(
   level: ListeningLevel
 ): Promise<ListeningQuiz[]> {
   const levelDesc = level === "A1A2"
-    ? "A1/A2 — أسئلة مباشرة تختبر فهم تفاصيل واضحة"
-    : "B1/B2 — أسئلة IELTS Academic من المستوى العالي";
+    ? "A1/A2 — تفصيل صريح، ترتيب بسيط، ومعلومة مباشرة"
+    : "B1/B2 — تفصيل دقيق، موقف، واستنتاج يربط معلومتين";
 
-  const prompt = `أنت محكّم IELTS Listening معتمد. بناءً على الحوار التالي، اكتب 3 أسئلة اختبار فهم دقيقة ومُحكمة.
+  const prompt = `أنت مراجع محترف لاختبارات الاستماع العربية وفق CEFR. أنشئ ثلاثة أسئلة عادلة وصعبة بقدر المستوى، ولا تخمّن أي معلومة خارج الحوار.
 
 الحوار:
 ${passage.arabicText}
 
-⚠️ قواعد صياغة الأسئلة (مستوى ${levelDesc}):
+المستوى: ${levelDesc}
 
-1. نوع الأسئلة المطلوبة:
-   - سؤال عن تفصيل محدد وُرد صراحةً في الحوار (رقم، تاريخ، مكان، اسم)
-   - سؤال عن موقف أو رأي شخصية معينة
-   - سؤال استنتاجي: يتطلب ربط جملتين من الحوار لا جملة واحدة
-
-2. معايير الخيارات الخاطئة — يجب أن:
-   - تحتوي على معلومات موجودة فعلاً في الحوار لكنها تنتمي لسياق مختلف (swap context)
-   - تبدو معقولة تماماً لمن لم ينتبه جيداً
-   - تشمل رقماً قريباً من الصحيح أو مكاناً ذُكر بسياق آخر
-   - ⚠️ ممنوع: خيارات واضحة الخطأ أو خارج الحوار كلياً
-
-3. الصياغة:
-   - السؤال بالعربية الفصحى مع تشكيل كامل
-   - كل خيار جملة قصيرة (max 70 حرف) بالعربية مع تشكيل
-   - الشرح: يوضح لماذا الإجابة الصحيحة صحيحة ولماذا أكثر الخيارات إغراءً خاطئ
-   - ⚠️ بالعربية فقط — ممنوع الأوزبكية
+قواعد إلزامية:
+- اكتب بالضبط 3 أسئلة بالترتيب: تفصيل، موقف/اختيار، ثم ${level === "A1A2" ? "تسلسل أو تفصيل صريح آخر" : "استنتاج يربط جملتين"}.
+- كل سؤال له 4 خيارات عربية فقط، خيار صحيح واحد فقط.
+- كل خيار خاطئ يجب أن يكون فخاً عادلاً: رقم قريب، أو حقيقة وردت في سياق آخر، أو نقل غير صحيح للموقف. لا تستخدم خياراً عبثياً.
+- لا تذكر أسماء المتحدثين؛ استخدم "المتحدث" أو "المتحدثة" فقط.
+- لا تزيد الأسئلة والخيارات عن 80 حرفاً. اكتب شرحاً مختصراً يثبت الإجابة من الحوار ويكشف أقوى فخ.
+- لا تعِد صياغة السؤال أو أي خيار. لا تستخدم الأوزبكية أو الإنجليزية.
 
 أجب بـ JSON فقط — مصفوفة من 3 كائنات:
 [
   {
-    "question": "مَا الَّذِي ذَكَرَتْهُ سَارَة بِشَأْنِ...؟",
+    "question": "سؤال عربي عن الحوار",
     "options": ["خيار أ", "خيار ب", "خيار ج", "خيار د"],
     "correctIndex": 2,
-    "explanation": "قَالَتْ سَارَة... بَيْنَمَا الخِيَار... يُشِير إِلَى مَعْلُومَة مِنْ سِيَاقٍ آخَر."
+    "explanation": "دليل الإجابة من الحوار وسبب خطأ الفخ الأقوى."
   }
 ]`;
 
@@ -508,27 +576,29 @@ ${passage.arabicText}
       if (jsonMatch) {
         const sanitized = jsonMatch[0].replace(/[\x00-\x08\x0b\x0c\x0e-\x1f]/g, " ");
         const parsed: any[] = JSON.parse(sanitized);
-        const valid = parsed
-          .filter(
-            (q) =>
-              q.question &&
-              Array.isArray(q.options) &&
-              q.options.length === 4 &&
-              q.options.every((o: unknown) => typeof o === "string" && (o as string).trim()) &&
-              typeof q.correctIndex === "number" &&
-              q.correctIndex >= 0 &&
-              q.correctIndex <= 3
-          )
-          .slice(0, 3)
-          .map((q) => ({
-            question: stripHarakat(q.question.trim()),
-            options: q.options.map((o: string) => stripHarakat(o.trim()).slice(0, 100)) as [string, string, string, string],
-            correctIndex: q.correctIndex as 0 | 1 | 2 | 3,
-            explanation: stripHarakat((q.explanation || "").trim()).slice(0, 200),
-          }));
-        if (valid.length > 0) {
-          console.log(`✓ ${valid.length} listening quizzes generated (${model})`);
-          return valid;
+        if (!Array.isArray(parsed) || parsed.length !== 3) continue;
+        const valid = parsed.map((q) => {
+          const question = stripHarakat(String(q?.question || "").trim()).slice(0, 240);
+          const options = Array.isArray(q?.options)
+            ? q.options.map((option: unknown) => stripHarakat(String(option || "").trim()).slice(0, 90))
+            : [];
+          const explanation = stripHarakat(String(q?.explanation || "").trim()).slice(0, 190);
+          const uniqueOptions = new Set(options.map((option: string) => option.replace(/\s+/g, " ").toLowerCase()));
+          const shapeIsValid = options.length === 4 &&
+            uniqueOptions.size === 4 &&
+            Number.isInteger(q?.correctIndex) &&
+            q.correctIndex >= 0 && q.correctIndex < 4;
+
+          if (!shapeIsValid || !hasEnoughArabic(question) || !hasEnoughArabic(explanation) ||
+            options.some((option: string) => !option || !hasEnoughArabic(option))) {
+            return null;
+          }
+          return { question, options: options as [string, string, string, string], correctIndex: q.correctIndex as 0 | 1 | 2 | 3, explanation };
+        });
+
+        if (valid.every(Boolean) && new Set(valid.map(quiz => quiz!.question)).size === 3) {
+          console.log(`✓ 3 listening quizzes generated (${model})`);
+          return valid as ListeningQuiz[];
         }
       }
     } catch (e: any) {

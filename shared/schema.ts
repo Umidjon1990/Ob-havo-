@@ -1,5 +1,5 @@
 import { sql } from "drizzle-orm";
-import { pgTable, text, varchar, integer, boolean, timestamp } from "drizzle-orm/pg-core";
+import { pgTable, text, varchar, integer, boolean, timestamp, uniqueIndex } from "drizzle-orm/pg-core";
 import { createInsertSchema } from "drizzle-zod";
 import { z } from "zod";
 
@@ -99,8 +99,11 @@ export const listeningChannels = pgTable("listening_channels", {
   title: text("title"),
   enabled: boolean("enabled").default(true),
   scheduledTime: text("scheduled_time").default("10:00"),
+  scheduledDays: text("scheduled_days").default("0,1,2,3,4,5,6"),
   lastSentAt: timestamp("last_sent_at"),
   currentLevel: text("current_level").default("A1A2"),
+  maleVoiceId: text("male_voice_id"),
+  femaleVoiceId: text("female_voice_id"),
   createdAt: timestamp("created_at").defaultNow(),
 });
 
@@ -115,12 +118,52 @@ export const readingChannels = pgTable("reading_channels", {
   title: text("title"),
   enabled: boolean("enabled").default(true),
   scheduledTime: text("scheduled_time").default("11:00"),
+  scheduledDays: text("scheduled_days").default("0,1,2,3,4,5,6"),
   lastSentAt: timestamp("last_sent_at"),
   currentLevel: text("current_level").default("A1A2"),
   createdAt: timestamp("created_at").defaultNow(),
 });
 
 export const insertReadingChannelSchema = createInsertSchema(readingChannels).omit({
+  id: true,
+  createdAt: true,
+});
+
+export const voiceProfiles = pgTable("voice_profiles", {
+  voiceId: text("voice_id").primaryKey(),
+  label: text("label").notNull(),
+  gender: text("gender").notNull().default("unknown"),
+  createdAt: timestamp("created_at").defaultNow(),
+});
+
+export const learningContentHistory = pgTable("learning_content_history", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  channelId: text("channel_id").notNull(),
+  contentType: text("content_type").notNull(),
+  topicKey: text("topic_key").notNull(),
+  createdAt: timestamp("created_at").defaultNow(),
+});
+
+export const learningDeliveryClaims = pgTable("learning_delivery_claims", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  channelId: text("channel_id").notNull(),
+  contentType: text("content_type").notNull(),
+  dateKey: text("date_key").notNull(),
+  claimedAt: timestamp("claimed_at").defaultNow(),
+  completedAt: timestamp("completed_at"),
+}, (table) => ({
+  uniqueDailyDelivery: uniqueIndex("learning_delivery_claims_daily_unique").on(
+    table.channelId,
+    table.contentType,
+    table.dateKey,
+  ),
+}));
+
+export const insertVoiceProfileSchema = createInsertSchema(voiceProfiles).omit({
+  createdAt: true,
+});
+
+export const insertLearningContentHistorySchema = createInsertSchema(learningContentHistory).omit({
   id: true,
   createdAt: true,
 });
@@ -141,3 +184,8 @@ export type InsertListeningChannel = z.infer<typeof insertListeningChannelSchema
 export type ListeningChannel = typeof listeningChannels.$inferSelect;
 export type InsertReadingChannel = z.infer<typeof insertReadingChannelSchema>;
 export type ReadingChannel = typeof readingChannels.$inferSelect;
+export type InsertVoiceProfile = z.infer<typeof insertVoiceProfileSchema>;
+export type VoiceProfile = typeof voiceProfiles.$inferSelect;
+export type InsertLearningContentHistory = z.infer<typeof insertLearningContentHistorySchema>;
+export type LearningContentHistory = typeof learningContentHistory.$inferSelect;
+export type LearningDeliveryClaim = typeof learningDeliveryClaims.$inferSelect;

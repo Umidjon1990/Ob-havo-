@@ -1,7 +1,19 @@
 import { db } from "./db";
-import { users, weatherCache, userProgress, botSettings, channels, newsChannels, listeningChannels, readingChannels } from "@shared/schema";
-import type { User, InsertUser, WeatherCache, InsertWeatherCache, UserProgress, InsertUserProgress, BotSettings, InsertBotSettings, Channel, InsertChannel, NewsChannel, InsertNewsChannel, ListeningChannel, InsertListeningChannel, ReadingChannel, InsertReadingChannel } from "@shared/schema";
-import { eq } from "drizzle-orm";
+import { users, weatherCache, userProgress, botSettings, channels, newsChannels, listeningChannels, readingChannels, voiceProfiles, learningContentHistory, learningDeliveryClaims } from "@shared/schema";
+import type { User, InsertUser, WeatherCache, InsertWeatherCache, UserProgress, InsertUserProgress, BotSettings, InsertBotSettings, Channel, InsertChannel, NewsChannel, InsertNewsChannel, ListeningChannel, InsertListeningChannel, ReadingChannel, InsertReadingChannel, VoiceProfile } from "@shared/schema";
+import { and, desc, eq } from "drizzle-orm";
+
+export const DEFAULT_VOICE_IDS = [
+  "G1HOkzin3NMwRHSq60UI",
+  "vY0W52tbYe3pDfogQWP7",
+  "w4LX7bK479eHGM1k15Em",
+  "XdoLPWNt7ytn6BtU4FBf",
+  "tavIIPLplRB883FzWU0V",
+  "qi4PkV9c01kb869Vh7Su",
+  "rUaPbzcZIu8df8iNL9WZ",
+  "EUojVLG1QfxaqqH4ce6s",
+  "gMB389pj77Qe5nErWNjd",
+];
 
 export interface IStorage {
   // User methods
@@ -43,23 +55,35 @@ export interface IStorage {
 
   // Listening channel methods
   getListeningChannels(): Promise<ListeningChannel[]>;
+  getListeningChannel(chatId: string): Promise<ListeningChannel | undefined>;
   getEnabledListeningChannels(): Promise<ListeningChannel[]>;
   addListeningChannel(channel: InsertListeningChannel): Promise<ListeningChannel>;
   removeListeningChannel(chatId: string): Promise<void>;
   toggleListeningChannel(chatId: string, enabled: boolean): Promise<ListeningChannel | undefined>;
-  updateListeningChannelSchedule(chatId: string, scheduledTime: string): Promise<ListeningChannel | undefined>;
-  updateListeningChannelAfterSend(chatId: string, nextLevel: string): Promise<void>;
+  updateListeningChannelSchedule(chatId: string, scheduledTime: string, scheduledDays?: string): Promise<ListeningChannel | undefined>;
+  updateListeningChannelVoices(chatId: string, maleVoiceId: string | null, femaleVoiceId: string | null): Promise<ListeningChannel | undefined>;
+  updateListeningChannelAfterSend(chatId: string): Promise<void>;
   updateListeningChannelLevel(chatId: string, level: string): Promise<ListeningChannel | undefined>;
 
   // Reading channel methods
   getReadingChannels(): Promise<ReadingChannel[]>;
+  getReadingChannel(chatId: string): Promise<ReadingChannel | undefined>;
   getEnabledReadingChannels(): Promise<ReadingChannel[]>;
   addReadingChannel(channel: InsertReadingChannel): Promise<ReadingChannel>;
   removeReadingChannel(chatId: string): Promise<void>;
   toggleReadingChannel(chatId: string, enabled: boolean): Promise<ReadingChannel | undefined>;
-  updateReadingChannelSchedule(chatId: string, scheduledTime: string): Promise<ReadingChannel | undefined>;
-  updateReadingChannelAfterSend(chatId: string, nextLevel: string): Promise<void>;
+  updateReadingChannelSchedule(chatId: string, scheduledTime: string, scheduledDays?: string): Promise<ReadingChannel | undefined>;
+  updateReadingChannelAfterSend(chatId: string): Promise<void>;
   updateReadingChannelLevel(chatId: string, level: string): Promise<ReadingChannel | undefined>;
+
+  // Learning content and voices
+  getVoiceProfiles(): Promise<VoiceProfile[]>;
+  updateVoiceProfile(voiceId: string, updates: Pick<VoiceProfile, "label" | "gender">): Promise<VoiceProfile | undefined>;
+  getRecentTopicKeys(channelId: string, contentType: "listening" | "reading", limit?: number): Promise<string[]>;
+  recordTopic(channelId: string, contentType: "listening" | "reading", topicKey: string): Promise<void>;
+  claimLearningDelivery(channelId: string, contentType: "listening" | "reading", dateKey: string): Promise<boolean>;
+  completeLearningDelivery(channelId: string, contentType: "listening" | "reading", dateKey: string): Promise<void>;
+  releaseLearningDelivery(channelId: string, contentType: "listening" | "reading", dateKey: string): Promise<void>;
 }
 
 export class DatabaseStorage implements IStorage {
@@ -237,6 +261,11 @@ export class DatabaseStorage implements IStorage {
     return await db.select().from(listeningChannels);
   }
 
+  async getListeningChannel(chatId: string): Promise<ListeningChannel | undefined> {
+    const [channel] = await db.select().from(listeningChannels).where(eq(listeningChannels.chatId, chatId)).limit(1);
+    return channel;
+  }
+
   async getEnabledListeningChannels(): Promise<ListeningChannel[]> {
     return await db.select().from(listeningChannels).where(eq(listeningChannels.enabled, true));
   }
@@ -259,19 +288,28 @@ export class DatabaseStorage implements IStorage {
     return updated;
   }
 
-  async updateListeningChannelSchedule(chatId: string, scheduledTime: string): Promise<ListeningChannel | undefined> {
+  async updateListeningChannelSchedule(chatId: string, scheduledTime: string, scheduledDays?: string): Promise<ListeningChannel | undefined> {
     const [updated] = await db
       .update(listeningChannels)
-      .set({ scheduledTime })
+      .set({ scheduledTime, ...(scheduledDays ? { scheduledDays } : {}) })
       .where(eq(listeningChannels.chatId, chatId))
       .returning();
     return updated;
   }
 
-  async updateListeningChannelAfterSend(chatId: string, nextLevel: string): Promise<void> {
+  async updateListeningChannelVoices(chatId: string, maleVoiceId: string | null, femaleVoiceId: string | null): Promise<ListeningChannel | undefined> {
+    const [updated] = await db
+      .update(listeningChannels)
+      .set({ maleVoiceId, femaleVoiceId })
+      .where(eq(listeningChannels.chatId, chatId))
+      .returning();
+    return updated;
+  }
+
+  async updateListeningChannelAfterSend(chatId: string): Promise<void> {
     await db
       .update(listeningChannels)
-      .set({ lastSentAt: new Date(), currentLevel: nextLevel })
+      .set({ lastSentAt: new Date() })
       .where(eq(listeningChannels.chatId, chatId));
   }
 
@@ -286,6 +324,11 @@ export class DatabaseStorage implements IStorage {
 
   async getReadingChannels(): Promise<ReadingChannel[]> {
     return await db.select().from(readingChannels);
+  }
+
+  async getReadingChannel(chatId: string): Promise<ReadingChannel | undefined> {
+    const [channel] = await db.select().from(readingChannels).where(eq(readingChannels.chatId, chatId)).limit(1);
+    return channel;
   }
 
   async getEnabledReadingChannels(): Promise<ReadingChannel[]> {
@@ -310,19 +353,19 @@ export class DatabaseStorage implements IStorage {
     return updated;
   }
 
-  async updateReadingChannelSchedule(chatId: string, scheduledTime: string): Promise<ReadingChannel | undefined> {
+  async updateReadingChannelSchedule(chatId: string, scheduledTime: string, scheduledDays?: string): Promise<ReadingChannel | undefined> {
     const [updated] = await db
       .update(readingChannels)
-      .set({ scheduledTime })
+      .set({ scheduledTime, ...(scheduledDays ? { scheduledDays } : {}) })
       .where(eq(readingChannels.chatId, chatId))
       .returning();
     return updated;
   }
 
-  async updateReadingChannelAfterSend(chatId: string, nextLevel: string): Promise<void> {
+  async updateReadingChannelAfterSend(chatId: string): Promise<void> {
     await db
       .update(readingChannels)
-      .set({ lastSentAt: new Date(), currentLevel: nextLevel })
+      .set({ lastSentAt: new Date() })
       .where(eq(readingChannels.chatId, chatId));
   }
 
@@ -333,6 +376,79 @@ export class DatabaseStorage implements IStorage {
       .where(eq(readingChannels.chatId, chatId))
       .returning();
     return updated;
+  }
+
+  private async ensureDefaultVoiceProfiles(): Promise<void> {
+    await db
+      .insert(voiceProfiles)
+      .values(DEFAULT_VOICE_IDS.map((voiceId, index) => ({
+        voiceId,
+        label: `Voice ${index + 1}`,
+        gender: "unknown",
+      })))
+      .onConflictDoNothing();
+  }
+
+  async getVoiceProfiles(): Promise<VoiceProfile[]> {
+    await this.ensureDefaultVoiceProfiles();
+    return await db.select().from(voiceProfiles).orderBy(voiceProfiles.label);
+  }
+
+  async updateVoiceProfile(voiceId: string, updates: Pick<VoiceProfile, "label" | "gender">): Promise<VoiceProfile | undefined> {
+    await this.ensureDefaultVoiceProfiles();
+    const [updated] = await db
+      .update(voiceProfiles)
+      .set(updates)
+      .where(eq(voiceProfiles.voiceId, voiceId))
+      .returning();
+    return updated;
+  }
+
+  async getRecentTopicKeys(channelId: string, contentType: "listening" | "reading", limit = 18): Promise<string[]> {
+    const rows = await db
+      .select({ topicKey: learningContentHistory.topicKey })
+      .from(learningContentHistory)
+      .where(and(
+        eq(learningContentHistory.channelId, channelId),
+        eq(learningContentHistory.contentType, contentType),
+      ))
+      .orderBy(desc(learningContentHistory.createdAt))
+      .limit(limit);
+    return rows.map(row => row.topicKey);
+  }
+
+  async recordTopic(channelId: string, contentType: "listening" | "reading", topicKey: string): Promise<void> {
+    await db.insert(learningContentHistory).values({ channelId, contentType, topicKey });
+  }
+
+  async claimLearningDelivery(channelId: string, contentType: "listening" | "reading", dateKey: string): Promise<boolean> {
+    const claim = await db
+      .insert(learningDeliveryClaims)
+      .values({ channelId, contentType, dateKey })
+      .onConflictDoNothing()
+      .returning({ id: learningDeliveryClaims.id });
+    return claim.length === 1;
+  }
+
+  async completeLearningDelivery(channelId: string, contentType: "listening" | "reading", dateKey: string): Promise<void> {
+    await db
+      .update(learningDeliveryClaims)
+      .set({ completedAt: new Date() })
+      .where(and(
+        eq(learningDeliveryClaims.channelId, channelId),
+        eq(learningDeliveryClaims.contentType, contentType),
+        eq(learningDeliveryClaims.dateKey, dateKey),
+      ));
+  }
+
+  async releaseLearningDelivery(channelId: string, contentType: "listening" | "reading", dateKey: string): Promise<void> {
+    await db
+      .delete(learningDeliveryClaims)
+      .where(and(
+        eq(learningDeliveryClaims.channelId, channelId),
+        eq(learningDeliveryClaims.contentType, contentType),
+        eq(learningDeliveryClaims.dateKey, dateKey),
+      ));
   }
 }
 

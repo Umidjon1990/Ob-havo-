@@ -60,7 +60,7 @@ function isAllowedTopic(title: string, desc: string): boolean {
 function extractRssItems(xml: string, sourceName: string): RssItem[] {
   const items: RssItem[] = [];
   const itemMatches = xml.matchAll(/<item[^>]*>([\s\S]*?)<\/item>/gi);
-  for (const match of itemMatches) {
+  for (const match of Array.from(itemMatches)) {
     const block = match[1];
     const titleMatch = block.match(/<title[^>]*>(?:<!\[CDATA\[)?([\s\S]*?)(?:\]\]>)?<\/title>/i);
     const descMatch = block.match(/<description[^>]*>(?:<!\[CDATA\[)?([\s\S]*?)(?:\]\]>)?<\/description>/i);

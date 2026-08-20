@@ -2,7 +2,8 @@ import { storage } from "../storage";
 import { generateWeatherAdvice } from "./openai";
 import { generateDailyNews, generateNewsImage, generateNewsQuiz, formatPhotoCaption, formatNewsText, formatNewsCaption, formatVocabMessage } from "./news";
 import { generateListeningPassage, generateListeningQuizzes, textToSpeechArabic, type ListeningLevel } from "./listening";
-import { generateReadingPassage, generateReadingQuizzes, shuffleReadingOptions, getReadingDateString, getReadingLevelByDate, type ReadingLevel } from "./reading";
+import { generateReadingPassage, generateReadingQuizzes, shuffleReadingOptions, getReadingDateString, type ReadingLevel } from "./reading";
+import { getUzbekistanDateKey, isLearningChannelDue } from "./learning-schedule";
 
 function getAppBaseUrl(): string {
   if (process.env.APP_URL) {
@@ -343,7 +344,8 @@ export async function sendDailyChannelMessage(channelId: string, miniAppUrl?: st
     const data = await storage.getWeatherCache(region.id);
     if (data) {
       const w = getWeatherInfo(data.condition || "");
-      let rMin = data.temperature - 3, rMax = data.temperature + 2;
+      const baseTemperature = data.temperature ?? 20;
+      let rMin = baseTemperature - 3, rMax = baseTemperature + 2;
       let rSunrise = "07:00", rSunset = "17:30";
       if (data.forecastData) {
         try {
@@ -616,13 +618,6 @@ function shuffleQuizOptions(quiz: { question: string; options: [string,string,st
   };
 }
 
-/** Determine listening level from Uzbekistan calendar day parity (odd=A1/A2, even=B1/B2) */
-function getListeningLevelByDate(): ListeningLevel {
-  const now = new Date();
-  const uzDay = new Date(now.getTime() + 5 * 60 * 60 * 1000).getUTCDate();
-  return uzDay % 2 !== 0 ? "A1A2" : "B1B2";
-}
-
 /** Flexible quiz poll — supports 3 or 4 options (for T/F/NG and MC polls) */
 async function sendTelegramFlexQuiz(
   chatId: string,
@@ -666,16 +661,32 @@ async function sendTelegramFlexQuiz(
   }
 }
 
-export async function sendDailyListeningToChannel(channelId: string): Promise<void> {
+export async function sendDailyListeningToChannel(
+  channelId: string,
+  options: { claimScheduledDelivery?: boolean } = {},
+): Promise<void> {
   console.log(`Generating listening content for ${channelId}...`);
+  const dateKey = getUzbekistanDateKey();
+  const shouldClaim = options.claimScheduledDelivery !== false;
+  const hasClaim = shouldClaim
+    ? await storage.claimLearningDelivery(channelId, "listening", dateKey)
+    : false;
+  if (shouldClaim && !hasClaim) {
+    console.log(`Listening already claimed for ${channelId} on ${dateKey}`);
+    return;
+  }
 
-  // Level strictly determined by Uzbekistan calendar day parity: odd=A1/A2, even=B1/B2
-  const level: ListeningLevel = getListeningLevelByDate();
-  const levelLabel = level === "A1A2" ? "🟢 A1/A2 — Boshlang'ich" : "🔵 B1/B2 — O'rta daraja";
-  const levelTag = level === "A1A2" ? "A1/A2" : "B1/B2";
+  let deliveryStarted = false;
+  try {
+    const channel = await storage.getListeningChannel(channelId);
+    if (!channel) throw new Error("Listening channel not found");
+    const level: ListeningLevel = channel.currentLevel === "B1B2" ? "B1B2" : "A1A2";
+    const levelLabel = level === "A1A2" ? "🟢 A1/A2 — Boshlang'ich" : "🔵 B1/B2 — O'rta daraja";
+    const levelTag = level === "A1A2" ? "A1/A2" : "B1/B2";
 
-  // 1. Generate passage
-  const passage = await generateListeningPassage(level);
+    // 1. Generate passage
+    const recentTopics = await storage.getRecentTopicKeys(channelId, "listening");
+    const passage = await generateListeningPassage(level, recentTopics);
   if (!passage) throw new Error("Listening passage generation failed");
 
   // 2. Generate exactly 3 quizzes — retry once if fewer than 3 returned
@@ -689,7 +700,10 @@ export async function sendDailyListeningToChannel(channelId: string): Promise<vo
   quizzes = quizzes.slice(0, 3);
 
   // 3. Generate dialog audio (ElevenLabs — male+female voices) — skip if unavailable
-  const audioBuffer = await textToSpeechArabic(passage);
+  const audioBuffer = await textToSpeechArabic(passage, {
+    maleVoiceId: channel.maleVoiceId,
+    femaleVoiceId: channel.femaleVoiceId,
+  });
   if (!audioBuffer) {
     console.warn(`TTS unavailable for ${channelId} — skipping listening run`);
     throw new Error("ElevenLabs TTS unavailable — listening run skipped");
@@ -701,11 +715,12 @@ export async function sendDailyListeningToChannel(channelId: string): Promise<vo
 ${levelLabel}
 🏷 <b>${passage.topicUz}</b> | ${passage.topicAr}
 
-👨 أَحْمَد  ·  👩 سَارَة
+👨 المتحدث الأول  ·  👩 المتحدثة الثانية
 🎵 <i>Dialogni diqqat bilan tinglang, so'ng savollarga javob bering!</i>
 ⬇️ Quyidagi testlarga javob bering`;
 
   // 4. Send audio
+  deliveryStarted = true;
   await sendTelegramAudio(channelId, audioBuffer, audioCaption);
   console.log(`✓ Listening dialog audio sent to ${channelId}`);
 
@@ -715,25 +730,20 @@ ${levelLabel}
     const quiz = quizzes[i];
     const { options, correctIndex } = shuffleQuizOptions(quiz);
     const pollTitle = `🎧 [${levelTag}] | السَّمَاعَة\n❓ ${quiz.question}`;
-    try {
-      await sendTelegramQuiz(
-        channelId,
-        pollTitle,
-        options,
-        correctIndex,
-        quiz.explanation
-      );
-      console.log(`✓ Listening quiz ${i + 1}/3 sent to ${channelId}`);
-    } catch (qErr: any) {
-      console.warn(`Quiz ${i + 1} send failed:`, qErr?.message);
-    }
+    await sendTelegramFlexQuiz(channelId, pollTitle, options, correctIndex, quiz.explanation);
+    console.log(`✓ Listening quiz ${i + 1}/3 sent to ${channelId}`);
     if (i < 2) await new Promise(r => setTimeout(r, 1000));
   }
 
-  // 6. Update lastSentAt and currentLevel (stored for reference, not used for scheduling)
-  const nextLevel: ListeningLevel = level === "A1A2" ? "B1B2" : "A1A2";
-  await storage.updateListeningChannelAfterSend(channelId, nextLevel);
-  console.log(`✓ Listening done for ${channelId}, level used: ${level}`);
+  // 6. Keep the admin-selected level unchanged and remember this topic.
+    await storage.updateListeningChannelAfterSend(channelId);
+    await storage.recordTopic(channelId, "listening", passage.topicAr);
+    if (hasClaim) await storage.completeLearningDelivery(channelId, "listening", dateKey);
+    console.log(`✓ Listening done for ${channelId}, level used: ${level}`);
+  } catch (error) {
+    if (hasClaim && !deliveryStarted) await storage.releaseLearningDelivery(channelId, "listening", dateKey);
+    throw error;
+  }
 }
 
 export async function startListeningScheduler() {
@@ -743,21 +753,11 @@ export async function startListeningScheduler() {
       if (channels.length === 0) return;
 
       const now = new Date();
-      const uzTime = new Date(now.getTime() + 5 * 60 * 60 * 1000);
-      const currentHour = uzTime.getUTCHours();
-      const currentMinute = uzTime.getUTCMinutes();
-      const today = uzTime.toDateString();
-
-      const due = channels.filter(ch => {
-        const [h, m] = (ch.scheduledTime || "10:00").split(":").map(Number);
-        if (currentHour !== h || currentMinute !== m) return false;
-        const lastSent = ch.lastSentAt;
-        return !lastSent || new Date(lastSent).toDateString() !== today;
-      });
+      const due = channels.filter(ch => isLearningChannelDue(ch, now));
 
       await Promise.allSettled(
         due.map(ch =>
-          sendDailyListeningToChannel(ch.chatId)
+          sendDailyListeningToChannel(ch.chatId, { claimScheduledDelivery: true })
             .then(() => console.log(`✓ Listening sent to ${ch.title || ch.chatId}`))
             .catch((err: any) => console.error(`✗ Listening error [${ch.chatId}]:`, err?.message))
         )
@@ -770,15 +770,32 @@ export async function startListeningScheduler() {
 
 // ─── Reading Channel Sender ────────────────────────────────────────────────────
 
-export async function sendDailyReadingToChannel(channelId: string): Promise<void> {
+export async function sendDailyReadingToChannel(
+  channelId: string,
+  options: { claimScheduledDelivery?: boolean } = {},
+): Promise<void> {
   console.log(`Generating reading content for ${channelId}...`);
+  const dateKey = getUzbekistanDateKey();
+  const shouldClaim = options.claimScheduledDelivery !== false;
+  const hasClaim = shouldClaim
+    ? await storage.claimLearningDelivery(channelId, "reading", dateKey)
+    : false;
+  if (shouldClaim && !hasClaim) {
+    console.log(`Reading already claimed for ${channelId} on ${dateKey}`);
+    return;
+  }
 
-  const level: ReadingLevel = getReadingLevelByDate();
-  const levelLabel = level === "A1A2" ? "🟢 A1/A2 — Boshlang'ich" : "🔵 B1/B2 — O'rta daraja";
-  const levelTag = level === "A1A2" ? "A1/A2" : "B1/B2";
+  let deliveryStarted = false;
+  try {
+    const channel = await storage.getReadingChannel(channelId);
+    if (!channel) throw new Error("Reading channel not found");
+    const level: ReadingLevel = channel.currentLevel === "B1B2" ? "B1B2" : "A1A2";
+    const levelLabel = level === "A1A2" ? "🟢 A1/A2 — Boshlang'ich" : "🔵 B1/B2 — O'rta daraja";
+    const levelTag = level === "A1A2" ? "A1/A2" : "B1/B2";
 
   // 1. Generate passage
-  const passage = await generateReadingPassage(level);
+  const recentTopics = await storage.getRecentTopicKeys(channelId, "reading");
+  const passage = await generateReadingPassage(level, recentTopics);
   if (!passage) throw new Error("Reading passage generation failed");
 
   // 2. Generate quizzes — retry once if fewer than 3 returned
@@ -802,6 +819,7 @@ ${levelLabel}
 📌 Quyidagi arabcha matnni diqqat bilan o'qing, so'ng 3 ta savolga javob bering!
 ⬇️ <i>Matn quydagi xabar orqali keladi</i>`;
 
+  deliveryStarted = true;
   await sendTelegramMessage(channelId, introText, "HTML");
   console.log(`✓ Reading intro sent to ${channelId}`);
 
@@ -811,7 +829,7 @@ ${levelLabel}
   if (passageText.length <= 4000) {
     await sendTelegramMessage(channelId, passageText, "HTML");
   } else {
-    const chunks = passageText.match(/.{1,4000}/gs) || [passageText];
+    const chunks = passageText.match(/[\s\S]{1,4000}/g) || [passageText];
     for (const chunk of chunks) {
       await sendTelegramMessage(channelId, chunk, "HTML");
       await new Promise(r => setTimeout(r, 800));
@@ -826,33 +844,30 @@ ${levelLabel}
 
   for (let i = 0; i < 3; i++) {
     const quiz = quizzes[i];
-    if (!quiz) {
-      console.warn(`Reading quiz ${i + 1} missing — skipping`);
-      continue;
-    }
+    if (!quiz) throw new Error(`Reading quiz ${i + 1} is missing`);
     const { options, correctIndex } = shuffleReadingOptions(quiz);
     const pollQuestion = `📖 [${levelTag}] ${quizLabels[i]}\n❓ ${quiz.question}`;
 
-    try {
-      await sendTelegramFlexQuiz(
-        channelId,
-        pollQuestion,
-        options,
-        correctIndex,
-        quiz.explanation
-      );
-      console.log(`✓ Reading quiz ${i + 1}/3 sent to ${channelId}`);
-    } catch (qErr: any) {
-      console.error(`✗ Reading quiz ${i + 1} send failed [${channelId}]:`, qErr?.message);
-      console.error(`  question length: ${pollQuestion.length}, options: ${options.map(o => o.length).join(',')}, expl: ${quiz.explanation?.length}`);
-    }
+    await sendTelegramFlexQuiz(
+      channelId,
+      pollQuestion,
+      options,
+      correctIndex,
+      quiz.explanation
+    );
+    console.log(`✓ Reading quiz ${i + 1}/3 sent to ${channelId}`);
     if (i < 2) await new Promise(r => setTimeout(r, 1000));
   }
 
-  // 6. Update lastSentAt and currentLevel
-  const nextLevel: ReadingLevel = level === "A1A2" ? "B1B2" : "A1A2";
-  await storage.updateReadingChannelAfterSend(channelId, nextLevel);
-  console.log(`✓ Reading done for ${channelId}, level used: ${level}`);
+  // 6. Keep the admin-selected level unchanged and remember this topic.
+    await storage.updateReadingChannelAfterSend(channelId);
+    await storage.recordTopic(channelId, "reading", passage.topicAr);
+    if (hasClaim) await storage.completeLearningDelivery(channelId, "reading", dateKey);
+    console.log(`✓ Reading done for ${channelId}, level used: ${level}`);
+  } catch (error) {
+    if (hasClaim && !deliveryStarted) await storage.releaseLearningDelivery(channelId, "reading", dateKey);
+    throw error;
+  }
 }
 
 export async function startReadingScheduler() {
@@ -862,21 +877,11 @@ export async function startReadingScheduler() {
       if (channels.length === 0) return;
 
       const now = new Date();
-      const uzTime = new Date(now.getTime() + 5 * 60 * 60 * 1000);
-      const currentHour = uzTime.getUTCHours();
-      const currentMinute = uzTime.getUTCMinutes();
-      const today = uzTime.toDateString();
-
-      const due = channels.filter(ch => {
-        const [h, m] = (ch.scheduledTime || "11:00").split(":").map(Number);
-        if (currentHour !== h || currentMinute !== m) return false;
-        const lastSent = ch.lastSentAt;
-        return !lastSent || new Date(lastSent).toDateString() !== today;
-      });
+      const due = channels.filter(ch => isLearningChannelDue(ch, now));
 
       await Promise.allSettled(
         due.map(ch =>
-          sendDailyReadingToChannel(ch.chatId)
+          sendDailyReadingToChannel(ch.chatId, { claimScheduledDelivery: true })
             .then(() => console.log(`✓ Reading sent to ${ch.title || ch.chatId}`))
             .catch((err: any) => console.error(`✗ Reading error [${ch.chatId}]:`, err?.message))
         )

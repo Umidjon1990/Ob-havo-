@@ -1,26 +1,38 @@
-import type { Express } from "express";
+import type { Express, NextFunction, Request, Response } from "express";
 import { createServer, type Server } from "http";
+import { randomBytes } from "crypto";
 import { storage } from "./storage";
 import { handleTelegramUpdate, sendTelegramMessage, setTelegramWebhook, sendDailyNewsToChannel, sendDailyListeningToChannel, sendDailyReadingToChannel } from "./lib/telegram";
 import { generateWeatherAdvice, generateVocabularyExample, generateNewVocabulary } from "./lib/openai";
 import { updateWeatherCache } from "./lib/weather";
+import { generateVoicePreview } from "./lib/listening";
+import { isValidScheduledTime, serializeScheduledDays } from "./lib/learning-schedule";
 import { regions } from "../client/src/data/regions";
 import { vocabulary } from "../client/src/data/vocabulary";
 
 // Admin credentials from environment variables
-const ADMIN_USERNAME = process.env.ADMIN_USERNAME || "admin";
-const ADMIN_PASSWORD = process.env.ADMIN_PASSWORD || "admin123";
+const ADMIN_USERNAME = process.env.ADMIN_USERNAME;
+const ADMIN_PASSWORD = process.env.ADMIN_PASSWORD;
 
 // Simple token storage (in production use Redis/DB)
 const validTokens = new Set<string>();
 
 function generateToken(): string {
-  return Math.random().toString(36).substring(2) + Date.now().toString(36);
+  return randomBytes(32).toString("base64url");
 }
 
 function verifyToken(token: string | undefined): boolean {
   if (!token) return false;
   return validTokens.has(token);
+}
+
+function requireAdmin(req: Request, res: Response, next: NextFunction): void {
+  const token = req.headers.authorization?.replace("Bearer ", "");
+  if (!verifyToken(token)) {
+    res.status(401).json({ error: "Admin authentication required" });
+    return;
+  }
+  next();
 }
 
 export async function registerRoutes(
@@ -31,6 +43,9 @@ export async function registerRoutes(
   // Admin login
   app.post("/api/admin/login", (req, res) => {
     const { username, password } = req.body;
+    if (!ADMIN_USERNAME || !ADMIN_PASSWORD) {
+      return res.status(503).json({ success: false, error: "Admin credentials are not configured" });
+    }
     if (username === ADMIN_USERNAME && password === ADMIN_PASSWORD) {
       const token = generateToken();
       validTokens.add(token);
@@ -375,7 +390,45 @@ export async function registerRoutes(
 
   // ─── Listening channels API ───────────────────────────────────────────────────
 
-  app.get("/api/listening-channels", async (req, res) => {
+  app.get("/api/listening-voices", requireAdmin, async (_req, res) => {
+    try {
+      res.json(await storage.getVoiceProfiles());
+    } catch (error) {
+      res.status(500).json({ error: "Failed to fetch voice profiles" });
+    }
+  });
+
+  app.patch("/api/listening-voices/:voiceId", requireAdmin, async (req, res) => {
+    try {
+      const { voiceId } = req.params;
+      const { label, gender } = req.body;
+      if (typeof label !== "string" || !label.trim() || label.trim().length > 60) {
+        return res.status(400).json({ error: "Voice label is required and must be under 60 characters" });
+      }
+      if (!["male", "female", "unknown"].includes(gender)) {
+        return res.status(400).json({ error: "Voice gender must be male, female, or unknown" });
+      }
+      const profile = await storage.updateVoiceProfile(voiceId, { label: label.trim(), gender });
+      if (!profile) return res.status(404).json({ error: "Voice profile not found" });
+      res.json(profile);
+    } catch (error) {
+      res.status(500).json({ error: "Failed to update voice profile" });
+    }
+  });
+
+  app.post("/api/listening-voices/:voiceId/preview", requireAdmin, async (req, res) => {
+    try {
+      const audio = await generateVoicePreview(req.params.voiceId);
+      if (!audio) return res.status(502).json({ error: "ElevenLabs preview could not be generated" });
+      res.setHeader("Content-Type", "audio/mpeg");
+      res.setHeader("Cache-Control", "no-store");
+      res.send(audio);
+    } catch (error: any) {
+      res.status(500).json({ error: error?.message || "Voice preview failed" });
+    }
+  });
+
+  app.get("/api/listening-channels", requireAdmin, async (req, res) => {
     try {
       const list = await storage.getListeningChannels();
       res.json(list);
@@ -384,14 +437,17 @@ export async function registerRoutes(
     }
   });
 
-  app.post("/api/listening-channels", async (req, res) => {
+  app.post("/api/listening-channels", requireAdmin, async (req, res) => {
     try {
-      const { chatId, title, scheduledTime } = req.body;
+      const { chatId, title, scheduledTime, scheduledDays } = req.body;
+      const safeTime = isValidScheduledTime(scheduledTime) ? scheduledTime : "10:00";
+      const safeDays = scheduledDays ? serializeScheduledDays(scheduledDays) : "0,1,2,3,4,5,6";
       const channel = await storage.addListeningChannel({
         chatId,
         title: title || chatId,
         enabled: true,
-        scheduledTime: scheduledTime || "10:00",
+        scheduledTime: safeTime,
+        scheduledDays: safeDays,
         currentLevel: "A1A2",
       });
       res.json(channel);
@@ -400,7 +456,7 @@ export async function registerRoutes(
     }
   });
 
-  app.delete("/api/listening-channels/:chatId", async (req, res) => {
+  app.delete("/api/listening-channels/:chatId", requireAdmin, async (req, res) => {
     try {
       const { chatId } = req.params;
       await storage.removeListeningChannel(chatId);
@@ -410,7 +466,7 @@ export async function registerRoutes(
     }
   });
 
-  app.patch("/api/listening-channels/:chatId", async (req, res) => {
+  app.patch("/api/listening-channels/:chatId", requireAdmin, async (req, res) => {
     try {
       const { chatId } = req.params;
       const { enabled } = req.body;
@@ -421,7 +477,7 @@ export async function registerRoutes(
     }
   });
 
-  app.patch("/api/listening-channels/:chatId/level", async (req, res) => {
+  app.patch("/api/listening-channels/:chatId/level", requireAdmin, async (req, res) => {
     try {
       const { chatId } = req.params;
       const { level } = req.body;
@@ -435,21 +491,47 @@ export async function registerRoutes(
     }
   });
 
-  app.patch("/api/listening-channels/:chatId/schedule", async (req, res) => {
+  app.patch("/api/listening-channels/:chatId/schedule", requireAdmin, async (req, res) => {
     try {
       const { chatId } = req.params;
-      const { scheduledTime } = req.body;
-      const channel = await storage.updateListeningChannelSchedule(chatId, scheduledTime);
+      const { scheduledTime, scheduledDays } = req.body;
+      if (!isValidScheduledTime(scheduledTime)) {
+        return res.status(400).json({ error: "Invalid time. Use HH:mm." });
+      }
+      const channel = await storage.updateListeningChannelSchedule(chatId, scheduledTime, serializeScheduledDays(scheduledDays));
       res.json(channel);
     } catch (error) {
       res.status(500).json({ error: "Failed to update listening schedule" });
     }
   });
 
-  app.post("/api/listening-channels/:chatId/send-now", async (req, res) => {
+  app.patch("/api/listening-channels/:chatId/voices", requireAdmin, async (req, res) => {
+    try {
+      const { chatId } = req.params;
+      const { maleVoiceId, femaleVoiceId } = req.body;
+      if ((maleVoiceId && typeof maleVoiceId !== "string") || (femaleVoiceId && typeof femaleVoiceId !== "string")) {
+        return res.status(400).json({ error: "Invalid voice selection" });
+      }
+      const profiles = await storage.getVoiceProfiles();
+      const male = maleVoiceId ? profiles.find(profile => profile.voiceId === maleVoiceId) : undefined;
+      const female = femaleVoiceId ? profiles.find(profile => profile.voiceId === femaleVoiceId) : undefined;
+      if (maleVoiceId && (!male || male.gender !== "male")) {
+        return res.status(400).json({ error: "Erkak speaker uchun erkak deb belgilangan voice tanlang" });
+      }
+      if (femaleVoiceId && (!female || female.gender !== "female")) {
+        return res.status(400).json({ error: "Ayol speaker uchun ayol deb belgilangan voice tanlang" });
+      }
+      const channel = await storage.updateListeningChannelVoices(chatId, maleVoiceId || null, femaleVoiceId || null);
+      res.json(channel);
+    } catch (error) {
+      res.status(500).json({ error: "Failed to update listening voices" });
+    }
+  });
+
+  app.post("/api/listening-channels/:chatId/send-now", requireAdmin, async (req, res) => {
     const { chatId } = req.params;
     try {
-      await sendDailyListeningToChannel(chatId);
+      await sendDailyListeningToChannel(chatId, { claimScheduledDelivery: false });
       res.json({ ok: true });
     } catch (error: any) {
       console.error(`listening send-now error for ${chatId}:`, error.message);
@@ -459,7 +541,7 @@ export async function registerRoutes(
 
   // ─── Reading channels API ─────────────────────────────────────────────────────
 
-  app.get("/api/reading-channels", async (req, res) => {
+  app.get("/api/reading-channels", requireAdmin, async (req, res) => {
     try {
       const list = await storage.getReadingChannels();
       res.json(list);
@@ -468,14 +550,17 @@ export async function registerRoutes(
     }
   });
 
-  app.post("/api/reading-channels", async (req, res) => {
+  app.post("/api/reading-channels", requireAdmin, async (req, res) => {
     try {
-      const { chatId, title, scheduledTime } = req.body;
+      const { chatId, title, scheduledTime, scheduledDays } = req.body;
+      const safeTime = isValidScheduledTime(scheduledTime) ? scheduledTime : "11:00";
+      const safeDays = scheduledDays ? serializeScheduledDays(scheduledDays) : "0,1,2,3,4,5,6";
       const channel = await storage.addReadingChannel({
         chatId,
         title: title || chatId,
         enabled: true,
-        scheduledTime: scheduledTime || "11:00",
+        scheduledTime: safeTime,
+        scheduledDays: safeDays,
         currentLevel: "A1A2",
       });
       res.json(channel);
@@ -484,7 +569,7 @@ export async function registerRoutes(
     }
   });
 
-  app.delete("/api/reading-channels/:chatId", async (req, res) => {
+  app.delete("/api/reading-channels/:chatId", requireAdmin, async (req, res) => {
     try {
       const { chatId } = req.params;
       await storage.removeReadingChannel(chatId);
@@ -494,7 +579,7 @@ export async function registerRoutes(
     }
   });
 
-  app.patch("/api/reading-channels/:chatId", async (req, res) => {
+  app.patch("/api/reading-channels/:chatId", requireAdmin, async (req, res) => {
     try {
       const { chatId } = req.params;
       const { enabled } = req.body;
@@ -505,7 +590,7 @@ export async function registerRoutes(
     }
   });
 
-  app.patch("/api/reading-channels/:chatId/level", async (req, res) => {
+  app.patch("/api/reading-channels/:chatId/level", requireAdmin, async (req, res) => {
     try {
       const { chatId } = req.params;
       const { level } = req.body;
@@ -519,21 +604,24 @@ export async function registerRoutes(
     }
   });
 
-  app.patch("/api/reading-channels/:chatId/schedule", async (req, res) => {
+  app.patch("/api/reading-channels/:chatId/schedule", requireAdmin, async (req, res) => {
     try {
       const { chatId } = req.params;
-      const { scheduledTime } = req.body;
-      const channel = await storage.updateReadingChannelSchedule(chatId, scheduledTime);
+      const { scheduledTime, scheduledDays } = req.body;
+      if (!isValidScheduledTime(scheduledTime)) {
+        return res.status(400).json({ error: "Invalid time. Use HH:mm." });
+      }
+      const channel = await storage.updateReadingChannelSchedule(chatId, scheduledTime, serializeScheduledDays(scheduledDays));
       res.json(channel);
     } catch (error) {
       res.status(500).json({ error: "Failed to update reading schedule" });
     }
   });
 
-  app.post("/api/reading-channels/:chatId/send-now", async (req, res) => {
+  app.post("/api/reading-channels/:chatId/send-now", requireAdmin, async (req, res) => {
     const { chatId } = req.params;
     try {
-      await sendDailyReadingToChannel(chatId);
+      await sendDailyReadingToChannel(chatId, { claimScheduledDelivery: false });
       res.json({ ok: true });
     } catch (error: any) {
       console.error(`reading send-now error for ${chatId}:`, error.message);

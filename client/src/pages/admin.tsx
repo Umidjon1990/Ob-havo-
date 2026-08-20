@@ -7,8 +7,23 @@ import { Textarea } from "@/components/ui/textarea";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { useToast } from "@/hooks/use-toast";
 import { Switch } from "@/components/ui/switch";
-import { setupTelegramWebhook, getBotSettings, updateBotSettings, testChannelMessage, getChannels, addChannel, removeChannel, toggleChannel, updateChannelSchedule, refreshWeatherData, generateNewVocabulary, adminLogin, verifyAdminToken, adminLogout, getNewsChannels, addNewsChannel, removeNewsChannel, toggleNewsChannel, updateNewsChannelSchedule, sendNewsNow, getListeningChannels, addListeningChannel, removeListeningChannel, toggleListeningChannel, updateListeningChannelSchedule, updateListeningChannelLevel, sendListeningNow, getReadingChannels, addReadingChannel, removeReadingChannel, toggleReadingChannel, updateReadingChannelSchedule, updateReadingChannelLevel, sendReadingNow, type Channel, type NewsChannel, type ListeningChannel, type ReadingChannel, type GeneratedWord } from "@/lib/api";
+import { setupTelegramWebhook, getBotSettings, updateBotSettings, testChannelMessage, getChannels, addChannel, removeChannel, toggleChannel, updateChannelSchedule, refreshWeatherData, generateNewVocabulary, adminLogin, verifyAdminToken, adminLogout, getNewsChannels, addNewsChannel, removeNewsChannel, toggleNewsChannel, updateNewsChannelSchedule, sendNewsNow, getListeningChannels, addListeningChannel, removeListeningChannel, toggleListeningChannel, updateListeningChannelSchedule, updateListeningChannelLevel, updateListeningChannelVoices, getListeningVoices, updateListeningVoice, previewListeningVoice, sendListeningNow, getReadingChannels, addReadingChannel, removeReadingChannel, toggleReadingChannel, updateReadingChannelSchedule, updateReadingChannelLevel, sendReadingNow, type Channel, type NewsChannel, type ListeningChannel, type ReadingChannel, type VoiceProfile, type GeneratedWord } from "@/lib/api";
 import { regions } from "@/data/regions";
+
+const WEEKDAYS = [
+  { value: 1, label: "Du" },
+  { value: 2, label: "Se" },
+  { value: 3, label: "Ch" },
+  { value: 4, label: "Pa" },
+  { value: 5, label: "Ju" },
+  { value: 6, label: "Sh" },
+  { value: 0, label: "Ya" },
+];
+
+function channelDays(value: string | null): number[] {
+  const parsed = (value || "0,1,2,3,4,5,6").split(",").map(Number).filter(day => day >= 0 && day <= 6);
+  return parsed.length ? parsed : [0, 1, 2, 3, 4, 5, 6];
+}
 
 export default function Admin() {
   const { toast } = useToast();
@@ -54,6 +69,8 @@ export default function Admin() {
   const [newListeningChannelTitle, setNewListeningChannelTitle] = useState("");
   const [newListeningTime, setNewListeningTime] = useState("10:00");
   const [sendingListeningNow, setSendingListeningNow] = useState<string | null>(null);
+  const [voiceProfiles, setVoiceProfiles] = useState<VoiceProfile[]>([]);
+  const [previewingVoiceId, setPreviewingVoiceId] = useState<string | null>(null);
 
   const [readingChannelsList, setReadingChannelsList] = useState<ReadingChannel[]>([]);
   const [newReadingChannelId, setNewReadingChannelId] = useState("");
@@ -88,6 +105,7 @@ export default function Admin() {
     loadNewsChannels();
     loadListeningChannels();
     loadReadingChannels();
+    loadVoiceProfiles();
   };
 
   const loadNewsChannels = async () => {
@@ -98,6 +116,10 @@ export default function Admin() {
   const loadListeningChannels = async () => {
     const list = await getListeningChannels();
     setListeningChannelsList(list);
+  };
+
+  const loadVoiceProfiles = async () => {
+    setVoiceProfiles(await getListeningVoices());
   };
 
   const loadReadingChannels = async () => {
@@ -135,8 +157,8 @@ export default function Admin() {
     loadReadingChannels();
   };
 
-  const handleReadingScheduleChange = async (chatId: string, time: string) => {
-    const result = await updateReadingChannelSchedule(chatId, time);
+  const handleReadingScheduleChange = async (chatId: string, time: string, days: number[]) => {
+    const result = await updateReadingChannelSchedule(chatId, time, days);
     if (result) {
       toast({ title: "Saqlandi!", description: `O'qib tushunish vaqti: ${time}` });
       loadReadingChannels();
@@ -194,8 +216,8 @@ export default function Admin() {
     loadListeningChannels();
   };
 
-  const handleListeningScheduleChange = async (chatId: string, time: string) => {
-    const result = await updateListeningChannelSchedule(chatId, time);
+  const handleListeningScheduleChange = async (chatId: string, time: string, days: number[]) => {
+    const result = await updateListeningChannelSchedule(chatId, time, days);
     if (result) {
       toast({ title: "Saqlandi!", description: `Tinglash vaqti: ${time}` });
       loadListeningChannels();
@@ -207,6 +229,51 @@ export default function Admin() {
     if (result) {
       toast({ title: "Daraja o'zgartirildi!", description: `${level === "A1A2" ? "A1/A2 — Boshlang'ich" : "B1/B2 — O'rta daraja"}` });
       loadListeningChannels();
+    }
+  };
+
+  const handleListeningVoicesChange = async (chatId: string, maleVoiceId: string | null, femaleVoiceId: string | null) => {
+    const result = await updateListeningChannelVoices(chatId, maleVoiceId, femaleVoiceId);
+    if (result) {
+      toast({ title: "Voice tanlovi saqlandi" });
+      loadListeningChannels();
+    } else {
+      toast({ title: "Xatolik", description: "Voice tanlovini saqlab bo'lmadi. Gender belgilari tekshiring.", variant: "destructive" });
+    }
+  };
+
+  const handleVoiceProfileSave = async (profile: VoiceProfile, label: string, gender: VoiceProfile["gender"]) => {
+    const result = await updateListeningVoice(profile.voiceId, label, gender);
+    if (result) {
+      toast({ title: "Voice profili saqlandi" });
+      loadVoiceProfiles();
+    }
+  };
+
+  const handleVoicePreview = async (voiceId: string) => {
+    setPreviewingVoiceId(voiceId);
+    const audio = await previewListeningVoice(voiceId);
+    if (!audio) {
+      toast({ title: "Preview xatosi", description: "ElevenLabs preview yaratib bo'lmadi.", variant: "destructive" });
+      setPreviewingVoiceId(null);
+      return;
+    }
+    const url = URL.createObjectURL(audio);
+    const player = new Audio(url);
+    player.onended = () => {
+      URL.revokeObjectURL(url);
+      setPreviewingVoiceId(null);
+    };
+    player.onerror = () => {
+      URL.revokeObjectURL(url);
+      setPreviewingVoiceId(null);
+    };
+    try {
+      await player.play();
+    } catch {
+      URL.revokeObjectURL(url);
+      setPreviewingVoiceId(null);
+      toast({ title: "Preview ijro etilmadi", variant: "destructive" });
     }
   };
 
@@ -935,7 +1002,7 @@ export default function Admin() {
               <Headphones className="w-5 h-5" /> Tinglash Testi Kanali
             </CardTitle>
             <p className="text-xs text-muted-foreground mt-1">
-              Har kuni arabcha audio (ElevenLabs) + 3 ta IELTS uslubidagi anonim quiz. Daraja kunma-kun almashadi: A1/A2 ↔ B1/B2.
+              Arabcha audio (ElevenLabs) + 3 ta professional comprehension quiz. Har kanal o'zining haftalik jadvali va doimiy A1/A2 yoki B1/B2 darajasiga ega.
             </p>
           </CardHeader>
           <CardContent className="space-y-4">
@@ -943,12 +1010,57 @@ export default function Admin() {
               <p className="text-xs text-purple-800">
                 🎧 <b>Format:</b> Audio (arabcha matn) → A1/A2 yoki B1/B2 darajasida 3 ta comprehension savoli (quiz poll)
               </p>
-              <p className="text-xs text-purple-700 mt-1">
-                📅 Daraja kalendar kun paritetiga ko'ra avtomat almashadi (toq kun = A1/A2, juft kun = B1/B2). Qo'lda ham o'zgartirishingiz mumkin.
-              </p>
+              <p className="text-xs text-purple-700 mt-1">📅 Jadval Toshkent vaqti va tanlangan hafta kunlariga qaraydi. Daraja faqat siz o'zgartirsangiz o'zgaradi.</p>
               <p className="text-xs text-red-600 mt-1">
                 ⚠️ ElevenLabs API kalit bo'lmasa yuborish to'xtatiladi (fallback yo'q — audio majburiy)
               </p>
+            </div>
+
+            <div className="border rounded-lg p-3 space-y-3 bg-background/50">
+              <div>
+                <h4 className="text-sm font-medium">ElevenLabs voice profillari</h4>
+                <p className="text-xs text-muted-foreground mt-1">Har bir voice uchun nom va genderni qo'lda belgilang, keyin kanalga erkak va ayol speaker sifatida biriktiring.</p>
+              </div>
+              <div className="grid gap-2 md:grid-cols-2">
+                {voiceProfiles.map((profile) => (
+                  <div key={profile.voiceId} className="border rounded-md p-2 space-y-2">
+                    <div className="flex gap-2">
+                      <Input
+                        defaultValue={profile.label}
+                        className="h-8 text-xs"
+                        aria-label={`${profile.voiceId} voice nomi`}
+                        onBlur={(event) => {
+                          if (event.target.value.trim() && event.target.value.trim() !== profile.label) {
+                            handleVoiceProfileSave(profile, event.target.value.trim(), profile.gender);
+                          }
+                        }}
+                      />
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        className="h-8 text-xs shrink-0"
+                        disabled={previewingVoiceId === profile.voiceId}
+                        onClick={() => handleVoicePreview(profile.voiceId)}
+                      >
+                        {previewingVoiceId === profile.voiceId ? <RefreshCw className="w-3 h-3 animate-spin" /> : "▶ Preview"}
+                      </Button>
+                    </div>
+                    <div className="flex items-center justify-between gap-2">
+                      <code className="text-[10px] text-muted-foreground truncate">{profile.voiceId}</code>
+                      <select
+                        value={profile.gender}
+                        onChange={(event) => handleVoiceProfileSave(profile, profile.label, event.target.value as VoiceProfile["gender"])}
+                        className="h-7 rounded border bg-background px-1 text-xs"
+                        aria-label={`${profile.label} gender`}
+                      >
+                        <option value="unknown">Belgilanmagan</option>
+                        <option value="male">Erkak</option>
+                        <option value="female">Ayol</option>
+                      </select>
+                    </div>
+                  </div>
+                ))}
+              </div>
             </div>
 
             <div className="space-y-2">
@@ -1026,11 +1138,54 @@ export default function Admin() {
                         defaultValue={ch.scheduledTime || "09:00"}
                         onBlur={(e) => {
                           if (e.target.value !== ch.scheduledTime) {
-                            handleListeningScheduleChange(ch.chatId, e.target.value);
+                            handleListeningScheduleChange(ch.chatId, e.target.value, channelDays(ch.scheduledDays));
                           }
                         }}
                         className="w-28 h-8 text-sm"
                       />
+                      <div className="flex items-center gap-1">
+                        <span className="text-xs text-muted-foreground mr-1">Kun:</span>
+                        {WEEKDAYS.map((day) => {
+                          const selected = channelDays(ch.scheduledDays).includes(day.value);
+                          return (
+                            <button
+                              key={day.value}
+                              type="button"
+                              title={day.label}
+                              onClick={() => {
+                                const current = channelDays(ch.scheduledDays);
+                                const next = selected ? current.filter(value => value !== day.value) : [...current, day.value];
+                                if (next.length) handleListeningScheduleChange(ch.chatId, ch.scheduledTime || "10:00", next);
+                              }}
+                              className={`h-7 w-7 rounded text-[10px] font-medium ${selected ? "bg-purple-600 text-white" : "border bg-background text-muted-foreground"}`}
+                            >
+                              {day.label}
+                            </button>
+                          );
+                        })}
+                      </div>
+                      <select
+                        value={ch.maleVoiceId || ""}
+                        onChange={(event) => handleListeningVoicesChange(ch.chatId, event.target.value || null, ch.femaleVoiceId)}
+                        className="h-8 rounded border bg-background px-2 text-xs"
+                        aria-label="Erkak speaker voice"
+                      >
+                        <option value="">Erkak: default</option>
+                        {voiceProfiles.filter(profile => profile.gender === "male").map(profile => (
+                          <option key={profile.voiceId} value={profile.voiceId}>Erkak: {profile.label}</option>
+                        ))}
+                      </select>
+                      <select
+                        value={ch.femaleVoiceId || ""}
+                        onChange={(event) => handleListeningVoicesChange(ch.chatId, ch.maleVoiceId, event.target.value || null)}
+                        className="h-8 rounded border bg-background px-2 text-xs"
+                        aria-label="Ayol speaker voice"
+                      >
+                        <option value="">Ayol: default</option>
+                        {voiceProfiles.filter(profile => profile.gender === "female").map(profile => (
+                          <option key={profile.voiceId} value={profile.voiceId}>Ayol: {profile.label}</option>
+                        ))}
+                      </select>
                       <Button
                         size="sm"
                         variant="outline"
@@ -1072,7 +1227,7 @@ export default function Admin() {
               <BookOpen className="w-5 h-5" /> O'qib Tushunish Kanali
             </CardTitle>
             <p className="text-xs text-muted-foreground mt-1">
-              Har kuni arabcha matn (harakat bilan) + o'zbekcha tarjima + 3 ta IELTS uslubidagi quiz. Daraja kunma-kun almashadi: A1/A2 ↔ B1/B2.
+              Arabcha matn + o'zbekcha tarjima + 3 ta IELTS uslubidagi quiz. Har kanal o'zining haftalik jadvali va doimiy A1/A2 yoki B1/B2 darajasiga ega.
             </p>
           </CardHeader>
           <CardContent className="space-y-4">
@@ -1083,9 +1238,7 @@ export default function Admin() {
               <p className="text-xs text-emerald-700 mt-1">
                 📝 <b>Savollar:</b> 1) Ko'p tanlov (أ ب ج د) · 2) صواب/غلط/غير معطى · 3) Sarlavha tanlash
               </p>
-              <p className="text-xs text-emerald-700 mt-1">
-                📅 Daraja kalendar kun paritetiga ko'ra avtomat almashadi (toq kun = A1/A2, juft kun = B1/B2).
-              </p>
+              <p className="text-xs text-emerald-700 mt-1">📅 Jadval Toshkent vaqti va tanlangan hafta kunlariga qaraydi. Daraja faqat siz o'zgartirsangiz o'zgaradi.</p>
             </div>
 
             <div className="space-y-2">
@@ -1163,11 +1316,32 @@ export default function Admin() {
                         defaultValue={ch.scheduledTime || "11:00"}
                         onBlur={(e) => {
                           if (e.target.value !== ch.scheduledTime) {
-                            handleReadingScheduleChange(ch.chatId, e.target.value);
+                            handleReadingScheduleChange(ch.chatId, e.target.value, channelDays(ch.scheduledDays));
                           }
                         }}
                         className="w-28 h-8 text-sm"
                       />
+                      <div className="flex items-center gap-1">
+                        <span className="text-xs text-muted-foreground mr-1">Kun:</span>
+                        {WEEKDAYS.map((day) => {
+                          const selected = channelDays(ch.scheduledDays).includes(day.value);
+                          return (
+                            <button
+                              key={day.value}
+                              type="button"
+                              title={day.label}
+                              onClick={() => {
+                                const current = channelDays(ch.scheduledDays);
+                                const next = selected ? current.filter(value => value !== day.value) : [...current, day.value];
+                                if (next.length) handleReadingScheduleChange(ch.chatId, ch.scheduledTime || "11:00", next);
+                              }}
+                              className={`h-7 w-7 rounded text-[10px] font-medium ${selected ? "bg-emerald-600 text-white" : "border bg-background text-muted-foreground"}`}
+                            >
+                              {day.label}
+                            </button>
+                          );
+                        })}
+                      </div>
                       <Button
                         size="sm"
                         variant="outline"

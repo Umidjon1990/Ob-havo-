@@ -48,7 +48,7 @@ export function shuffleReadingOptions(quiz: ReadingQuiz): { options: string[]; c
 
 // ─── Topics ───────────────────────────────────────────────────────────────────
 
-// 30 A1/A2 reading topics (different from listening topics) — selected by day-of-month
+// 30 A1/A2 reading topics (different from listening topics)
 const TOPICS_A1A2 = [
   "الحيوانات الأليفة في المنزل",
   "البريد والطرود والرسائل",
@@ -82,7 +82,7 @@ const TOPICS_A1A2 = [
   "الألعاب الرياضية في الهواء الطلق",
 ];
 
-// 30 B1/B2 reading topics (different from listening topics) — selected by day-of-month
+// 30 B1/B2 reading topics (different from listening topics)
 const TOPICS_B1B2 = [
   "تاريخ الحضارة المصرية القديمة",
   "الأوبئة الكبرى وكيف تغلب عليها البشر",
@@ -118,29 +118,59 @@ const TOPICS_B1B2 = [
 
 // ─── Passage Generation ───────────────────────────────────────────────────────
 
-export async function generateReadingPassage(level: ReadingLevel): Promise<ReadingPassage | null> {
+function getArabicWordCount(text: string): number {
+  return text.match(/[\u0600-\u06FF]+/g)?.length || 0;
+}
+
+function hasEnoughArabic(text: string): boolean {
+  const visible = text.replace(/[^A-Za-z\u0600-\u06FF]/g, "");
+  const arabic = text.match(/[\u0600-\u06FF]/g)?.length || 0;
+  return visible.length > 0 && arabic / visible.length >= 0.82;
+}
+
+function pickFreshTopic(topics: string[], excludedTopics: string[]): string {
+  const excluded = new Set(excludedTopics.map(topic => topic.trim()));
+  const available = topics.filter(topic => !excluded.has(topic));
+  const pool = available.length ? available : topics;
+  return pool[Math.floor(Math.random() * pool.length)];
+}
+
+function isProfessionalReadingPassage(parsed: any, level: ReadingLevel): boolean {
+  if (!parsed || typeof parsed.titleAr !== "string" || typeof parsed.titleUz !== "string") return false;
+  if (!Array.isArray(parsed.paragraphsAr) || parsed.paragraphsAr.length !== 3) return false;
+  if (!Array.isArray(parsed.paragraphsUz) || parsed.paragraphsUz.length !== 3) return false;
+  if (!parsed.paragraphsAr.every((paragraph: unknown) => typeof paragraph === "string" && hasEnoughArabic(paragraph))) return false;
+  if (!parsed.paragraphsUz.every((paragraph: unknown) => typeof paragraph === "string" && paragraph.trim().length >= 8)) return false;
+
+  const totalWords = parsed.paragraphsAr.reduce((sum: number, paragraph: string) => sum + getArabicWordCount(paragraph), 0);
+  const [minWords, maxWords] = level === "A1A2" ? [100, 145] : [180, 245];
+  return hasEnoughArabic(parsed.titleAr) &&
+    typeof parsed.topicAr === "string" && hasEnoughArabic(parsed.topicAr) &&
+    typeof parsed.topicUz === "string" && parsed.topicUz.trim().length >= 3 &&
+    totalWords >= minWords && totalWords <= maxWords;
+}
+
+export async function generateReadingPassage(
+  level: ReadingLevel,
+  excludedTopics: string[] = [],
+): Promise<ReadingPassage | null> {
   const topics = level === "A1A2" ? TOPICS_A1A2 : TOPICS_B1B2;
-  // Deterministic by Uzbekistan day-of-month so each day has a unique topic
-  const now = new Date();
-  const uzDay = new Date(now.getTime() + 5 * 60 * 60 * 1000).getUTCDate();
-  const topic = topics[(uzDay - 1) % topics.length];
+  const topic = pickFreshTopic(topics, excludedTopics);
 
   const wordCount = level === "A1A2"
-    ? "100–130 كلمة، جمل قصيرة وبسيطة، مفردات يومية"
-    : "180–220 كلمة، أسلوب أكاديمي، تراكيب معقدة، مفردات متقدمة";
+    ? "100–145 كلمة؛ جمل واضحة ومفردات عالية التكرار وروابط بسيطة"
+    : "180–245 كلمة؛ أسلوب معلوماتي متماسك، تراكيب متنوعة ومفردات مجردة مضبوطة";
 
-  const prompt = `أنت خبير IELTS Reading Academic متخصص في إعداد نصوص اختبارية.
-اكتب نصاً قابلاً للاختبار عن موضوع: "${topic}"
+  const prompt = `أنت مؤلف محترف لاختبارات القراءة العربية وفق CEFR ومراجع جودة صارم.
+اكتب نصاً أصلياً قابلاً للاختبار عن الموضوع: "${topic}".
 
-المواصفات:
-- المستوى: ${level === "A1A2" ? "A1/A2 مبتدئ" : "B1/B2 متوسط-متقدم"} — ${wordCount}
-- 3 فقرات بالضبط: (1) مقدمة، (2) محتوى رئيسي، (3) خاتمة
-- كل فقرة تحتوي على:
-  * معلومة قابلة للاختبار: رقم دقيق أو تاريخ أو اسم أو مقارنة أو نسبة مئوية
-  * جملة رأي (لتمكين T/F/NG)
-  * جملة حقيقة واضحة
-- التشكيل الكامل على النص العربي كله بدون استثناء
-- ممنوع: السياسة، الطائفية، المحتوى الحساس
+المواصفات الإلزامية:
+- المستوى: ${level === "A1A2" ? "A1/A2 مبتدئ" : "B1/B2 متوسط-متقدم"} — ${wordCount}.
+- ثلاث فقرات بالضبط، لكل فقرة وظيفة مختلفة: تمهيد، تفصيل/مقارنة، وخلاصة.
+- استخدم حقائق داخلية متسقة وقابلة للرجوع إلى النص. لا تخترع خبراً حديثاً أو رقماً واقعياً غير متحقق؛ عند الحاجة اجعل المثال سيناريو تعليمياً واضحاً.
+- أدرج أدلة كافية لثلاثة أسئلة: تفصيل، صواب/غلط/غير معطى، وعنوان رئيسي.
+- في B1/B2 استخدم إعادة صياغة وروابط استدلالية؛ في A1/A2 اجعل المعنى صريحاً وتجنب الجمل المعقدة جداً.
+- العربية الفصحى فقط في النص العربي، بلا سياسة أو طائفية أو محتوى حساس.
 
 أجب بـ JSON فقط:
 {
@@ -175,12 +205,7 @@ export async function generateReadingPassage(level: ReadingLevel): Promise<Readi
       if (!jsonMatch) continue;
       const sanitized = jsonMatch[0].replace(/[\x00-\x08\x0b\x0c\x0e-\x1f]/g, " ");
       const parsed = JSON.parse(sanitized);
-      if (
-        parsed.titleAr && parsed.titleUz &&
-        Array.isArray(parsed.paragraphsAr) && parsed.paragraphsAr.length === 3 &&
-        Array.isArray(parsed.paragraphsUz) && parsed.paragraphsUz.length === 3 &&
-        parsed.paragraphsAr.every((p: unknown) => typeof p === "string" && (p as string).trim().length > 10)
-      ) {
+      if (isProfessionalReadingPassage(parsed, level)) {
         const fullAr = parsed.paragraphsAr.map((p: string) => p.trim()).join("\n\n");
         const fullUz = parsed.paragraphsUz.map((p: string) => p.trim()).join("\n\n");
         console.log(`✓ Reading passage generated (${model}), topic: ${parsed.topicUz || topic}`);
@@ -300,8 +325,9 @@ ${passage.fullAr}
       // min/max accepted option counts per type
       const OPTION_RANGE: [number, number][] = [[4, 4], [3, 3], [3, 4]]; // best_title accepts 3 or 4
 
+      if (!Array.isArray(parsed) || parsed.length !== 3) continue;
       const valid: ReadingQuiz[] = [];
-      for (let i = 0; i < Math.min(3, parsed.length); i++) {
+      for (let i = 0; i < 3; i++) {
         const q = parsed[i];
         const expectedType = EXPECTED_TYPES[i];
         const [minOpts, maxOpts] = OPTION_RANGE[i];
@@ -310,22 +336,32 @@ ${passage.fullAr}
         const optsOk = optCount >= minOpts && optCount <= maxOpts &&
           q.options.every((o: unknown) => typeof o === "string" && (o as string).trim());
         const idxOk = typeof q.correctIndex === "number" &&
+          Number.isInteger(q.correctIndex) &&
           q.correctIndex >= 0 && q.correctIndex < optCount;
 
-        if (!typeMatch || !q.question?.trim() || !optsOk || !idxOk) {
+        const question = stripHarakat(String(q.question || "").trim()).slice(0, 240);
+        const options = optsOk
+          ? q.options.map((option: string) => stripHarakat(option.trim()).slice(0, 90))
+          : [];
+        const explanation = stripHarakat(String(q.explanation || "").trim()).slice(0, 190);
+        const optionsUnique = new Set(options.map((option: string) => option.replace(/\s+/g, " ").toLowerCase())).size === options.length;
+
+        if (!typeMatch || !optsOk || !idxOk || !optionsUnique ||
+          !hasEnoughArabic(question) || !hasEnoughArabic(explanation) ||
+          options.some((option: string) => !option || !hasEnoughArabic(option))) {
           console.warn(`Reading quiz ${i + 1} validation failed (${model}): type=${q.type} opts=${optCount} idx=${q.correctIndex}`);
           continue;
         }
         valid.push({
           type: q.type,
-          question: stripHarakat(q.question.trim()),
-          options: q.options.map((o: string) => stripHarakat(o.trim()).slice(0, 100)),
+          question,
+          options,
           correctIndex: q.correctIndex,
-          explanation: stripHarakat((q.explanation || "").trim()).slice(0, 190),
+          explanation,
         });
       }
 
-      if (valid.length === 3) {
+      if (valid.length === 3 && new Set(valid.map(quiz => quiz.question)).size === 3) {
         console.log(`✓ 3 reading quizzes generated (${model})`);
         return valid;
       }

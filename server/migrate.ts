@@ -151,6 +151,12 @@ async function migrate() {
       created_at TIMESTAMP DEFAULT NOW()
     );
   `);
+  await client.query(`
+    ALTER TABLE listening_channels
+      ADD COLUMN IF NOT EXISTS scheduled_days TEXT DEFAULT '0,1,2,3,4,5,6',
+      ADD COLUMN IF NOT EXISTS male_voice_id TEXT,
+      ADD COLUMN IF NOT EXISTS female_voice_id TEXT;
+  `);
 
   await client.query(`
     CREATE TABLE IF NOT EXISTS reading_channels (
@@ -162,6 +168,41 @@ async function migrate() {
       last_sent_at TIMESTAMP,
       current_level TEXT DEFAULT 'A1A2',
       created_at TIMESTAMP DEFAULT NOW()
+    );
+  `);
+  await client.query(`
+    ALTER TABLE reading_channels
+      ADD COLUMN IF NOT EXISTS scheduled_days TEXT DEFAULT '0,1,2,3,4,5,6';
+  `);
+
+  await client.query(`
+    CREATE TABLE IF NOT EXISTS voice_profiles (
+      voice_id TEXT PRIMARY KEY,
+      label TEXT NOT NULL,
+      gender TEXT NOT NULL DEFAULT 'unknown',
+      created_at TIMESTAMP DEFAULT NOW()
+    );
+  `);
+
+  await client.query(`
+    CREATE TABLE IF NOT EXISTS learning_content_history (
+      id VARCHAR(255) PRIMARY KEY DEFAULT gen_random_uuid()::text,
+      channel_id TEXT NOT NULL,
+      content_type TEXT NOT NULL,
+      topic_key TEXT NOT NULL,
+      created_at TIMESTAMP DEFAULT NOW()
+    );
+  `);
+
+  await client.query(`
+    CREATE TABLE IF NOT EXISTS learning_delivery_claims (
+      id VARCHAR(255) PRIMARY KEY DEFAULT gen_random_uuid()::text,
+      channel_id TEXT NOT NULL,
+      content_type TEXT NOT NULL,
+      date_key TEXT NOT NULL,
+      claimed_at TIMESTAMP DEFAULT NOW(),
+      completed_at TIMESTAMP,
+      CONSTRAINT learning_delivery_claims_daily_unique UNIQUE (channel_id, content_type, date_key)
     );
   `);
   
