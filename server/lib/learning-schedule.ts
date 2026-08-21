@@ -1,6 +1,7 @@
 export const ALL_WEEK_DAYS = [0, 1, 2, 3, 4, 5, 6];
 
 export type LearningLevel = "A1A2" | "B1B2";
+export type WeekdayLevelSchedule = Partial<Record<number, LearningLevel>>;
 
 export interface LearningDeliveryContext {
   level: LearningLevel;
@@ -17,6 +18,78 @@ export function getLearningDeliveryContext(
 ): LearningDeliveryContext {
   return {
     level: channel.currentLevel === "B1B2" ? "B1B2" : "A1A2",
+    recentTopics: [...recentTopics],
+  };
+}
+
+/**
+ * Read a per-weekday schedule. Legacy channels have no schedule yet, so their
+ * selected current level is used for each configured weekday.
+ */
+export function normalizeWeekdayLevelSchedule(
+  value: unknown,
+  fallbackLevel: LearningLevel = "A1A2",
+  fallbackDays: unknown = ALL_WEEK_DAYS,
+): WeekdayLevelSchedule {
+  let raw: unknown = value;
+  if (typeof raw === "string") {
+    try {
+      raw = JSON.parse(raw);
+    } catch {
+      raw = null;
+    }
+  }
+
+  const schedule: WeekdayLevelSchedule = {};
+  if (raw && typeof raw === "object" && !Array.isArray(raw)) {
+    for (const [day, level] of Object.entries(raw)) {
+      const numericDay = Number(day);
+      if (Number.isInteger(numericDay) && numericDay >= 0 && numericDay <= 6 && (level === "A1A2" || level === "B1B2")) {
+        schedule[numericDay] = level;
+      }
+    }
+  }
+
+  if (Object.keys(schedule).length > 0) return schedule;
+  for (const day of normalizeScheduledDays(fallbackDays)) {
+    schedule[day] = fallbackLevel;
+  }
+  return schedule;
+}
+
+export function serializeWeekdayLevelSchedule(value: unknown): string {
+  if (!value || typeof value !== "object" || Array.isArray(value)) {
+    throw new Error("A weekday-level schedule is required");
+  }
+
+  const schedule: Record<string, LearningLevel> = {};
+  for (const [day, level] of Object.entries(value)) {
+    const numericDay = Number(day);
+    if (!Number.isInteger(numericDay) || numericDay < 0 || numericDay > 6) {
+      throw new Error("Weekday must be between 0 and 6");
+    }
+    if (level !== "A1A2" && level !== "B1B2") {
+      throw new Error("Level must be A1A2 or B1B2");
+    }
+    schedule[String(numericDay)] = level;
+  }
+
+  if (Object.keys(schedule).length === 0) {
+    throw new Error("At least one weekday-level pair is required");
+  }
+  return JSON.stringify(schedule);
+}
+
+export function getScheduledLearningDeliveryContext(
+  channel: { currentLevel?: string | null; scheduledLevels?: string | null; scheduledDays?: string | null },
+  recentTopics: string[],
+  now = new Date(),
+): LearningDeliveryContext {
+  const fallbackLevel: LearningLevel = channel.currentLevel === "B1B2" ? "B1B2" : "A1A2";
+  const schedule = normalizeWeekdayLevelSchedule(channel.scheduledLevels, fallbackLevel, channel.scheduledDays || ALL_WEEK_DAYS);
+  const weekday = getUzbekistanDate(now).getUTCDay();
+  return {
+    level: schedule[weekday] || fallbackLevel,
     recentTopics: [...recentTopics],
   };
 }

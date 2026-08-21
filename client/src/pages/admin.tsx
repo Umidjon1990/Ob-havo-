@@ -25,6 +25,25 @@ function channelDays(value: string | null): number[] {
   return parsed.length ? parsed : [0, 1, 2, 3, 4, 5, 6];
 }
 
+type WeekdayLevelSchedule = Record<string, "A1A2" | "B1B2">;
+
+function channelWeekdayLevels(channel: { scheduledLevels: string | null; scheduledDays: string | null; currentLevel: string | null }): WeekdayLevelSchedule {
+  try {
+    const parsed = JSON.parse(channel.scheduledLevels || "{}");
+    if (parsed && typeof parsed === "object" && !Array.isArray(parsed)) {
+      const entries = Object.entries(parsed).filter(([day, level]) =>
+        /^[0-6]$/.test(day) && (level === "A1A2" || level === "B1B2"),
+      ) as [string, "A1A2" | "B1B2"][];
+      if (entries.length) return Object.fromEntries(entries);
+    }
+  } catch {
+    // Legacy channels are represented with their pre-existing level below.
+  }
+
+  const legacyLevel = channel.currentLevel === "B1B2" ? "B1B2" : "A1A2";
+  return Object.fromEntries(channelDays(channel.scheduledDays).map(day => [String(day), legacyLevel]));
+}
+
 export default function Admin() {
   const { toast } = useToast();
   
@@ -157,8 +176,8 @@ export default function Admin() {
     loadReadingChannels();
   };
 
-  const handleReadingScheduleChange = async (chatId: string, time: string, days: number[]) => {
-    const result = await updateReadingChannelSchedule(chatId, time, days);
+  const handleReadingScheduleChange = async (chatId: string, time: string, scheduledLevels: WeekdayLevelSchedule) => {
+    const result = await updateReadingChannelSchedule(chatId, time, scheduledLevels);
     if (result) {
       toast({ title: "Saqlandi!", description: `O'qib tushunish vaqti: ${time}` });
       loadReadingChannels();
@@ -216,8 +235,8 @@ export default function Admin() {
     loadListeningChannels();
   };
 
-  const handleListeningScheduleChange = async (chatId: string, time: string, days: number[]) => {
-    const result = await updateListeningChannelSchedule(chatId, time, days);
+  const handleListeningScheduleChange = async (chatId: string, time: string, scheduledLevels: WeekdayLevelSchedule) => {
+    const result = await updateListeningChannelSchedule(chatId, time, scheduledLevels);
     if (result) {
       toast({ title: "Saqlandi!", description: `Tinglash vaqti: ${time}` });
       loadListeningChannels();
@@ -1002,7 +1021,7 @@ export default function Admin() {
               <Headphones className="w-5 h-5" /> Tinglash Testi Kanali
             </CardTitle>
             <p className="text-xs text-muted-foreground mt-1">
-              Arabcha audio (ElevenLabs) + 3 ta professional comprehension quiz. Har kanal o'zining haftalik jadvali va doimiy A1/A2 yoki B1/B2 darajasiga ega.
+              Arabcha audio (ElevenLabs) + 3 ta professional comprehension quiz. Har bir tanlangan kunga A1/A2 yoki B1/B2 darajasini alohida biriktiring.
             </p>
           </CardHeader>
           <CardContent className="space-y-4">
@@ -1010,7 +1029,7 @@ export default function Admin() {
               <p className="text-xs text-purple-800">
                 🎧 <b>Format:</b> Audio (arabcha matn) → A1/A2 yoki B1/B2 darajasida 3 ta comprehension savoli (quiz poll)
               </p>
-              <p className="text-xs text-purple-700 mt-1">📅 Jadval Toshkent vaqti va tanlangan hafta kunlariga qaraydi. Daraja faqat siz o'zgartirsangiz o'zgaradi.</p>
+              <p className="text-xs text-purple-700 mt-1">📅 Jadval Toshkent vaqti bo'yicha ishlaydi. Masalan, Du — A1/A2 va Pa — B1/B2 qilib belgilang.</p>
               <p className="text-xs text-red-600 mt-1">
                 ⚠️ ElevenLabs API kalit bo'lmasa yuborish to'xtatiladi (fallback yo'q — audio majburiy)
               </p>
@@ -1108,6 +1127,7 @@ export default function Admin() {
                       </Button>
                     </div>
                     <div className="flex items-center gap-2 pl-10 flex-wrap">
+                      <span className="text-xs text-muted-foreground">Hozir yuborish:</span>
                       <div className="flex items-center border rounded-md overflow-hidden">
                         <button
                           className={`px-2 py-1 text-xs font-medium transition-colors ${ch.currentLevel === "A1A2" ? "bg-green-500 text-white" : "bg-muted text-muted-foreground hover:bg-green-100"}`}
@@ -1126,29 +1146,47 @@ export default function Admin() {
                         defaultValue={ch.scheduledTime || "09:00"}
                         onBlur={(e) => {
                           if (e.target.value !== ch.scheduledTime) {
-                            handleListeningScheduleChange(ch.chatId, e.target.value, channelDays(ch.scheduledDays));
+                              handleListeningScheduleChange(ch.chatId, e.target.value, channelWeekdayLevels(ch));
                           }
                         }}
                         className="w-28 h-8 text-sm"
                       />
-                      <div className="flex items-center gap-1">
-                        <span className="text-xs text-muted-foreground mr-1">Kun:</span>
+                      <div className="flex flex-wrap items-center gap-2 w-full">
+                        <span className="text-xs text-muted-foreground mr-1">Avtomatik jadval:</span>
                         {WEEKDAYS.map((day) => {
-                          const selected = channelDays(ch.scheduledDays).includes(day.value);
+                          const levels = channelWeekdayLevels(ch);
+                          const selectedLevel = levels[String(day.value)];
+                          const selected = Boolean(selectedLevel);
                           return (
-                            <button
-                              key={day.value}
-                              type="button"
-                              title={day.label}
-                              onClick={() => {
-                                const current = channelDays(ch.scheduledDays);
-                                const next = selected ? current.filter(value => value !== day.value) : [...current, day.value];
-                                if (next.length) handleListeningScheduleChange(ch.chatId, ch.scheduledTime || "10:00", next);
-                              }}
-                              className={`h-7 w-7 rounded text-[10px] font-medium ${selected ? "bg-purple-600 text-white" : "border bg-background text-muted-foreground"}`}
-                            >
-                              {day.label}
-                            </button>
+                            <div key={day.value} className={`flex items-center rounded border ${selected ? "border-purple-300 bg-purple-50" : "bg-background"}`}>
+                              <button
+                                type="button"
+                                title={day.label}
+                                onClick={() => {
+                                  const next = { ...levels };
+                                  if (selected) delete next[String(day.value)];
+                                  else next[String(day.value)] = ch.currentLevel === "B1B2" ? "B1B2" : "A1A2";
+                                  if (Object.keys(next).length) handleListeningScheduleChange(ch.chatId, ch.scheduledTime || "10:00", next);
+                                }}
+                                className={`h-7 min-w-8 px-1 rounded-l text-[10px] font-medium ${selected ? "bg-purple-600 text-white" : "text-muted-foreground"}`}
+                              >
+                                {day.label}
+                              </button>
+                              {selected && (
+                                <div className="flex overflow-hidden rounded-r border-l border-purple-200">
+                                  <button
+                                    type="button"
+                                    onClick={() => handleListeningScheduleChange(ch.chatId, ch.scheduledTime || "10:00", { ...levels, [day.value]: "A1A2" })}
+                                    className={`h-7 px-1.5 text-[10px] font-medium ${selectedLevel === "A1A2" ? "bg-green-500 text-white" : "bg-background text-muted-foreground"}`}
+                                  >A1/A2</button>
+                                  <button
+                                    type="button"
+                                    onClick={() => handleListeningScheduleChange(ch.chatId, ch.scheduledTime || "10:00", { ...levels, [day.value]: "B1B2" })}
+                                    className={`h-7 px-1.5 text-[10px] font-medium ${selectedLevel === "B1B2" ? "bg-blue-500 text-white" : "bg-background text-muted-foreground"}`}
+                                  >B1/B2</button>
+                                </div>
+                              )}
+                            </div>
                           );
                         })}
                       </div>
@@ -1226,7 +1264,7 @@ export default function Admin() {
               <BookOpen className="w-5 h-5" /> O'qib Tushunish Kanali
             </CardTitle>
             <p className="text-xs text-muted-foreground mt-1">
-              Arabcha matn + o'zbekcha tarjima + 3 ta IELTS uslubidagi quiz. Har kanal o'zining haftalik jadvali va doimiy A1/A2 yoki B1/B2 darajasiga ega.
+              Arabcha matn + o'zbekcha tarjima + 3 ta IELTS uslubidagi quiz. Har bir tanlangan kunga A1/A2 yoki B1/B2 darajasini alohida biriktiring.
             </p>
           </CardHeader>
           <CardContent className="space-y-4">
@@ -1237,7 +1275,7 @@ export default function Admin() {
               <p className="text-xs text-emerald-700 mt-1">
                 📝 <b>Savollar:</b> 1) Ko'p tanlov (أ ب ج د) · 2) صواب/غلط/غير معطى · 3) Sarlavha tanlash
               </p>
-              <p className="text-xs text-emerald-700 mt-1">📅 Jadval Toshkent vaqti va tanlangan hafta kunlariga qaraydi. Daraja faqat siz o'zgartirsangiz o'zgaradi.</p>
+              <p className="text-xs text-emerald-700 mt-1">📅 Jadval Toshkent vaqti bo'yicha ishlaydi. Masalan, Du — A1/A2 va Pa — B1/B2 qilib belgilang.</p>
             </div>
 
             <div className="space-y-2">
@@ -1297,6 +1335,7 @@ export default function Admin() {
                       </Button>
                     </div>
                     <div className="flex items-center gap-2 pl-10 flex-wrap">
+                      <span className="text-xs text-muted-foreground">Hozir yuborish:</span>
                       <div className="flex items-center border rounded-md overflow-hidden">
                         <button
                           className={`px-2 py-1 text-xs font-medium transition-colors ${ch.currentLevel === "A1A2" ? "bg-green-500 text-white" : "bg-muted text-muted-foreground hover:bg-green-100"}`}
@@ -1315,29 +1354,47 @@ export default function Admin() {
                         defaultValue={ch.scheduledTime || "11:00"}
                         onBlur={(e) => {
                           if (e.target.value !== ch.scheduledTime) {
-                            handleReadingScheduleChange(ch.chatId, e.target.value, channelDays(ch.scheduledDays));
+                            handleReadingScheduleChange(ch.chatId, e.target.value, channelWeekdayLevels(ch));
                           }
                         }}
                         className="w-28 h-8 text-sm"
                       />
-                      <div className="flex items-center gap-1">
-                        <span className="text-xs text-muted-foreground mr-1">Kun:</span>
+                      <div className="flex flex-wrap items-center gap-2 w-full">
+                        <span className="text-xs text-muted-foreground mr-1">Avtomatik jadval:</span>
                         {WEEKDAYS.map((day) => {
-                          const selected = channelDays(ch.scheduledDays).includes(day.value);
+                          const levels = channelWeekdayLevels(ch);
+                          const selectedLevel = levels[String(day.value)];
+                          const selected = Boolean(selectedLevel);
                           return (
-                            <button
-                              key={day.value}
-                              type="button"
-                              title={day.label}
-                              onClick={() => {
-                                const current = channelDays(ch.scheduledDays);
-                                const next = selected ? current.filter(value => value !== day.value) : [...current, day.value];
-                                if (next.length) handleReadingScheduleChange(ch.chatId, ch.scheduledTime || "11:00", next);
-                              }}
-                              className={`h-7 w-7 rounded text-[10px] font-medium ${selected ? "bg-emerald-600 text-white" : "border bg-background text-muted-foreground"}`}
-                            >
-                              {day.label}
-                            </button>
+                            <div key={day.value} className={`flex items-center rounded border ${selected ? "border-emerald-300 bg-emerald-50" : "bg-background"}`}>
+                              <button
+                                type="button"
+                                title={day.label}
+                                onClick={() => {
+                                  const next = { ...levels };
+                                  if (selected) delete next[String(day.value)];
+                                  else next[String(day.value)] = ch.currentLevel === "B1B2" ? "B1B2" : "A1A2";
+                                  if (Object.keys(next).length) handleReadingScheduleChange(ch.chatId, ch.scheduledTime || "11:00", next);
+                                }}
+                                className={`h-7 min-w-8 px-1 rounded-l text-[10px] font-medium ${selected ? "bg-emerald-600 text-white" : "text-muted-foreground"}`}
+                              >
+                                {day.label}
+                              </button>
+                              {selected && (
+                                <div className="flex overflow-hidden rounded-r border-l border-emerald-200">
+                                  <button
+                                    type="button"
+                                    onClick={() => handleReadingScheduleChange(ch.chatId, ch.scheduledTime || "11:00", { ...levels, [day.value]: "A1A2" })}
+                                    className={`h-7 px-1.5 text-[10px] font-medium ${selectedLevel === "A1A2" ? "bg-green-500 text-white" : "bg-background text-muted-foreground"}`}
+                                  >A1/A2</button>
+                                  <button
+                                    type="button"
+                                    onClick={() => handleReadingScheduleChange(ch.chatId, ch.scheduledTime || "11:00", { ...levels, [day.value]: "B1B2" })}
+                                    className={`h-7 px-1.5 text-[10px] font-medium ${selectedLevel === "B1B2" ? "bg-blue-500 text-white" : "bg-background text-muted-foreground"}`}
+                                  >B1/B2</button>
+                                </div>
+                              )}
+                            </div>
                           );
                         })}
                       </div>

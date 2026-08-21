@@ -3,6 +3,8 @@ import { test } from "node:test";
 import {
   isLearningChannelDue,
   getLearningDeliveryContext,
+  getScheduledLearningDeliveryContext,
+  serializeWeekdayLevelSchedule,
 } from "./learning-schedule";
 import {
   isProfessionalDialog,
@@ -111,6 +113,31 @@ test("delivery context preserves the configured level and recent topics", () => 
   context.recentTopics.push("لا تعدل المصدر");
   assert.deepEqual(recentTopics, ["موضوع سابق", "موضوع أقدم"]);
   assert.equal(getLearningDeliveryContext({ currentLevel: "invalid" }, []).level, "A1A2");
+});
+
+test("scheduled delivery selects the configured level for the Tashkent weekday", () => {
+  const channel = {
+    currentLevel: "A1A2",
+    scheduledDays: "1,4",
+    scheduledLevels: JSON.stringify({ 1: "A1A2", 4: "B1B2" }),
+  };
+
+  const monday = new Date("2026-08-17T04:00:00.000Z");
+  const thursday = new Date("2026-08-20T04:00:00.000Z");
+  assert.equal(getScheduledLearningDeliveryContext(channel, [], monday).level, "A1A2");
+  assert.equal(getScheduledLearningDeliveryContext(channel, [], thursday).level, "B1B2");
+  assert.equal(isLearningChannelDue({ ...channel, scheduledTime: "09:00", lastSentAt: null }, thursday), true);
+});
+
+test("legacy schedules and invalid weekday-level schedules are handled safely", () => {
+  const legacyChannel = { currentLevel: "B1B2", scheduledDays: "1,4", scheduledLevels: null };
+  assert.equal(
+    getScheduledLearningDeliveryContext(legacyChannel, [], new Date("2026-08-20T04:00:00.000Z")).level,
+    "B1B2",
+  );
+  assert.throws(() => serializeWeekdayLevelSchedule({}), /At least one weekday-level pair/);
+  assert.throws(() => serializeWeekdayLevelSchedule({ 7: "A1A2" }), /Weekday must be between 0 and 6/);
+  assert.throws(() => serializeWeekdayLevelSchedule({ 1: "C1" }), /Level must be A1A2 or B1B2/);
 });
 
 for (const level of ["A1A2", "B1B2"] as const) {

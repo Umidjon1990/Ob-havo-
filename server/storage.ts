@@ -60,7 +60,7 @@ export interface IStorage {
   addListeningChannel(channel: InsertListeningChannel): Promise<ListeningChannel>;
   removeListeningChannel(chatId: string): Promise<void>;
   toggleListeningChannel(chatId: string, enabled: boolean): Promise<ListeningChannel | undefined>;
-  updateListeningChannelSchedule(chatId: string, scheduledTime: string, scheduledDays?: string): Promise<ListeningChannel | undefined>;
+  updateListeningChannelSchedule(chatId: string, scheduledTime: string, scheduledDays: string, scheduledLevels: string): Promise<ListeningChannel | undefined>;
   updateListeningChannelVoices(chatId: string, maleVoiceId: string | null, femaleVoiceId: string | null): Promise<ListeningChannel | undefined>;
   updateListeningChannelAfterSend(chatId: string): Promise<void>;
   updateListeningChannelLevel(chatId: string, level: string): Promise<ListeningChannel | undefined>;
@@ -72,7 +72,7 @@ export interface IStorage {
   addReadingChannel(channel: InsertReadingChannel): Promise<ReadingChannel>;
   removeReadingChannel(chatId: string): Promise<void>;
   toggleReadingChannel(chatId: string, enabled: boolean): Promise<ReadingChannel | undefined>;
-  updateReadingChannelSchedule(chatId: string, scheduledTime: string, scheduledDays?: string): Promise<ReadingChannel | undefined>;
+  updateReadingChannelSchedule(chatId: string, scheduledTime: string, scheduledDays: string, scheduledLevels: string): Promise<ReadingChannel | undefined>;
   updateReadingChannelAfterSend(chatId: string): Promise<void>;
   updateReadingChannelLevel(chatId: string, level: string): Promise<ReadingChannel | undefined>;
 
@@ -288,10 +288,10 @@ export class DatabaseStorage implements IStorage {
     return updated;
   }
 
-  async updateListeningChannelSchedule(chatId: string, scheduledTime: string, scheduledDays?: string): Promise<ListeningChannel | undefined> {
+  async updateListeningChannelSchedule(chatId: string, scheduledTime: string, scheduledDays: string, scheduledLevels: string): Promise<ListeningChannel | undefined> {
     const [updated] = await db
       .update(listeningChannels)
-      .set({ scheduledTime, ...(scheduledDays ? { scheduledDays } : {}) })
+      .set({ scheduledTime, scheduledDays, scheduledLevels })
       .where(eq(listeningChannels.chatId, chatId))
       .returning();
     return updated;
@@ -353,10 +353,10 @@ export class DatabaseStorage implements IStorage {
     return updated;
   }
 
-  async updateReadingChannelSchedule(chatId: string, scheduledTime: string, scheduledDays?: string): Promise<ReadingChannel | undefined> {
+  async updateReadingChannelSchedule(chatId: string, scheduledTime: string, scheduledDays: string, scheduledLevels: string): Promise<ReadingChannel | undefined> {
     const [updated] = await db
       .update(readingChannels)
-      .set({ scheduledTime, ...(scheduledDays ? { scheduledDays } : {}) })
+      .set({ scheduledTime, scheduledDays, scheduledLevels })
       .where(eq(readingChannels.chatId, chatId))
       .returning();
     return updated;

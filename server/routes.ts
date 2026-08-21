@@ -6,7 +6,7 @@ import { handleTelegramUpdate, sendTelegramMessage, setTelegramWebhook, sendDail
 import { generateWeatherAdvice, generateVocabularyExample, generateNewVocabulary } from "./lib/openai";
 import { updateWeatherCache } from "./lib/weather";
 import { generateVoicePreview } from "./lib/listening";
-import { isValidScheduledTime, serializeScheduledDays } from "./lib/learning-schedule";
+import { isValidScheduledTime, normalizeWeekdayLevelSchedule, serializeScheduledDays, serializeWeekdayLevelSchedule } from "./lib/learning-schedule";
 import { regions } from "../client/src/data/regions";
 import { vocabulary } from "../client/src/data/vocabulary";
 
@@ -439,15 +439,19 @@ export async function registerRoutes(
 
   app.post("/api/listening-channels", requireAdmin, async (req, res) => {
     try {
-      const { chatId, title, scheduledTime, scheduledDays } = req.body;
+      const { chatId, title, scheduledTime, scheduledDays, scheduledLevels } = req.body;
       const safeTime = isValidScheduledTime(scheduledTime) ? scheduledTime : "10:00";
-      const safeDays = scheduledDays ? serializeScheduledDays(scheduledDays) : "0,1,2,3,4,5,6";
+      const safeLevels = scheduledLevels
+        ? serializeWeekdayLevelSchedule(scheduledLevels)
+        : JSON.stringify(normalizeWeekdayLevelSchedule(null, "A1A2", scheduledDays || "0,1,2,3,4,5,6"));
+      const safeDays = serializeScheduledDays(Object.keys(JSON.parse(safeLevels)).map(Number));
       const channel = await storage.addListeningChannel({
         chatId,
         title: title || chatId,
         enabled: true,
         scheduledTime: safeTime,
         scheduledDays: safeDays,
+        scheduledLevels: safeLevels,
         currentLevel: "A1A2",
       });
       res.json(channel);
@@ -494,11 +498,17 @@ export async function registerRoutes(
   app.patch("/api/listening-channels/:chatId/schedule", requireAdmin, async (req, res) => {
     try {
       const { chatId } = req.params;
-      const { scheduledTime, scheduledDays } = req.body;
+      const { scheduledTime, scheduledLevels } = req.body;
       if (!isValidScheduledTime(scheduledTime)) {
         return res.status(400).json({ error: "Invalid time. Use HH:mm." });
       }
-      const channel = await storage.updateListeningChannelSchedule(chatId, scheduledTime, serializeScheduledDays(scheduledDays));
+      const levels = serializeWeekdayLevelSchedule(scheduledLevels);
+      const channel = await storage.updateListeningChannelSchedule(
+        chatId,
+        scheduledTime,
+        serializeScheduledDays(Object.keys(JSON.parse(levels)).map(Number)),
+        levels,
+      );
       res.json(channel);
     } catch (error) {
       res.status(500).json({ error: "Failed to update listening schedule" });
@@ -555,15 +565,19 @@ export async function registerRoutes(
 
   app.post("/api/reading-channels", requireAdmin, async (req, res) => {
     try {
-      const { chatId, title, scheduledTime, scheduledDays } = req.body;
+      const { chatId, title, scheduledTime, scheduledDays, scheduledLevels } = req.body;
       const safeTime = isValidScheduledTime(scheduledTime) ? scheduledTime : "11:00";
-      const safeDays = scheduledDays ? serializeScheduledDays(scheduledDays) : "0,1,2,3,4,5,6";
+      const safeLevels = scheduledLevels
+        ? serializeWeekdayLevelSchedule(scheduledLevels)
+        : JSON.stringify(normalizeWeekdayLevelSchedule(null, "A1A2", scheduledDays || "0,1,2,3,4,5,6"));
+      const safeDays = serializeScheduledDays(Object.keys(JSON.parse(safeLevels)).map(Number));
       const channel = await storage.addReadingChannel({
         chatId,
         title: title || chatId,
         enabled: true,
         scheduledTime: safeTime,
         scheduledDays: safeDays,
+        scheduledLevels: safeLevels,
         currentLevel: "A1A2",
       });
       res.json(channel);
@@ -610,11 +624,17 @@ export async function registerRoutes(
   app.patch("/api/reading-channels/:chatId/schedule", requireAdmin, async (req, res) => {
     try {
       const { chatId } = req.params;
-      const { scheduledTime, scheduledDays } = req.body;
+      const { scheduledTime, scheduledLevels } = req.body;
       if (!isValidScheduledTime(scheduledTime)) {
         return res.status(400).json({ error: "Invalid time. Use HH:mm." });
       }
-      const channel = await storage.updateReadingChannelSchedule(chatId, scheduledTime, serializeScheduledDays(scheduledDays));
+      const levels = serializeWeekdayLevelSchedule(scheduledLevels);
+      const channel = await storage.updateReadingChannelSchedule(
+        chatId,
+        scheduledTime,
+        serializeScheduledDays(Object.keys(JSON.parse(levels)).map(Number)),
+        levels,
+      );
       res.json(channel);
     } catch (error) {
       res.status(500).json({ error: "Failed to update reading schedule" });

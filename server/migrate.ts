@@ -154,8 +154,20 @@ async function migrate() {
   await client.query(`
     ALTER TABLE listening_channels
       ADD COLUMN IF NOT EXISTS scheduled_days TEXT DEFAULT '0,1,2,3,4,5,6',
+      ADD COLUMN IF NOT EXISTS scheduled_levels TEXT DEFAULT '{}',
       ADD COLUMN IF NOT EXISTS male_voice_id TEXT,
       ADD COLUMN IF NOT EXISTS female_voice_id TEXT;
+  `);
+  await client.query(`
+    UPDATE listening_channels
+    SET scheduled_levels = (
+      SELECT COALESCE(
+        json_object_agg(day, CASE WHEN listening_channels.current_level = 'B1B2' THEN 'B1B2' ELSE 'A1A2' END)::text,
+        '{}'
+      )
+      FROM unnest(string_to_array(COALESCE(listening_channels.scheduled_days, '0,1,2,3,4,5,6'), ',')) AS day
+    )
+    WHERE scheduled_levels IS NULL OR scheduled_levels = '{}';
   `);
 
   await client.query(`
@@ -172,7 +184,19 @@ async function migrate() {
   `);
   await client.query(`
     ALTER TABLE reading_channels
-      ADD COLUMN IF NOT EXISTS scheduled_days TEXT DEFAULT '0,1,2,3,4,5,6';
+      ADD COLUMN IF NOT EXISTS scheduled_days TEXT DEFAULT '0,1,2,3,4,5,6',
+      ADD COLUMN IF NOT EXISTS scheduled_levels TEXT DEFAULT '{}';
+  `);
+  await client.query(`
+    UPDATE reading_channels
+    SET scheduled_levels = (
+      SELECT COALESCE(
+        json_object_agg(day, CASE WHEN reading_channels.current_level = 'B1B2' THEN 'B1B2' ELSE 'A1A2' END)::text,
+        '{}'
+      )
+      FROM unnest(string_to_array(COALESCE(reading_channels.scheduled_days, '0,1,2,3,4,5,6'), ',')) AS day
+    )
+    WHERE scheduled_levels IS NULL OR scheduled_levels = '{}';
   `);
 
   await client.query(`

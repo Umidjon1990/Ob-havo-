@@ -305,6 +305,7 @@ export interface ListeningChannel {
   enabled: boolean | null;
   scheduledTime: string | null;
   scheduledDays: string | null;
+  scheduledLevels: string | null;
   lastSentAt: string | null;
   currentLevel: string | null;
   maleVoiceId: string | null;
@@ -393,12 +394,12 @@ export async function toggleListeningChannel(chatId: string, enabled: boolean): 
   }
 }
 
-export async function updateListeningChannelSchedule(chatId: string, scheduledTime: string, scheduledDays: number[]): Promise<ListeningChannel | null> {
+export async function updateListeningChannelSchedule(chatId: string, scheduledTime: string, scheduledLevels: Record<string, "A1A2" | "B1B2">): Promise<ListeningChannel | null> {
   try {
     const response = await fetch(`/api/listening-channels/${encodeURIComponent(chatId)}/schedule`, {
       method: 'PATCH',
       headers: adminHeaders({ 'Content-Type': 'application/json' }),
-      body: JSON.stringify({ scheduledTime, scheduledDays }),
+      body: JSON.stringify({ scheduledTime, scheduledLevels }),
     });
     return response.ok ? await response.json() : null;
   } catch (error) {
@@ -452,6 +453,7 @@ export interface ReadingChannel {
   enabled: boolean | null;
   scheduledTime: string | null;
   scheduledDays: string | null;
+  scheduledLevels: string | null;
   lastSentAt: string | null;
   currentLevel: string | null;
   createdAt: string | null;
@@ -501,12 +503,12 @@ export async function toggleReadingChannel(chatId: string, enabled: boolean): Pr
   }
 }
 
-export async function updateReadingChannelSchedule(chatId: string, scheduledTime: string, scheduledDays: number[]): Promise<ReadingChannel | null> {
+export async function updateReadingChannelSchedule(chatId: string, scheduledTime: string, scheduledLevels: Record<string, "A1A2" | "B1B2">): Promise<ReadingChannel | null> {
   try {
     const response = await fetch(`/api/reading-channels/${encodeURIComponent(chatId)}/schedule`, {
       method: 'PATCH',
       headers: adminHeaders({ 'Content-Type': 'application/json' }),
-      body: JSON.stringify({ scheduledTime, scheduledDays }),
+      body: JSON.stringify({ scheduledTime, scheduledLevels }),
     });
     return response.ok ? await response.json() : null;
   } catch (error) {

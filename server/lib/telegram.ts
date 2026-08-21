@@ -4,7 +4,7 @@ import { generateDailyNews, generateNewsImage, generateNewsQuiz, formatPhotoCapt
 import { generateListeningPassage, generateListeningQuizzes, textToSpeechArabic, type ListeningLevel } from "./listening";
 import { generateReadingPassage, generateReadingQuizzes, shuffleReadingOptions, getReadingDateString, type ReadingLevel } from "./reading";
 import { shuffleQuizOptions } from "./quiz-quality";
-import { getLearningDeliveryContext, getUzbekistanDateKey, isLearningChannelDue } from "./learning-schedule";
+import { getLearningDeliveryContext, getScheduledLearningDeliveryContext, getUzbekistanDateKey, isLearningChannelDue } from "./learning-schedule";
 
 function getAppBaseUrl(): string {
   if (process.env.APP_URL) {
@@ -671,7 +671,9 @@ export async function sendDailyListeningToChannel(
     const channel = await storage.getListeningChannel(channelId);
     if (!channel) throw new Error("Listening channel not found");
     const recentTopics = await storage.getRecentTopicKeys(channelId, "listening");
-    const { level, recentTopics: excludedTopics } = getLearningDeliveryContext(channel, recentTopics);
+    const { level, recentTopics: excludedTopics } = shouldClaim
+      ? getScheduledLearningDeliveryContext(channel, recentTopics)
+      : getLearningDeliveryContext(channel, recentTopics);
     const levelLabel = level === "A1A2" ? "🟢 A1/A2 — Boshlang'ich" : "🔵 B1/B2 — O'rta daraja";
     const levelTag = level === "A1A2" ? "A1/A2" : "B1/B2";
 
@@ -786,7 +788,9 @@ export async function sendDailyReadingToChannel(
     const channel = await storage.getReadingChannel(channelId);
     if (!channel) throw new Error("Reading channel not found");
     const recentTopics = await storage.getRecentTopicKeys(channelId, "reading");
-    const { level, recentTopics: excludedTopics } = getLearningDeliveryContext(channel, recentTopics);
+    const { level, recentTopics: excludedTopics } = shouldClaim
+      ? getScheduledLearningDeliveryContext(channel, recentTopics)
+      : getLearningDeliveryContext(channel, recentTopics);
     const levelLabel = level === "A1A2" ? "🟢 A1/A2 — Boshlang'ich" : "🔵 B1/B2 — O'rta daraja";
     const levelTag = level === "A1A2" ? "A1/A2" : "B1/B2";
 
