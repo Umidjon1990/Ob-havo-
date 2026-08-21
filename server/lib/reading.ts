@@ -135,19 +135,24 @@ function pickFreshTopic(topics: string[], excludedTopics: string[]): string {
   return pool[Math.floor(Math.random() * pool.length)];
 }
 
-function isProfessionalReadingPassage(parsed: any, level: ReadingLevel): boolean {
-  if (!parsed || typeof parsed.titleAr !== "string" || typeof parsed.titleUz !== "string") return false;
-  if (!Array.isArray(parsed.paragraphsAr) || parsed.paragraphsAr.length !== 3) return false;
-  if (!Array.isArray(parsed.paragraphsUz) || parsed.paragraphsUz.length !== 3) return false;
-  if (!parsed.paragraphsAr.every((paragraph: unknown) => typeof paragraph === "string" && hasEnoughArabic(paragraph))) return false;
-  if (!parsed.paragraphsUz.every((paragraph: unknown) => typeof paragraph === "string" && paragraph.trim().length >= 8)) return false;
+function getReadingPassageValidationError(parsed: any, level: ReadingLevel): string | null {
+  if (!parsed || typeof parsed.titleAr !== "string" || typeof parsed.titleUz !== "string") return "missing title";
+  if (!Array.isArray(parsed.paragraphsAr) || parsed.paragraphsAr.length !== 3) return "expected exactly 3 Arabic paragraphs";
+  if (!Array.isArray(parsed.paragraphsUz) || parsed.paragraphsUz.length !== 3) return "expected exactly 3 Uzbek paragraphs";
+  if (!parsed.paragraphsAr.every((paragraph: unknown) => typeof paragraph === "string" && hasEnoughArabic(paragraph))) return "Arabic paragraph is missing or not predominantly Arabic";
+  if (!parsed.paragraphsUz.every((paragraph: unknown) => typeof paragraph === "string" && paragraph.trim().length >= 8)) return "Uzbek paragraph is missing or too short";
 
   const totalWords = parsed.paragraphsAr.reduce((sum: number, paragraph: string) => sum + getArabicWordCount(paragraph), 0);
-  const [minWords, maxWords] = level === "A1A2" ? [100, 145] : [180, 245];
-  return hasEnoughArabic(parsed.titleAr) &&
-    typeof parsed.topicAr === "string" && hasEnoughArabic(parsed.topicAr) &&
-    typeof parsed.topicUz === "string" && parsed.topicUz.trim().length >= 3 &&
-    totalWords >= minWords && totalWords <= maxWords;
+  const [minWords, maxWords] = level === "A1A2" ? [85, 175] : [120, 300];
+  if (!hasEnoughArabic(parsed.titleAr)) return "Arabic title is invalid";
+  if (typeof parsed.topicAr !== "string" || !hasEnoughArabic(parsed.topicAr)) return "Arabic topic is invalid";
+  if (typeof parsed.topicUz !== "string" || parsed.topicUz.trim().length < 3) return "Uzbek topic is invalid";
+  if (totalWords < minWords || totalWords > maxWords) return `expected ${minWords}–${maxWords} words, got ${totalWords}`;
+  return null;
+}
+
+function isProfessionalReadingPassage(parsed: any, level: ReadingLevel): boolean {
+  return getReadingPassageValidationError(parsed, level) === null;
 }
 
 export async function generateReadingPassage(
@@ -190,7 +195,8 @@ export async function generateReadingPassage(
   ]
 }`;
 
-  const models = ["gpt-5", "gpt-4o", "gpt-4-turbo"];
+  // gpt-4o is the supported structured-text model in this environment.
+  const models = ["gpt-4o", "gpt-4o", "gpt-4o"];
   for (const model of models) {
     try {
       console.log(`Reading passage model: ${model}`);
@@ -205,7 +211,8 @@ export async function generateReadingPassage(
       if (!jsonMatch) continue;
       const sanitized = jsonMatch[0].replace(/[\x00-\x08\x0b\x0c\x0e-\x1f]/g, " ");
       const parsed = JSON.parse(sanitized);
-      if (isProfessionalReadingPassage(parsed, level)) {
+      const validationError = getReadingPassageValidationError(parsed, level);
+      if (!validationError) {
         const fullAr = parsed.paragraphsAr.map((p: string) => p.trim()).join("\n\n");
         const fullUz = parsed.paragraphsUz.map((p: string) => p.trim()).join("\n\n");
         console.log(`✓ Reading passage generated (${model}), topic: ${parsed.topicUz || topic}`);
@@ -220,6 +227,7 @@ export async function generateReadingPassage(
           topicUz: (parsed.topicUz || parsed.titleUz).trim(),
         };
       }
+      console.warn(`Reading passage model ${model} rejected: ${validationError}`);
     } catch (e: any) {
       console.warn(`Reading passage model ${model} failed:`, e?.message || e);
     }
