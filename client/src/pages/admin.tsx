@@ -238,7 +238,7 @@ export default function Admin() {
       toast({ title: "Voice tanlovi saqlandi" });
       loadListeningChannels();
     } else {
-      toast({ title: "Xatolik", description: "Voice tanlovini saqlab bo'lmadi. Gender belgilari tekshiring.", variant: "destructive" });
+      toast({ title: "Xatolik", description: "Voice tanlovini saqlab bo'lmadi. Ikki xil voice tanlang.", variant: "destructive" });
     }
   };
 
@@ -1019,7 +1019,7 @@ export default function Admin() {
             <div className="border rounded-lg p-3 space-y-3 bg-background/50">
               <div>
                 <h4 className="text-sm font-medium">ElevenLabs voice profillari</h4>
-                <p className="text-xs text-muted-foreground mt-1">Har bir voice uchun nom va genderni qo'lda belgilang, keyin kanalga erkak va ayol speaker sifatida biriktiring.</p>
+                <p className="text-xs text-muted-foreground mt-1">Avval ovozlarni tinglang va nomlang. Keyin har kanalga istalgan ikkita turli ovozni erkak va ayol speaker sifatida biriktiring.</p>
               </div>
               <div className="grid gap-2 md:grid-cols-2">
                 {voiceProfiles.map((profile) => (
@@ -1045,19 +1045,7 @@ export default function Admin() {
                         {previewingVoiceId === profile.voiceId ? <RefreshCw className="w-3 h-3 animate-spin" /> : "▶ Preview"}
                       </Button>
                     </div>
-                    <div className="flex items-center justify-between gap-2">
-                      <code className="text-[10px] text-muted-foreground truncate">{profile.voiceId}</code>
-                      <select
-                        value={profile.gender}
-                        onChange={(event) => handleVoiceProfileSave(profile, profile.label, event.target.value as VoiceProfile["gender"])}
-                        className="h-7 rounded border bg-background px-1 text-xs"
-                        aria-label={`${profile.label} gender`}
-                      >
-                        <option value="unknown">Belgilanmagan</option>
-                        <option value="male">Erkak</option>
-                        <option value="female">Ayol</option>
-                      </select>
-                    </div>
+                    <code className="block text-[10px] text-muted-foreground truncate">{profile.voiceId}</code>
                   </div>
                 ))}
               </div>
@@ -1164,28 +1152,39 @@ export default function Admin() {
                           );
                         })}
                       </div>
-                      <select
-                        value={ch.maleVoiceId || ""}
-                        onChange={(event) => handleListeningVoicesChange(ch.chatId, event.target.value || null, ch.femaleVoiceId)}
-                        className="h-8 rounded border bg-background px-2 text-xs"
-                        aria-label="Erkak speaker voice"
-                      >
-                        <option value="">Erkak: default</option>
-                        {voiceProfiles.filter(profile => profile.gender === "male").map(profile => (
-                          <option key={profile.voiceId} value={profile.voiceId}>Erkak: {profile.label}</option>
-                        ))}
-                      </select>
-                      <select
-                        value={ch.femaleVoiceId || ""}
-                        onChange={(event) => handleListeningVoicesChange(ch.chatId, ch.maleVoiceId, event.target.value || null)}
-                        className="h-8 rounded border bg-background px-2 text-xs"
-                        aria-label="Ayol speaker voice"
-                      >
-                        <option value="">Ayol: default</option>
-                        {voiceProfiles.filter(profile => profile.gender === "female").map(profile => (
-                          <option key={profile.voiceId} value={profile.voiceId}>Ayol: {profile.label}</option>
-                        ))}
-                      </select>
+                      <div className="flex items-center gap-1 rounded-md border bg-background p-1">
+                        <select
+                          value={ch.maleVoiceId || ""}
+                          onChange={(event) => handleListeningVoicesChange(ch.chatId, event.target.value || null, ch.femaleVoiceId)}
+                          className="h-7 max-w-36 rounded border bg-background px-1 text-xs"
+                          aria-label="Erkak speaker voice"
+                        >
+                          <option value="">👨 Erkak ovozni tanlang</option>
+                          {voiceProfiles.map(profile => (
+                            <option key={profile.voiceId} value={profile.voiceId}>👨 {profile.label}</option>
+                          ))}
+                        </select>
+                        {ch.maleVoiceId && (
+                          <Button size="sm" variant="ghost" className="h-7 px-2 text-xs" onClick={() => handleVoicePreview(ch.maleVoiceId!)}>▶</Button>
+                        )}
+                        <select
+                          value={ch.femaleVoiceId || ""}
+                          onChange={(event) => handleListeningVoicesChange(ch.chatId, ch.maleVoiceId, event.target.value || null)}
+                          className="h-7 max-w-36 rounded border bg-background px-1 text-xs"
+                          aria-label="Ayol speaker voice"
+                        >
+                          <option value="">👩 Ayol ovozni tanlang</option>
+                          {voiceProfiles.map(profile => (
+                            <option key={profile.voiceId} value={profile.voiceId}>👩 {profile.label}</option>
+                          ))}
+                        </select>
+                        {ch.femaleVoiceId && (
+                          <Button size="sm" variant="ghost" className="h-7 px-2 text-xs" onClick={() => handleVoicePreview(ch.femaleVoiceId!)}>▶</Button>
+                        )}
+                      </div>
+                      {(!ch.maleVoiceId || !ch.femaleVoiceId) && (
+                        <span className="text-xs text-amber-700">Yuborishdan oldin 2 ta turli voice tanlang.</span>
+                      )}
                       <Button
                         size="sm"
                         variant="outline"

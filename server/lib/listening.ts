@@ -29,8 +29,6 @@ export interface ListeningQuiz {
 }
 
 // ─── ElevenLabs Voices ────────────────────────────────────────────────────────
-const DEFAULT_MALE_VOICE_ID = process.env.ELEVENLABS_VOICE_ID || "onwK4e9ZLuTAKqWW03F9";
-const DEFAULT_FEMALE_VOICE_ID = process.env.ELEVENLABS_FEMALE_VOICE_ID || "9BWtsMINqrJLrRacOk9x";
 const ELEVENLABS_MODEL = "eleven_multilingual_v2";
 
 export interface SpeakerVoices {
@@ -268,14 +266,25 @@ export async function textToSpeechArabic(passage: ListeningPassage, voices: Spea
     console.warn("ELEVENLABS_API_KEY not set — skipping TTS");
     return null;
   }
+  const maleVoiceId = voices.maleVoiceId?.trim();
+  const femaleVoiceId = voices.femaleVoiceId?.trim();
+  if (!maleVoiceId || !femaleVoiceId) {
+    console.warn("TTS skipped: this channel must have both a male and female voice selected");
+    return null;
+  }
+  if (maleVoiceId === femaleVoiceId) {
+    console.warn("TTS skipped: male and female speakers cannot use the same selected voice");
+    return null;
+  }
+  console.log(`TTS selected voices: M=${maleVoiceId}, F=${femaleVoiceId}`);
 
   const parts: Buffer[] = [];
 
   for (let i = 0; i < passage.dialog.length; i++) {
     const line = passage.dialog[i];
     const voiceId = line.speaker === "M"
-      ? voices.maleVoiceId || DEFAULT_MALE_VOICE_ID
-      : voices.femaleVoiceId || DEFAULT_FEMALE_VOICE_ID;
+      ? maleVoiceId
+      : femaleVoiceId;
     let buf = await ttsLine(line.text, voiceId, apiKey);
     // Retry once on failure
     if (!buf) {
@@ -373,7 +382,7 @@ const TOPICS_B1B2 = [
   "التاريخ الحضاري للعالم العربي",
 ];
 
-function getArabicWordCount(text: string): number {
+export function getArabicWordCount(text: string): number {
   return text.match(/[\u0600-\u06FF]+/g)?.length || 0;
 }
 
@@ -413,7 +422,11 @@ async function failsPersonalNameAudit(text: string): Promise<boolean> {
       }],
       max_completion_tokens: 8,
     });
-    return response.choices[0]?.message?.content?.trim().toUpperCase() !== "NO";
+    const verdict = response.choices[0]?.message?.content?.trim().toUpperCase() || "";
+    if (/^(YES|نعم)\b/.test(verdict)) return true;
+    if (/^(NO|لا)\b/.test(verdict)) return false;
+    console.warn(`Listening personal-name audit returned an unrecognized verdict: ${verdict}`);
+    return false;
   } catch (error) {
     console.warn("Listening personal-name audit unavailable; continuing with local name validation:", (error as Error)?.message || error);
     return false;
@@ -432,7 +445,7 @@ function getProfessionalDialogValidationError(dialog: unknown, level: ListeningL
   if (dialog.length < 12 || dialog.length > 16) return `expected 12–16 lines, got ${dialog.length}`;
   const [minWords, maxWords, minTotal, maxTotal] = level === "A1A2"
     ? [7, 16, 100, 205]
-    : [6, 26, 130, 330];
+    : [6, 26, 110, 330];
   const maleLines = dialog.filter(line => line?.speaker === "M").length;
   const femaleLines = dialog.filter(line => line?.speaker === "F").length;
   const totalWords = dialog.reduce((total, line) => total + getArabicWordCount(String(line?.text || "")), 0);
@@ -451,10 +464,41 @@ function getProfessionalDialogValidationError(dialog: unknown, level: ListeningL
   return null;
 }
 
-function isProfessionalDialog(dialog: unknown, level: ListeningLevel): dialog is DialogLine[] {
+export function isProfessionalDialog(dialog: unknown, level: ListeningLevel): dialog is DialogLine[] {
   return getProfessionalDialogValidationError(dialog, level) === null;
 }
 
+export function validateListeningQuizzes(parsed: unknown): ListeningQuiz[] | null {
+  if (!Array.isArray(parsed) || parsed.length !== 3) return null;
+
+  const valid = parsed.map((q: any) => {
+    const question = stripHarakat(String(q?.question || "").trim()).slice(0, 240);
+    const options = Array.isArray(q?.options)
+      ? q.options.map((option: unknown) => stripHarakat(String(option || "").trim()).slice(0, 90))
+      : [];
+    const explanation = stripHarakat(String(q?.explanation || "").trim()).slice(0, 190);
+    const uniqueOptions = new Set(options.map((option: string) => option.replace(/\s+/g, " ").toLowerCase()));
+    const shapeIsValid = options.length === 4 &&
+      uniqueOptions.size === 4 &&
+      Number.isInteger(q?.correctIndex) &&
+      q.correctIndex >= 0 && q.correctIndex < 4;
+
+    if (!shapeIsValid || !hasEnoughArabic(question) || !hasEnoughArabic(explanation) ||
+      options.some((option: string) => !option || !hasEnoughArabic(option))) {
+      return null;
+    }
+    return {
+      question,
+      options: options as [string, string, string, string],
+      correctIndex: q.correctIndex as 0 | 1 | 2 | 3,
+      explanation,
+    };
+  });
+
+  return valid.every(Boolean) && new Set(valid.map(quiz => quiz!.question)).size === 3
+    ? valid as ListeningQuiz[]
+    : null;
+}
 export async function generateListeningPassage(
   level: ListeningLevel,
   excludedTopics: string[] = [],
@@ -589,29 +633,10 @@ ${passage.arabicText}
       if (jsonMatch) {
         const sanitized = jsonMatch[0].replace(/[\x00-\x08\x0b\x0c\x0e-\x1f]/g, " ");
         const parsed: any[] = JSON.parse(sanitized);
-        if (!Array.isArray(parsed) || parsed.length !== 3) continue;
-        const valid = parsed.map((q) => {
-          const question = stripHarakat(String(q?.question || "").trim()).slice(0, 240);
-          const options = Array.isArray(q?.options)
-            ? q.options.map((option: unknown) => stripHarakat(String(option || "").trim()).slice(0, 90))
-            : [];
-          const explanation = stripHarakat(String(q?.explanation || "").trim()).slice(0, 190);
-          const uniqueOptions = new Set(options.map((option: string) => option.replace(/\s+/g, " ").toLowerCase()));
-          const shapeIsValid = options.length === 4 &&
-            uniqueOptions.size === 4 &&
-            Number.isInteger(q?.correctIndex) &&
-            q.correctIndex >= 0 && q.correctIndex < 4;
-
-          if (!shapeIsValid || !hasEnoughArabic(question) || !hasEnoughArabic(explanation) ||
-            options.some((option: string) => !option || !hasEnoughArabic(option))) {
-            return null;
-          }
-          return { question, options: options as [string, string, string, string], correctIndex: q.correctIndex as 0 | 1 | 2 | 3, explanation };
-        });
-
-        if (valid.every(Boolean) && new Set(valid.map(quiz => quiz!.question)).size === 3) {
+        const valid = validateListeningQuizzes(parsed);
+        if (valid) {
           console.log(`✓ 3 listening quizzes generated (${model})`);
-          return valid as ListeningQuiz[];
+          return valid;
         }
       }
     } catch (e: any) {

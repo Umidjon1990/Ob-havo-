@@ -3,7 +3,7 @@ import { generateWeatherAdvice } from "./openai";
 import { generateDailyNews, generateNewsImage, generateNewsQuiz, formatPhotoCaption, formatNewsText, formatNewsCaption, formatVocabMessage } from "./news";
 import { generateListeningPassage, generateListeningQuizzes, textToSpeechArabic, type ListeningLevel } from "./listening";
 import { generateReadingPassage, generateReadingQuizzes, shuffleReadingOptions, getReadingDateString, type ReadingLevel } from "./reading";
-import { getUzbekistanDateKey, isLearningChannelDue } from "./learning-schedule";
+import { getLearningDeliveryContext, getUzbekistanDateKey, isLearningChannelDue } from "./learning-schedule";
 
 function getAppBaseUrl(): string {
   if (process.env.APP_URL) {
@@ -680,13 +680,13 @@ export async function sendDailyListeningToChannel(
   try {
     const channel = await storage.getListeningChannel(channelId);
     if (!channel) throw new Error("Listening channel not found");
-    const level: ListeningLevel = channel.currentLevel === "B1B2" ? "B1B2" : "A1A2";
+    const recentTopics = await storage.getRecentTopicKeys(channelId, "listening");
+    const { level, recentTopics: excludedTopics } = getLearningDeliveryContext(channel, recentTopics);
     const levelLabel = level === "A1A2" ? "🟢 A1/A2 — Boshlang'ich" : "🔵 B1/B2 — O'rta daraja";
     const levelTag = level === "A1A2" ? "A1/A2" : "B1/B2";
 
     // 1. Generate passage
-    const recentTopics = await storage.getRecentTopicKeys(channelId, "listening");
-    const passage = await generateListeningPassage(level, recentTopics);
+    const passage = await generateListeningPassage(level, excludedTopics);
   if (!passage) throw new Error("Listening passage generation failed");
 
   // 2. Generate exactly 3 quizzes — retry once if fewer than 3 returned
@@ -700,6 +700,12 @@ export async function sendDailyListeningToChannel(
   quizzes = quizzes.slice(0, 3);
 
   // 3. Generate dialog audio (ElevenLabs — male+female voices) — skip if unavailable
+  if (!channel.maleVoiceId || !channel.femaleVoiceId) {
+    throw new Error("Tinglash audiosi uchun kanalga erkak va ayol voice tanlang");
+  }
+  if (channel.maleVoiceId === channel.femaleVoiceId) {
+    throw new Error("Erkak va ayol speaker uchun turli voice tanlang");
+  }
   const audioBuffer = await textToSpeechArabic(passage, {
     maleVoiceId: channel.maleVoiceId,
     femaleVoiceId: channel.femaleVoiceId,
@@ -789,13 +795,13 @@ export async function sendDailyReadingToChannel(
   try {
     const channel = await storage.getReadingChannel(channelId);
     if (!channel) throw new Error("Reading channel not found");
-    const level: ReadingLevel = channel.currentLevel === "B1B2" ? "B1B2" : "A1A2";
+    const recentTopics = await storage.getRecentTopicKeys(channelId, "reading");
+    const { level, recentTopics: excludedTopics } = getLearningDeliveryContext(channel, recentTopics);
     const levelLabel = level === "A1A2" ? "🟢 A1/A2 — Boshlang'ich" : "🔵 B1/B2 — O'rta daraja";
     const levelTag = level === "A1A2" ? "A1/A2" : "B1/B2";
 
   // 1. Generate passage
-  const recentTopics = await storage.getRecentTopicKeys(channelId, "reading");
-  const passage = await generateReadingPassage(level, recentTopics);
+  const passage = await generateReadingPassage(level, excludedTopics);
   if (!passage) throw new Error("Reading passage generation failed");
 
   // 2. Generate quizzes — retry once if fewer than 3 returned

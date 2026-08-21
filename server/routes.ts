@@ -515,11 +515,14 @@ export async function registerRoutes(
       const profiles = await storage.getVoiceProfiles();
       const male = maleVoiceId ? profiles.find(profile => profile.voiceId === maleVoiceId) : undefined;
       const female = femaleVoiceId ? profiles.find(profile => profile.voiceId === femaleVoiceId) : undefined;
-      if (maleVoiceId && (!male || male.gender !== "male")) {
-        return res.status(400).json({ error: "Erkak speaker uchun erkak deb belgilangan voice tanlang" });
+      if (maleVoiceId && !male) {
+        return res.status(400).json({ error: "Tanlangan erkak voice topilmadi" });
       }
-      if (femaleVoiceId && (!female || female.gender !== "female")) {
-        return res.status(400).json({ error: "Ayol speaker uchun ayol deb belgilangan voice tanlang" });
+      if (femaleVoiceId && !female) {
+        return res.status(400).json({ error: "Tanlangan ayol voice topilmadi" });
+      }
+      if (maleVoiceId && femaleVoiceId && maleVoiceId === femaleVoiceId) {
+        return res.status(400).json({ error: "Erkak va ayol speaker uchun turli voice tanlang" });
       }
       const channel = await storage.updateListeningChannelVoices(chatId, maleVoiceId || null, femaleVoiceId || null);
       res.json(channel);
