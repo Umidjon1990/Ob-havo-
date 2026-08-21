@@ -1,4 +1,5 @@
 import OpenAI from "openai";
+import { isPredominantlyArabic, stripArabicDiacritics, validateQuizQuality } from "./quiz-quality";
 
 const isReplit = !!process.env.AI_INTEGRATIONS_OPENAI_API_KEY;
 const openai = new OpenAI(
@@ -139,7 +140,7 @@ function concatMp3(parts: Buffer[]): Buffer {
 /** Strip all Arabic diacritics (harakat) before sending to ElevenLabs.
  *  ElevenLabs reads Arabic correctly without them; wrong tashkeel causes mispronunciation. */
 function stripHarakat(text: string): string {
-  return text.replace(/[\u064B-\u065F\u0610-\u061A\u0670]/g, "").trim();
+  return stripArabicDiacritics(text);
 }
 
 /**
@@ -387,9 +388,7 @@ export function getArabicWordCount(text: string): number {
 }
 
 function hasEnoughArabic(text: string): boolean {
-  const visible = text.replace(/[^A-Za-z\u0600-\u06FF]/g, "");
-  const arabic = text.match(/[\u0600-\u06FF]/g)?.length || 0;
-  return visible.length > 0 && arabic / visible.length >= 0.82;
+  return isPredominantlyArabic(text);
 }
 
 const LIKELY_PERSON_NAMES = [
@@ -444,7 +443,7 @@ function getProfessionalDialogValidationError(dialog: unknown, level: ListeningL
   if (!Array.isArray(dialog)) return "dialog is not an array";
   if (dialog.length < 12 || dialog.length > 16) return `expected 12–16 lines, got ${dialog.length}`;
   const [minWords, maxWords, minTotal, maxTotal] = level === "A1A2"
-    ? [7, 16, 100, 205]
+    ? [6, 16, 80, 205]
     : [6, 26, 110, 330];
   const maleLines = dialog.filter(line => line?.speaker === "M").length;
   const femaleLines = dialog.filter(line => line?.speaker === "F").length;
@@ -468,30 +467,21 @@ export function isProfessionalDialog(dialog: unknown, level: ListeningLevel): di
   return getProfessionalDialogValidationError(dialog, level) === null;
 }
 
-export function validateListeningQuizzes(parsed: unknown): ListeningQuiz[] | null {
+export function validateListeningQuizzes(
+  parsed: unknown,
+  level: ListeningLevel = "B1B2",
+): ListeningQuiz[] | null {
   if (!Array.isArray(parsed) || parsed.length !== 3) return null;
 
   const valid = parsed.map((q: any) => {
-    const question = stripHarakat(String(q?.question || "").trim()).slice(0, 240);
-    const options = Array.isArray(q?.options)
-      ? q.options.map((option: unknown) => stripHarakat(String(option || "").trim()).slice(0, 90))
-      : [];
-    const explanation = stripHarakat(String(q?.explanation || "").trim()).slice(0, 190);
-    const uniqueOptions = new Set(options.map((option: string) => option.replace(/\s+/g, " ").toLowerCase()));
-    const shapeIsValid = options.length === 4 &&
-      uniqueOptions.size === 4 &&
-      Number.isInteger(q?.correctIndex) &&
-      q.correctIndex >= 0 && q.correctIndex < 4;
-
-    if (!shapeIsValid || !hasEnoughArabic(question) || !hasEnoughArabic(explanation) ||
-      options.some((option: string) => !option || !hasEnoughArabic(option))) {
-      return null;
-    }
+    const rules = { level, minOptions: 4, maxOptions: 4 } as const;
+    const quality = validateQuizQuality(q, rules);
+    if (!quality) return null;
     return {
-      question,
-      options: options as [string, string, string, string],
-      correctIndex: q.correctIndex as 0 | 1 | 2 | 3,
-      explanation,
+      question: quality.question,
+      options: quality.options as [string, string, string, string],
+      correctIndex: quality.correctIndex as 0 | 1 | 2 | 3,
+      explanation: quality.explanation,
     };
   });
 
@@ -519,7 +509,8 @@ export async function generateListeningPassage(
 - الحوار موقف واقعي مكتمل، وليس درساً أو قائمة معلومات.
 - المتحدثان رجل [M] وامرأة [F]. لا تذكر أي اسم شخص داخل الحوار أو العنوان.
 - اكتب 12 إلى 16 مداخلة متوازنة؛ لكل متحدث أربع مداخلات على الأقل.
-- ${level === "A1A2" ? "كل مداخلة من 7 إلى 16 كلمة." : "كل مداخلة من 12 إلى 23 كلمة."}
+ - ${level === "A1A2" ? "كل مداخلة من 6 إلى 16 كلمة." : "كل مداخلة من 12 إلى 23 كلمة."}
+- ${level === "A1A2" ? "استهدف 90 إلى 145 كلمة عربية في الحوار كاملاً." : "استهدف 140 إلى 280 كلمة عربية في الحوار كاملاً."}
 - اجعل الحقائق الداخلية متسقة تماماً. لا تخترع أخباراً أو إحصاءات واقعية حديثة؛ استخدم سيناريو تعليمياً واضحاً عند الحاجة إلى أرقام.
 - تضمّن تفاصيل قابلة للاختبار: وقتاً أو رقماً، مكاناً أو خدمة، ترتيباً زمنياً، مقارنة، ورأياً منسوباً بوضوح لأحد المتحدثين.
 - الحوار عفوي: سؤال، توضيح، تردد أو تصحيح، اتفاق أو اختلاف مهذب.
@@ -605,8 +596,14 @@ ${passage.arabicText}
 - اكتب بالضبط 3 أسئلة بالترتيب: تفصيل، موقف/اختيار، ثم ${level === "A1A2" ? "تسلسل أو تفصيل صريح آخر" : "استنتاج يربط جملتين"}.
 - كل سؤال له 4 خيارات عربية فقط، خيار صحيح واحد فقط.
 - كل خيار خاطئ يجب أن يكون فخاً عادلاً: رقم قريب، أو حقيقة وردت في سياق آخر، أو نقل غير صحيح للموقف. لا تستخدم خياراً عبثياً.
+- ${level === "A1A2"
+    ? "اختبر تفصيلاً واضحاً أو ترتيباً مباشراً فقط، واستخدم مفردات عالية التكرار."
+    : "اختبر تفصيلاً دقيقاً أو استنتاجاً عادلاً يحتاج إلى ربط معلومتين أو فهم إعادة صياغة."}
 - لا تذكر أسماء المتحدثين؛ استخدم "المتحدث" أو "المتحدثة" فقط.
-- لا تزيد الأسئلة والخيارات عن 80 حرفاً. اكتب شرحاً مختصراً يثبت الإجابة من الحوار ويكشف أقوى فخ.
+- اجعل البدائل متوازنة في الطول والبنية النحوية. لا تجعل الإجابة الصحيحة أطول بوضوح من البدائل، ولا تجعل أي بديل فقرة طويلة.
+- السؤال قصير وواضح، وكل بديل جملة أو عبارة عربية قصيرة؛ لا تتجاوز 75 حرفاً للبديل أو 180 حرفاً للشرح.
+- لا تستخدم "جميع ما سبق" أو "لا شيء مما سبق" أو تلميحاً يكشف الإجابة من طولها.
+- اكتب شرحاً مختصراً يثبت الإجابة من الحوار ويكشف أقوى فخ.
 - لا تعِد صياغة السؤال أو أي خيار. لا تستخدم الأوزبكية أو الإنجليزية.
 
 أجب بـ JSON فقط — مصفوفة من 3 كائنات:
@@ -619,7 +616,7 @@ ${passage.arabicText}
   }
 ]`;
 
-  const models = ["gpt-5", "gpt-4o", "gpt-4-turbo"];
+  const models = ["gpt-4o", "gpt-4o", "gpt-4o"];
   for (const model of models) {
     try {
       const response = await openai.chat.completions.create({
@@ -633,7 +630,7 @@ ${passage.arabicText}
       if (jsonMatch) {
         const sanitized = jsonMatch[0].replace(/[\x00-\x08\x0b\x0c\x0e-\x1f]/g, " ");
         const parsed: any[] = JSON.parse(sanitized);
-        const valid = validateListeningQuizzes(parsed);
+        const valid = validateListeningQuizzes(parsed, level);
         if (valid) {
           console.log(`✓ 3 listening quizzes generated (${model})`);
           return valid;

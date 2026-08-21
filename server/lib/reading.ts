@@ -1,4 +1,5 @@
 import OpenAI from "openai";
+import { isPredominantlyArabic, shuffleQuizOptions, stripArabicDiacritics, validateQuizQuality } from "./quiz-quality";
 
 const isReplit = !!process.env.AI_INTEGRATIONS_OPENAI_API_KEY;
 const openai = new OpenAI(
@@ -30,20 +31,12 @@ export interface ReadingQuiz {
 
 /** Strip Arabic diacritics (harakat) — reused from listening */
 export function stripHarakat(text: string): string {
-  return text.replace(/[\u064B-\u065F\u0610-\u061A\u0670]/g, "").trim();
+  return stripArabicDiacritics(text);
 }
 
 /** Fisher-Yates shuffle preserving correct answer index */
 export function shuffleReadingOptions(quiz: ReadingQuiz): { options: string[]; correctIndex: number } {
-  const indexed = quiz.options.map((opt, i) => ({ opt, correct: i === quiz.correctIndex }));
-  for (let i = indexed.length - 1; i > 0; i--) {
-    const j = Math.floor(Math.random() * (i + 1));
-    [indexed[i], indexed[j]] = [indexed[j], indexed[i]];
-  }
-  return {
-    options: indexed.map(x => x.opt),
-    correctIndex: indexed.findIndex(x => x.correct),
-  };
+  return shuffleQuizOptions(quiz.options, quiz.correctIndex);
 }
 
 // ─── Topics ───────────────────────────────────────────────────────────────────
@@ -123,9 +116,7 @@ export function getArabicWordCount(text: string): number {
 }
 
 function hasEnoughArabic(text: string): boolean {
-  const visible = text.replace(/[^A-Za-z\u0600-\u06FF]/g, "");
-  const arabic = text.match(/[\u0600-\u06FF]/g)?.length || 0;
-  return visible.length > 0 && arabic / visible.length >= 0.82;
+  return isPredominantlyArabic(text);
 }
 
 function pickFreshTopic(topics: string[], excludedTopics: string[]): string {
@@ -143,7 +134,7 @@ function getReadingPassageValidationError(parsed: any, level: ReadingLevel): str
   if (!parsed.paragraphsUz.every((paragraph: unknown) => typeof paragraph === "string" && paragraph.trim().length >= 8)) return "Uzbek paragraph is missing or too short";
 
   const totalWords = parsed.paragraphsAr.reduce((sum: number, paragraph: string) => sum + getArabicWordCount(paragraph), 0);
-  const [minWords, maxWords] = level === "A1A2" ? [85, 175] : [120, 300];
+  const [minWords, maxWords] = level === "A1A2" ? [70, 175] : [120, 300];
   if (!hasEnoughArabic(parsed.titleAr)) return "Arabic title is invalid";
   if (typeof parsed.topicAr !== "string" || !hasEnoughArabic(parsed.topicAr)) return "Arabic topic is invalid";
   if (typeof parsed.topicUz !== "string" || parsed.topicUz.trim().length < 3) return "Uzbek topic is invalid";
@@ -155,7 +146,10 @@ export function isProfessionalReadingPassage(parsed: unknown, level: ReadingLeve
   return getReadingPassageValidationError(parsed, level) === null;
 }
 
-export function validateReadingQuizzes(parsed: unknown): ReadingQuiz[] | null {
+export function validateReadingQuizzes(
+  parsed: unknown,
+  level: ReadingLevel = "B1B2",
+): ReadingQuiz[] | null {
   const expectedTypes = ["multiple_choice", "true_false_ng", "best_title"];
   const optionRange: [number, number][] = [[4, 4], [3, 3], [3, 4]];
 
@@ -165,31 +159,22 @@ export function validateReadingQuizzes(parsed: unknown): ReadingQuiz[] | null {
   for (let i = 0; i < 3; i++) {
     const q = parsed[i];
     const [minOpts, maxOpts] = optionRange[i];
-    const optCount = Array.isArray(q?.options) ? q.options.length : 0;
-    const optsOk = optCount >= minOpts && optCount <= maxOpts &&
-      q.options.every((o: unknown) => typeof o === "string" && (o as string).trim());
-    const idxOk = typeof q?.correctIndex === "number" &&
-      Number.isInteger(q.correctIndex) &&
-      q.correctIndex >= 0 && q.correctIndex < optCount;
-
-    const question = stripHarakat(String(q?.question || "").trim()).slice(0, 240);
-    const options = optsOk
-      ? q.options.map((option: string) => stripHarakat(option.trim()).slice(0, 90))
-      : [];
-    const explanation = stripHarakat(String(q?.explanation || "").trim()).slice(0, 190);
-    const optionsUnique = new Set(options.map((option: string) => option.replace(/\s+/g, " ").toLowerCase())).size === options.length;
-
-    if (q?.type !== expectedTypes[i] || !optsOk || !idxOk || !optionsUnique ||
-      !hasEnoughArabic(question) || !hasEnoughArabic(explanation) ||
-      options.some((option: string) => !option || !hasEnoughArabic(option))) {
+    const rules = {
+      level,
+      minOptions: minOpts,
+      maxOptions: maxOpts,
+      fixedOptions: q?.type === "true_false_ng" ? ["صواب", "غلط", "غير معطى"] : undefined,
+    };
+    const quality = validateQuizQuality(q, rules);
+    if (q?.type !== expectedTypes[i] || !quality) {
       return null;
     }
     valid.push({
       type: q.type,
-      question,
-      options,
-      correctIndex: q.correctIndex,
-      explanation,
+      question: quality.question,
+      options: quality.options,
+      correctIndex: quality.correctIndex,
+      explanation: quality.explanation,
     });
   }
 
@@ -212,6 +197,7 @@ export async function generateReadingPassage(
 المواصفات الإلزامية:
 - المستوى: ${level === "A1A2" ? "A1/A2 مبتدئ" : "B1/B2 متوسط-متقدم"} — ${wordCount}.
 - ثلاث فقرات بالضبط، لكل فقرة وظيفة مختلفة: تمهيد، تفصيل/مقارنة، وخلاصة.
+- ${level === "A1A2" ? "استهدف 25 إلى 45 كلمة عربية في كل فقرة." : "استهدف 45 إلى 85 كلمة عربية في كل فقرة."}
 - استخدم حقائق داخلية متسقة وقابلة للرجوع إلى النص. لا تخترع خبراً حديثاً أو رقماً واقعياً غير متحقق؛ عند الحاجة اجعل المثال سيناريو تعليمياً واضحاً.
 - أدرج أدلة كافية لثلاثة أسئلة: تفصيل، صواب/غلط/غير معطى، وعنوان رئيسي.
 - في B1/B2 استخدم إعادة صياغة وروابط استدلالية؛ في A1/A2 اجعل المعنى صريحاً وتجنب الجمل المعقدة جداً.
@@ -304,10 +290,13 @@ ${passage.fullAr}
 ⚠️ اكتب بالضبط 3 أسئلة بهذه الأنواع بالترتيب:
 
 **السؤال 1 — اختيار من متعدد (أ، ب، ج، د):**
-- يختبر استنتاجاً غير مباشر أو تفصيلاً دقيقاً يتطلب ربط جملتين
+- ${level === "A1A2"
+  ? "يختبر تفصيلاً صريحاً ورد بوضوح في النص، من دون استنتاج معقد"
+  : "يختبر استنتاجاً غير مباشر أو تفصيلاً دقيقاً يتطلب ربط جملتين"}
 - 4 خيارات: 1 صحيح + 3 فخاخ احترافية (انظر مبدأ التضليل أعلاه)
 - الخيارات الخاطئة يجب أن تبدو معقولة تماماً للقارئ السريع
-- كل خيار جملة قصيرة (max 80 حرف)
+- اجعل الخيارات متوازنة في الطول والبنية؛ لا تجعل الإجابة الصحيحة الأطول بوضوح، ولا تستخدم خياراً على شكل فقرة.
+- كل خيار جملة قصيرة (max 75 حرف)
 
 **السؤال 2 — صواب / غلط / غير معطى:**
 - اختر عبارة تبدو صحيحة للوهلة الأولى لكنها تتعارض مع النص أو غير موجودة فيه
@@ -326,7 +315,11 @@ ${passage.fullAr}
 
 **قواعد الصياغة:**
 - الأسئلة والخيارات والشرح: بالعربية فقط، بدون تشكيل
-- max 80 حرف لكل خيار
+- ${level === "A1A2"
+  ? "في A1/A2: استخدم جُملاً قصيرة ومفردات يومية؛ لا تجعل الفخ يتطلب معرفة خارج النص."
+  : "في B1/B2: استخدم إعادة الصياغة والاستدلال العادل؛ لا تجعل الفخ يتطلب معرفة خارج النص."}
+- لا تستخدم "جميع ما سبق" أو "لا شيء مما سبق"، ولا تعطِ تلميحاً من طول الإجابة أو تفصيلها.
+- max 75 حرف لكل خيار
 - الشرح (مهم جداً): اذكر أولاً لماذا الإجابة صحيحة، ثم حدد بدقة لماذا أقوى فخ خاطئ يُوقع الطلاب
 
 أجب بـ JSON فقط — مصفوفة من 3 كائنات:
@@ -354,7 +347,7 @@ ${passage.fullAr}
   }
 ]`;
 
-  const models = ["gpt-5", "gpt-4o", "gpt-4-turbo"];
+  const models = ["gpt-4o", "gpt-4o", "gpt-4o"];
   for (const model of models) {
     try {
       const response = await openai.chat.completions.create({
@@ -369,7 +362,7 @@ ${passage.fullAr}
       const sanitized = jsonMatch[0].replace(/[\x00-\x08\x0b\x0c\x0e-\x1f]/g, " ");
       const parsed: any[] = JSON.parse(sanitized);
 
-      const valid = validateReadingQuizzes(parsed);
+      const valid = validateReadingQuizzes(parsed, level);
       if (valid) {
         console.log(`✓ 3 reading quizzes generated (${model})`);
         return valid;

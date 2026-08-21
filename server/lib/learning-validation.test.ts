@@ -11,8 +11,10 @@ import {
 } from "./listening";
 import {
   isProfessionalReadingPassage,
+  shuffleReadingOptions,
   validateReadingQuizzes,
 } from "./reading";
+import { shuffleQuizOptions } from "./quiz-quality";
 
 const arabicWords = (count: number): string =>
   Array.from({ length: count }, (_, index) => `كلمة${index + 1}`).join(" ");
@@ -174,4 +176,60 @@ test("reading validator rejects fewer than three or incorrectly ordered quizzes"
     ]),
     null,
   );
+});
+
+for (const level of ["A1A2", "B1B2"] as const) {
+  test(`${level} quiz validators reject answer-length clues, overlong choices, and duplicates`, () => {
+    const listeningWithLongCorrect = makeListeningQuizzes().map(quiz => ({ ...quiz }));
+    listeningWithLongCorrect[0] = {
+      ...listeningWithLongCorrect[0],
+      options: [
+        "خيار قصير",
+        "بديل قريب",
+        "جواب موجز",
+        "هذه الإجابة الصحيحة تشرح تفاصيل كثيرة بشكل واضح ومباشر",
+      ],
+      correctIndex: 3,
+    };
+    assert.equal(validateListeningQuizzes(listeningWithLongCorrect, level), null);
+
+    const readingWithLongOption = makeReadingQuizzes().map(quiz => ({ ...quiz }));
+    readingWithLongOption[0] = {
+      ...readingWithLongOption[0],
+      options: [
+        "خيار أول",
+        "خيار ثان",
+        "خيار ثالث",
+        Array.from({ length: 22 }, () => "كلمة").join(" "),
+      ],
+      correctIndex: 0,
+    };
+    assert.equal(validateReadingQuizzes(readingWithLongOption, level), null);
+
+    const listeningWithDuplicate = makeListeningQuizzes().map(quiz => ({ ...quiz }));
+    listeningWithDuplicate[1] = {
+      ...listeningWithDuplicate[1],
+      options: ["الخيار الأول", "الخيار الأول", "الخيار الثالث", "الخيار الرابع"],
+    };
+    assert.equal(validateListeningQuizzes(listeningWithDuplicate, level), null);
+  });
+}
+
+test("Fisher–Yates shuffle keeps the correct answer attached in listening and reading flows", () => {
+  const original = ["الخيار الأول", "الخيار الثاني", "الخيار الثالث", "الخيار الرابع"];
+  const shuffledListening = shuffleQuizOptions(original, 2, () => 0);
+  assert.notDeepEqual(shuffledListening.options, original);
+  assert.equal(shuffledListening.options[shuffledListening.correctIndex], original[2]);
+
+  const readingQuiz = {
+    type: "multiple_choice" as const,
+    question: "ما الفكرة الرئيسية؟",
+    options: original,
+    correctIndex: 1,
+    explanation: "هذا شرح عربي واضح للإجابة.",
+  };
+  for (let attempt = 0; attempt < 8; attempt++) {
+    const shuffledReading = shuffleReadingOptions(readingQuiz);
+    assert.equal(shuffledReading.options[shuffledReading.correctIndex], original[1]);
+  }
 });

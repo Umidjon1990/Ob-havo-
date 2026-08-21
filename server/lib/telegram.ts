@@ -3,6 +3,7 @@ import { generateWeatherAdvice } from "./openai";
 import { generateDailyNews, generateNewsImage, generateNewsQuiz, formatPhotoCaption, formatNewsText, formatNewsCaption, formatVocabMessage } from "./news";
 import { generateListeningPassage, generateListeningQuizzes, textToSpeechArabic, type ListeningLevel } from "./listening";
 import { generateReadingPassage, generateReadingQuizzes, shuffleReadingOptions, getReadingDateString, type ReadingLevel } from "./reading";
+import { shuffleQuizOptions } from "./quiz-quality";
 import { getLearningDeliveryContext, getUzbekistanDateKey, isLearningChannelDue } from "./learning-schedule";
 
 function getAppBaseUrl(): string {
@@ -606,18 +607,6 @@ async function sendTelegramAudio(chatId: string, audioBuffer: Buffer, caption: s
   if (!data.ok) throw new Error(`Telegram sendAudio failed: ${data.description}`);
 }
 
-function shuffleQuizOptions(quiz: { question: string; options: [string,string,string,string]; correctIndex: 0|1|2|3; explanation: string }) {
-  const indexed = quiz.options.map((opt, i) => ({ opt, correct: i === quiz.correctIndex }));
-  for (let i = indexed.length - 1; i > 0; i--) {
-    const j = Math.floor(Math.random() * (i + 1));
-    [indexed[i], indexed[j]] = [indexed[j], indexed[i]];
-  }
-  return {
-    options: indexed.map(x => x.opt) as [string,string,string,string],
-    correctIndex: indexed.findIndex(x => x.correct) as 0|1|2|3,
-  };
-}
-
 /** Flexible quiz poll — supports 3 or 4 options (for T/F/NG and MC polls) */
 async function sendTelegramFlexQuiz(
   chatId: string,
@@ -633,10 +622,11 @@ async function sendTelegramFlexQuiz(
   if (correctOptionId < 0 || correctOptionId >= options.length)
     throw new Error(`Invalid correctOptionId: ${correctOptionId}`);
 
-  // Telegram API hard limits: question≤300, each option≤100, explanation≤200
-  const safeQuestion = question.slice(0, 300);
-  const safeOptions = options.map(o => o.slice(0, 100));
-  const safeExplanation = explanation ? explanation.slice(0, 190) : undefined;
+  // Learning validators reject overlong content before delivery; never truncate
+  // a choice because that can alter its meaning or create a giveaway answer.
+  if (question.length > 300 || options.some(option => option.length > 80) || explanation.length > 190) {
+    throw new Error("Quiz payload exceeds learning quality limits");
+  }
 
   const response = await fetch(
     `https://api.telegram.org/bot${BOT_TOKEN}/sendPoll`,
@@ -645,11 +635,11 @@ async function sendTelegramFlexQuiz(
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
         chat_id: chatId,
-        question: safeQuestion,
-        options: safeOptions,
+        question,
+        options,
         type: "quiz",
         correct_option_id: correctOptionId,
-        explanation: safeExplanation,
+        explanation: explanation || undefined,
         is_anonymous: true,
       }),
     }
@@ -734,7 +724,7 @@ ${levelLabel}
   await new Promise(r => setTimeout(r, 2000));
   for (let i = 0; i < 3; i++) {
     const quiz = quizzes[i];
-    const { options, correctIndex } = shuffleQuizOptions(quiz);
+    const { options, correctIndex } = shuffleQuizOptions(quiz.options, quiz.correctIndex);
     const pollTitle = `🎧 [${levelTag}] | السَّمَاعَة\n❓ ${quiz.question}`;
     await sendTelegramFlexQuiz(channelId, pollTitle, options, correctIndex, quiz.explanation);
     console.log(`✓ Listening quiz ${i + 1}/3 sent to ${channelId}`);
