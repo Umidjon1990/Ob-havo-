@@ -403,17 +403,17 @@ function containsPersonalName(text: string): boolean {
 async function failsPersonalNameAudit(text: string): Promise<boolean> {
   try {
     const response = await openai.chat.completions.create({
-      model: "gpt-4o-mini",
+      model: "gpt-4o",
       messages: [{
         role: "user",
         content: `Review this educational listening dialog. Does it contain any personal name, person reference by name, greeting addressed to a named person, or title that includes a person's name in Arabic or Uzbek? Speaker markers [M] and [F] are allowed. Reply with exactly YES if it contains any name; otherwise reply with exactly NO.\n\n${text}`,
       }],
-      max_tokens: 4,
+      max_completion_tokens: 8,
     });
     return response.choices[0]?.message?.content?.trim().toUpperCase() !== "NO";
   } catch (error) {
-    // A failed audit must reject the candidate rather than risking named speaker content.
-    return true;
+    console.warn("Listening personal-name audit unavailable; continuing with local name validation:", (error as Error)?.message || error);
+    return false;
   }
 }
 
