@@ -489,6 +489,21 @@ export function validateListeningQuizzes(
     ? valid as ListeningQuiz[]
     : null;
 }
+
+/**
+ * The JSON response mode returns an object, while older model responses used a
+ * top-level array. Accept both shapes so existing retries remain compatible.
+ */
+export function parseListeningQuizResponse(content: string): unknown {
+  const sanitized = content
+    .trim()
+    .replace(/^```(?:json)?\s*/i, "")
+    .replace(/\s*```$/i, "")
+    .replace(/[\x00-\x08\x0b\x0c\x0e-\x1f]/g, " ");
+  const parsed = JSON.parse(sanitized);
+  return Array.isArray(parsed) ? parsed : parsed?.quizzes;
+}
+
 export async function generateListeningPassage(
   level: ListeningLevel,
   excludedTopics: string[] = [],
@@ -606,35 +621,35 @@ ${passage.arabicText}
 - اكتب شرحاً مختصراً يثبت الإجابة من الحوار ويكشف أقوى فخ.
 - لا تعِد صياغة السؤال أو أي خيار. لا تستخدم الأوزبكية أو الإنجليزية.
 
-أجب بـ JSON فقط — مصفوفة من 3 كائنات:
-[
-  {
-    "question": "سؤال عربي عن الحوار",
-    "options": ["خيار أ", "خيار ب", "خيار ج", "خيار د"],
-    "correctIndex": 2,
-    "explanation": "دليل الإجابة من الحوار وسبب خطأ الفخ الأقوى."
-  }
-]`;
+أجب بكائن JSON صالح واحد فقط، بلا Markdown أو نص إضافي:
+{
+  "quizzes": [
+    {
+      "question": "سؤال عربي عن الحوار",
+      "options": ["خيار أ", "خيار ب", "خيار ج", "خيار د"],
+      "correctIndex": 2,
+      "explanation": "دليل الإجابة من الحوار وسبب خطأ الفخ الأقوى."
+    }
+  ]
+}`;
 
   const models = ["gpt-4o", "gpt-4o", "gpt-4o"];
   for (const model of models) {
     try {
+      console.log(`Listening quiz model: ${model}`);
       const response = await openai.chat.completions.create({
         model,
         messages: [{ role: "user", content: prompt }],
+        response_format: { type: "json_object" },
         max_completion_tokens: 1800,
       });
       const content = response.choices[0]?.message?.content || "";
       if (!content) continue;
-      const jsonMatch = content.match(/\[[\s\S]*\]/);
-      if (jsonMatch) {
-        const sanitized = jsonMatch[0].replace(/[\x00-\x08\x0b\x0c\x0e-\x1f]/g, " ");
-        const parsed: any[] = JSON.parse(sanitized);
-        const valid = validateListeningQuizzes(parsed, level);
-        if (valid) {
-          console.log(`✓ 3 listening quizzes generated (${model})`);
-          return valid;
-        }
+      const parsed = parseListeningQuizResponse(content);
+      const valid = validateListeningQuizzes(parsed, level);
+      if (valid) {
+        console.log(`✓ 3 listening quizzes generated (${model})`);
+        return valid;
       }
     } catch (e: any) {
       console.warn(`Listening quiz model ${model} failed:`, e?.message || e);

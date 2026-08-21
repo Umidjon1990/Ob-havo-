@@ -8,6 +8,7 @@ import {
 } from "./learning-schedule";
 import {
   isProfessionalDialog,
+  parseListeningQuizResponse,
   validateListeningQuizzes,
   type DialogLine,
 } from "./listening";
@@ -191,6 +192,13 @@ test("listening validator rejects fewer than three quizzes", () => {
     }))),
     null,
   );
+});
+
+test("listening quiz parser accepts JSON mode objects and prior array responses", () => {
+  const quizzes = makeListeningQuizzes();
+  assert.deepEqual(parseListeningQuizResponse(JSON.stringify({ quizzes })), quizzes);
+  assert.deepEqual(parseListeningQuizResponse(`\`\`\`json\n${JSON.stringify(quizzes)}\n\`\`\``), quizzes);
+  assert.throws(() => parseListeningQuizResponse('{"quizzes": [invalid]}'), SyntaxError);
 });
 
 test("reading validator rejects fewer than three or incorrectly ordered quizzes", () => {
