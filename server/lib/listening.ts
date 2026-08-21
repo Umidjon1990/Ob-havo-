@@ -383,21 +383,24 @@ function hasEnoughArabic(text: string): boolean {
   return visible.length > 0 && arabic / visible.length >= 0.82;
 }
 
+const LIKELY_PERSON_NAMES = [
+  // Keep only unambiguous person names here. Common Arabic words such as نور,
+  // أمل, حياة, سلام, سعيد, and كمال must not make a valid dialog fail.
+  "أحمد", "سارة", "محمد", "فاطمة", "خالد", "يوسف", "إبراهيم", "إسماعيل",
+  "موسى", "عيسى", "حمزة", "خديجة", "زينب", "عائشة", "مريم", "ليلى",
+  "ياسمين", "دانيال", "آريا",
+];
+
 function containsPersonalName(text: string): boolean {
-  const likelyNames = new Set([
-    "أحمد", "سارة", "محمد", "فاطمة", "علي", "خالد", "يوسف", "عمر", "عبد", "الله",
-    "إبراهيم", "إسماعيل", "موسى", "عيسى", "آدم", "أيمن", "أمين", "أنس", "بدر", "بشير",
-    "جمال", "حسن", "حسين", "حمزة", "داود", "رامي", "سالم", "سعيد", "سلمان", "سامي",
-    "طارق", "عثمان", "فارس", "كمال", "مازن", "مالك", "منصور", "ناصر", "وليد", "ياسر",
-    "يحيى", "يونس", "زين", "زينب", "آمنة", "أمل", "أميرة", "إيمان", "بشرى", "حياة",
-    "خديجة", "دينا", "رنا", "ريم", "رزان", "سلمى", "سناء", "شيماء", "صفاء", "عائشة",
-    "غادة", "فرح", "لبنى", "ليلى", "مريم", "منى", "ناديا", "ندى", "نورا", "نور", "هند",
-    "هدى", "ياسمين", "دانيال", "آريا",
-  ]);
+  const likelyNames = new Set(LIKELY_PERSON_NAMES);
   const tokens = text.match(/[\u0621-\u064A]+/g) || [];
   const namingCues = new Set(["اسمي", "اسمه", "اسمها", "يدعى", "تدعى"]);
   return tokens.some(token => likelyNames.has(token) || namingCues.has(token)) ||
     /يا\s+[\u0621-\u064A]+/.test(text);
+}
+
+function anonymizeKnownPersonalNames(text: string): string {
+  return text.replace(new RegExp(LIKELY_PERSON_NAMES.join("|"), "g"), "المتحدث");
 }
 
 async function failsPersonalNameAudit(text: string): Promise<boolean> {
@@ -424,25 +427,32 @@ function pickFreshTopic(topics: string[], excludedTopics: string[]): string {
   return pool[Math.floor(Math.random() * pool.length)];
 }
 
-function isProfessionalDialog(dialog: unknown, level: ListeningLevel): dialog is DialogLine[] {
-  if (!Array.isArray(dialog) || dialog.length < 12 || dialog.length > 16) return false;
+function getProfessionalDialogValidationError(dialog: unknown, level: ListeningLevel): string | null {
+  if (!Array.isArray(dialog)) return "dialog is not an array";
+  if (dialog.length < 12 || dialog.length > 16) return `expected 12–16 lines, got ${dialog.length}`;
   const [minWords, maxWords, minTotal, maxTotal] = level === "A1A2"
     ? [7, 16, 100, 205]
-    : [12, 23, 175, 330];
+    : [6, 26, 130, 330];
   const maleLines = dialog.filter(line => line?.speaker === "M").length;
   const femaleLines = dialog.filter(line => line?.speaker === "F").length;
   const totalWords = dialog.reduce((total, line) => total + getArabicWordCount(String(line?.text || "")), 0);
 
-  return maleLines >= 4 && femaleLines >= 4 &&
-    totalWords >= minTotal && totalWords <= maxTotal &&
-    dialog.every(line => {
-      const text = typeof line?.text === "string" ? line.text.trim() : "";
-      const words = getArabicWordCount(text);
-      return (line?.speaker === "M" || line?.speaker === "F") &&
-        words >= minWords && words <= maxWords &&
-        hasEnoughArabic(text) &&
-        !containsPersonalName(text);
-    });
+  if (maleLines < 4 || femaleLines < 4) return `speaker balance M=${maleLines}, F=${femaleLines}`;
+  if (totalWords < minTotal || totalWords > maxTotal) return `expected ${minTotal}–${maxTotal} words, got ${totalWords}`;
+
+  for (let index = 0; index < dialog.length; index++) {
+    const line = dialog[index];
+    const text = typeof line?.text === "string" ? line.text.trim() : "";
+    const words = getArabicWordCount(text);
+    if (line?.speaker !== "M" && line?.speaker !== "F") return `line ${index + 1} has invalid speaker`;
+    if (words < minWords || words > maxWords) return `line ${index + 1} has ${words} words (expected ${minWords}–${maxWords})`;
+    if (!hasEnoughArabic(text)) return `line ${index + 1} is not predominantly Arabic`;
+  }
+  return null;
+}
+
+function isProfessionalDialog(dialog: unknown, level: ListeningLevel): dialog is DialogLine[] {
+  return getProfessionalDialogValidationError(dialog, level) === null;
 }
 
 export async function generateListeningPassage(
@@ -481,7 +491,9 @@ export async function generateListeningPassage(
   "topicUz": "Mavzu o‘zbekcha qisqa"
 }`;
 
-  const models = ["gpt-5", "gpt-4o", "gpt-4-turbo"];
+  // Retry the supported model: a single otherwise-valid dialog can be rejected
+  // when it happens to include a personal name despite the prompt.
+  const models = ["gpt-4o", "gpt-4o", "gpt-4o"];
   for (const model of models) {
     try {
       console.log(`Listening passage model: ${model}`);
@@ -496,17 +508,17 @@ export async function generateListeningPassage(
       if (jsonMatch) {
         const sanitized = jsonMatch[0].replace(/[\x00-\x08\x0b\x0c\x0e-\x1f]/g, " ");
         const parsed = JSON.parse(sanitized);
-        if (
-          isProfessionalDialog(parsed.dialog, level) &&
-          typeof parsed.topicAr === "string" && hasEnoughArabic(parsed.topicAr) && !containsPersonalName(parsed.topicAr) &&
-          typeof parsed.topicUz === "string" && parsed.topicUz.trim().length >= 3
-        ) {
+        const dialogError = getProfessionalDialogValidationError(parsed.dialog, level);
+        const topicIsValid = typeof parsed.topicAr === "string" && hasEnoughArabic(parsed.topicAr) &&
+          typeof parsed.topicUz === "string" && parsed.topicUz.trim().length >= 3;
+        if (!dialogError && topicIsValid) {
           const dialog: DialogLine[] = parsed.dialog.map((l: any) => ({
             speaker: l.speaker as "M" | "F",
-            text: l.text.trim(),
+            text: anonymizeKnownPersonalNames(l.text.trim()),
           }));
           const arabicText = dialog.map(l => `[${l.speaker}] ${l.text}`).join("\n");
-          if (await failsPersonalNameAudit(`${arabicText}\n${parsed.topicAr}\n${parsed.topicUz}`)) {
+          const topicAr = anonymizeKnownPersonalNames(parsed.topicAr.trim());
+          if (await failsPersonalNameAudit(`${arabicText}\n${topicAr}\n${parsed.topicUz}`)) {
             console.warn(`Listening passage model ${model} returned a personal name or failed name audit`);
             continue;
           }
@@ -514,10 +526,11 @@ export async function generateListeningPassage(
           return {
             arabicText,
             dialog,
-            topicAr: parsed.topicAr.trim(),
+            topicAr,
             topicUz: parsed.topicUz.trim(),
           };
         }
+        console.warn(`Listening passage model ${model} rejected: ${dialogError || "invalid topic fields"}`);
       }
     } catch (e: any) {
       console.warn(`Listening passage model ${model} failed:`, e?.message || e);
