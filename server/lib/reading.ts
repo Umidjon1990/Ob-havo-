@@ -118,7 +118,7 @@ const TOPICS_B1B2 = [
 
 // ─── Passage Generation ───────────────────────────────────────────────────────
 
-function getArabicWordCount(text: string): number {
+export function getArabicWordCount(text: string): number {
   return text.match(/[\u0600-\u06FF]+/g)?.length || 0;
 }
 
@@ -151,10 +151,50 @@ function getReadingPassageValidationError(parsed: any, level: ReadingLevel): str
   return null;
 }
 
-function isProfessionalReadingPassage(parsed: any, level: ReadingLevel): boolean {
+export function isProfessionalReadingPassage(parsed: unknown, level: ReadingLevel): boolean {
   return getReadingPassageValidationError(parsed, level) === null;
 }
 
+export function validateReadingQuizzes(parsed: unknown): ReadingQuiz[] | null {
+  const expectedTypes = ["multiple_choice", "true_false_ng", "best_title"];
+  const optionRange: [number, number][] = [[4, 4], [3, 3], [3, 4]];
+
+  if (!Array.isArray(parsed) || parsed.length !== 3) return null;
+
+  const valid: ReadingQuiz[] = [];
+  for (let i = 0; i < 3; i++) {
+    const q = parsed[i];
+    const [minOpts, maxOpts] = optionRange[i];
+    const optCount = Array.isArray(q?.options) ? q.options.length : 0;
+    const optsOk = optCount >= minOpts && optCount <= maxOpts &&
+      q.options.every((o: unknown) => typeof o === "string" && (o as string).trim());
+    const idxOk = typeof q?.correctIndex === "number" &&
+      Number.isInteger(q.correctIndex) &&
+      q.correctIndex >= 0 && q.correctIndex < optCount;
+
+    const question = stripHarakat(String(q?.question || "").trim()).slice(0, 240);
+    const options = optsOk
+      ? q.options.map((option: string) => stripHarakat(option.trim()).slice(0, 90))
+      : [];
+    const explanation = stripHarakat(String(q?.explanation || "").trim()).slice(0, 190);
+    const optionsUnique = new Set(options.map((option: string) => option.replace(/\s+/g, " ").toLowerCase())).size === options.length;
+
+    if (q?.type !== expectedTypes[i] || !optsOk || !idxOk || !optionsUnique ||
+      !hasEnoughArabic(question) || !hasEnoughArabic(explanation) ||
+      options.some((option: string) => !option || !hasEnoughArabic(option))) {
+      return null;
+    }
+    valid.push({
+      type: q.type,
+      question,
+      options,
+      correctIndex: q.correctIndex,
+      explanation,
+    });
+  }
+
+  return new Set(valid.map(quiz => quiz.question)).size === 3 ? valid : null;
+}
 export async function generateReadingPassage(
   level: ReadingLevel,
   excludedTopics: string[] = [],
@@ -329,51 +369,12 @@ ${passage.fullAr}
       const sanitized = jsonMatch[0].replace(/[\x00-\x08\x0b\x0c\x0e-\x1f]/g, " ");
       const parsed: any[] = JSON.parse(sanitized);
 
-      const EXPECTED_TYPES = ["multiple_choice", "true_false_ng", "best_title"];
-      // min/max accepted option counts per type
-      const OPTION_RANGE: [number, number][] = [[4, 4], [3, 3], [3, 4]]; // best_title accepts 3 or 4
-
-      if (!Array.isArray(parsed) || parsed.length !== 3) continue;
-      const valid: ReadingQuiz[] = [];
-      for (let i = 0; i < 3; i++) {
-        const q = parsed[i];
-        const expectedType = EXPECTED_TYPES[i];
-        const [minOpts, maxOpts] = OPTION_RANGE[i];
-        const optCount = Array.isArray(q.options) ? q.options.length : 0;
-        const typeMatch = q.type === expectedType;
-        const optsOk = optCount >= minOpts && optCount <= maxOpts &&
-          q.options.every((o: unknown) => typeof o === "string" && (o as string).trim());
-        const idxOk = typeof q.correctIndex === "number" &&
-          Number.isInteger(q.correctIndex) &&
-          q.correctIndex >= 0 && q.correctIndex < optCount;
-
-        const question = stripHarakat(String(q.question || "").trim()).slice(0, 240);
-        const options = optsOk
-          ? q.options.map((option: string) => stripHarakat(option.trim()).slice(0, 90))
-          : [];
-        const explanation = stripHarakat(String(q.explanation || "").trim()).slice(0, 190);
-        const optionsUnique = new Set(options.map((option: string) => option.replace(/\s+/g, " ").toLowerCase())).size === options.length;
-
-        if (!typeMatch || !optsOk || !idxOk || !optionsUnique ||
-          !hasEnoughArabic(question) || !hasEnoughArabic(explanation) ||
-          options.some((option: string) => !option || !hasEnoughArabic(option))) {
-          console.warn(`Reading quiz ${i + 1} validation failed (${model}): type=${q.type} opts=${optCount} idx=${q.correctIndex}`);
-          continue;
-        }
-        valid.push({
-          type: q.type,
-          question,
-          options,
-          correctIndex: q.correctIndex,
-          explanation,
-        });
-      }
-
-      if (valid.length === 3 && new Set(valid.map(quiz => quiz.question)).size === 3) {
+      const valid = validateReadingQuizzes(parsed);
+      if (valid) {
         console.log(`✓ 3 reading quizzes generated (${model})`);
         return valid;
       }
-      console.warn(`Reading quiz model ${model}: only ${valid.length}/3 valid quizzes, retrying...`);
+      console.warn(`Reading quiz model ${model}: fewer than 3 valid quizzes, retrying...`);
     } catch (e: any) {
       console.warn(`Reading quiz model ${model} failed:`, e?.message || e);
     }

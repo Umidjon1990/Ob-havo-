@@ -1,5 +1,26 @@
 export const ALL_WEEK_DAYS = [0, 1, 2, 3, 4, 5, 6];
 
+export type LearningLevel = "A1A2" | "B1B2";
+
+export interface LearningDeliveryContext {
+  level: LearningLevel;
+  recentTopics: string[];
+}
+
+/**
+ * Resolve the level from the channel configuration, not from the calendar.
+ * This keeps an admin-selected level stable across scheduled deliveries.
+ */
+export function getLearningDeliveryContext(
+  channel: { currentLevel?: string | null },
+  recentTopics: string[],
+): LearningDeliveryContext {
+  return {
+    level: channel.currentLevel === "B1B2" ? "B1B2" : "A1A2",
+    recentTopics: [...recentTopics],
+  };
+}
+
 export function getUzbekistanDate(date = new Date()): Date {
   return new Date(date.getTime() + 5 * 60 * 60 * 1000);
 }

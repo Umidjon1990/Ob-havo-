@@ -1,1 +1,3 @@
 - [News bot architecture](news-bot.md) — daily Arabic news uses separate news_channels table + scheduler, with DALL-E image fallback to text-only if image fails
+- [Learning content validation](learning-content-validation.md) — use real model smoke tests and retry near-valid Arabic content; overly rigid line/word rules silently block delivery
+- [Listening voice assignment](listening-voice-assignment.md) — selected channel voice IDs are mandatory; never silently fall back to default voices
