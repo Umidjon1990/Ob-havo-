@@ -1,6 +1,6 @@
 import { useState, useEffect, useMemo } from "react";
 import { motion, AnimatePresence } from "framer-motion";
-import { Menu, Search, Compass, Calendar, Settings, Cloud, Sun, CloudRain, Wind, MapPin, X, Info, Quote, Sparkles, Globe, BookOpen, CloudSnow, CloudLightning } from "lucide-react";
+import { Menu, Search, Compass, Calendar, Settings, Cloud, Sun, CloudRain, Wind, MapPin, X, Info, Quote, Sparkles, Globe, BookOpen, CloudSnow, CloudLightning, FileText } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import FlipCard from "@/components/FlipCard";
@@ -204,6 +204,12 @@ export default function Home() {
                 <BookOpen className="w-4 h-4" />
                 <span className="hidden sm:inline">{t.vocab}</span>
              </button>
+              <Link href="/tests">
+                <button className="p-2 rounded-full hover:bg-white/50 transition-colors text-primary bg-white/30 backdrop-blur-sm border border-white/40 text-xs font-bold px-3 flex items-center gap-2">
+                  <FileText className="w-4 h-4" />
+                  <span className="hidden sm:inline">Testlar</span>
+                </button>
+              </Link>
              <Link href="/admin">
                 <button className="p-2 rounded-full hover:bg-white/50 transition-colors text-muted-foreground bg-white/30 backdrop-blur-sm border border-white/40">
                   <Settings className="w-5 h-5" />

@@ -18,6 +18,7 @@ import {
   validateReadingQuizzes,
 } from "./reading";
 import { shuffleQuizOptions } from "./quiz-quality";
+import { createLearningTestDocx } from "./learning-docx";
 
 const arabicWords = (count: number): string =>
   Array.from({ length: count }, (_, index) => `كلمة${index + 1}`).join(" ");
@@ -267,4 +268,38 @@ test("Fisher–Yates shuffle keeps the correct answer attached in listening and 
     const shuffledReading = shuffleReadingOptions(readingQuiz);
     assert.equal(shuffledReading.options[shuffledReading.correctIndex], original[1]);
   }
+});
+
+test("learning DOCX generator creates a document and rejects incomplete archives", async () => {
+  const basePassage = makeReadingPassage("A1A2");
+  const passage = {
+    ...basePassage,
+    fullAr: basePassage.paragraphsAr.join("\n\n"),
+    fullUz: basePassage.paragraphsUz.join("\n\n"),
+  };
+  const meta = {
+    contentType: "reading" as const,
+    titleAr: passage.titleAr,
+    titleUz: passage.titleUz,
+    testDate: "2026-08-28",
+    level: "A1A2",
+    channelTitle: "Arab tili",
+  };
+
+  const document = await createLearningTestDocx(meta, {
+    contentType: "reading",
+    passage,
+    quizzes: makeReadingQuizzes(),
+  });
+  assert.equal(document.subarray(0, 2).toString(), "PK");
+  assert.ok(document.length > 1000);
+
+  await assert.rejects(
+    () => createLearningTestDocx(meta, {
+      contentType: "reading",
+      passage,
+      quizzes: makeReadingQuizzes().slice(0, 2),
+    }),
+    /incomplete/,
+  );
 });

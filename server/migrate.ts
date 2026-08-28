@@ -229,6 +229,25 @@ async function migrate() {
       CONSTRAINT learning_delivery_claims_daily_unique UNIQUE (channel_id, content_type, date_key)
     );
   `);
+
+  await client.query(`
+    CREATE TABLE IF NOT EXISTS learning_tests (
+      id VARCHAR(255) PRIMARY KEY DEFAULT gen_random_uuid()::text,
+      content_type TEXT NOT NULL,
+      title_ar TEXT NOT NULL,
+      title_uz TEXT NOT NULL,
+      test_date TEXT NOT NULL,
+      level TEXT NOT NULL,
+      channel_id TEXT NOT NULL,
+      channel_title TEXT,
+      payload TEXT NOT NULL,
+      created_at TIMESTAMP DEFAULT NOW()
+    );
+  `);
+  await client.query(`
+    CREATE INDEX IF NOT EXISTS learning_tests_date_idx
+      ON learning_tests (test_date DESC, created_at DESC);
+  `);
   
   // Insert default bot settings if not exists
   const result = await client.query(`SELECT COUNT(*) FROM bot_settings`);

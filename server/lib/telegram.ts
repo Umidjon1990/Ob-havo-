@@ -5,6 +5,7 @@ import { generateListeningPassage, generateListeningQuizzes, textToSpeechArabic,
 import { generateReadingPassage, generateReadingQuizzes, shuffleReadingOptions, getReadingDateString, type ReadingLevel } from "./reading";
 import { shuffleQuizOptions } from "./quiz-quality";
 import { getLearningDeliveryContext, getScheduledLearningDeliveryContext, getUzbekistanDateKey, isLearningChannelDue } from "./learning-schedule";
+import type { LearningTestPayload } from "./learning-docx";
 
 function getAppBaseUrl(): string {
   if (process.env.APP_URL) {
@@ -20,6 +21,27 @@ function getAppBaseUrl(): string {
     return `https://${process.env.REPLIT_DEV_DOMAIN}`;
   }
   return 'https://ob-havo.replit.app';
+}
+
+async function archiveLearningTest(
+  contentType: "listening" | "reading",
+  channel: { chatId: string; title?: string | null },
+  level: string,
+  testDate: string,
+  titleAr: string,
+  titleUz: string,
+  payload: LearningTestPayload,
+): Promise<void> {
+  await storage.createLearningTest({
+    contentType,
+    titleAr,
+    titleUz,
+    testDate,
+    level,
+    channelId: channel.chatId,
+    channelTitle: channel.title || channel.chatId,
+    payload: JSON.stringify(payload),
+  });
 }
 
 interface TelegramMessage {
@@ -722,18 +744,32 @@ ${levelLabel}
   await sendTelegramAudio(channelId, audioBuffer, audioCaption);
   console.log(`✓ Listening dialog audio sent to ${channelId}`);
 
+  // Keep the exact shuffled order used in Telegram for the downloadable document.
+  const quizzesForDelivery = quizzes.map((quiz) => {
+    const { options, correctIndex } = shuffleQuizOptions(quiz.options, quiz.correctIndex);
+    return { ...quiz, options, correctIndex } as typeof quiz;
+  });
+
   // 5. Send exactly 3 quiz polls (2s delay after audio, 1s between each)
   await new Promise(r => setTimeout(r, 2000));
   for (let i = 0; i < 3; i++) {
-    const quiz = quizzes[i];
-    const { options, correctIndex } = shuffleQuizOptions(quiz.options, quiz.correctIndex);
+    const quiz = quizzesForDelivery[i];
     const pollTitle = `🎧 [${levelTag}] | السَّمَاعَة\n❓ ${quiz.question}`;
-    await sendTelegramFlexQuiz(channelId, pollTitle, options, correctIndex, quiz.explanation);
+    await sendTelegramFlexQuiz(channelId, pollTitle, quiz.options, quiz.correctIndex, quiz.explanation);
     console.log(`✓ Listening quiz ${i + 1}/3 sent to ${channelId}`);
     if (i < 2) await new Promise(r => setTimeout(r, 1000));
   }
 
   // 6. Keep the admin-selected level unchanged and remember this topic.
+    await archiveLearningTest(
+      "listening",
+      channel,
+      level,
+      dateKey,
+      passage.topicAr,
+      passage.topicUz,
+      { contentType: "listening", passage, quizzes: quizzesForDelivery },
+    );
     await storage.updateListeningChannelAfterSend(channelId);
     await storage.recordTopic(channelId, "listening", passage.topicAr);
     if (hasClaim) await storage.completeLearningDelivery(channelId, "listening", dateKey);
@@ -837,22 +873,27 @@ ${levelLabel}
   }
   console.log(`✓ Reading passage sent to ${channelId}`);
 
+  // Keep the exact shuffled order used in Telegram for the downloadable document.
+  const quizzesForDelivery = quizzes.map((quiz) => {
+    const { options, correctIndex } = shuffleReadingOptions(quiz);
+    return { ...quiz, options, correctIndex };
+  });
+
   // 5. Send 3 quiz polls (2s delay after passage, 1s between each)
   await new Promise(r => setTimeout(r, 2000));
 
   const quizLabels = ["1️⃣ اختيار من متعدد", "2️⃣ صواب / غلط / غير معطى", "3️⃣ اختر العنوان"];
 
   for (let i = 0; i < 3; i++) {
-    const quiz = quizzes[i];
+    const quiz = quizzesForDelivery[i];
     if (!quiz) throw new Error(`Reading quiz ${i + 1} is missing`);
-    const { options, correctIndex } = shuffleReadingOptions(quiz);
     const pollQuestion = `📖 [${levelTag}] ${quizLabels[i]}\n❓ ${quiz.question}`;
 
     await sendTelegramFlexQuiz(
       channelId,
       pollQuestion,
-      options,
-      correctIndex,
+      quiz.options,
+      quiz.correctIndex,
       quiz.explanation
     );
     console.log(`✓ Reading quiz ${i + 1}/3 sent to ${channelId}`);
@@ -860,6 +901,15 @@ ${levelLabel}
   }
 
   // 6. Keep the admin-selected level unchanged and remember this topic.
+    await archiveLearningTest(
+      "reading",
+      channel,
+      level,
+      dateKey,
+      passage.titleAr,
+      passage.titleUz,
+      { contentType: "reading", passage, quizzes: quizzesForDelivery },
+    );
     await storage.updateReadingChannelAfterSend(channelId);
     await storage.recordTopic(channelId, "reading", passage.topicAr);
     if (hasClaim) await storage.completeLearningDelivery(channelId, "reading", dateKey);

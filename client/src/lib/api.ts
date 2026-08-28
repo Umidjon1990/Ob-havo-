@@ -540,6 +540,32 @@ export async function sendReadingNow(chatId: string): Promise<{ ok: boolean; err
   }
 }
 
+export interface LearningTest {
+  id: string;
+  contentType: "listening" | "reading";
+  titleAr: string;
+  titleUz: string;
+  testDate: string;
+  level: "A1A2" | "B1B2";
+}
+
+export async function getLearningTests(filters: {
+  contentType?: "listening" | "reading";
+  level?: "A1A2" | "B1B2";
+} = {}): Promise<LearningTest[]> {
+  try {
+    const params = new URLSearchParams();
+    if (filters.contentType) params.set("type", filters.contentType);
+    if (filters.level) params.set("level", filters.level);
+    const response = await fetch(`/api/tests${params.toString() ? `?${params}` : ""}`);
+    if (!response.ok) throw new Error("Failed to fetch learning tests");
+    return await response.json();
+  } catch (error) {
+    console.error("Error fetching learning tests:", error);
+    throw error;
+  }
+}
+
 // Admin authentication
 export async function adminLogin(username: string, password: string): Promise<{ success: boolean; token?: string; error?: string }> {
   try {

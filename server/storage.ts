@@ -1,6 +1,6 @@
 import { db } from "./db";
-import { users, weatherCache, userProgress, botSettings, channels, newsChannels, listeningChannels, readingChannels, voiceProfiles, learningContentHistory, learningDeliveryClaims } from "@shared/schema";
-import type { User, InsertUser, WeatherCache, InsertWeatherCache, UserProgress, InsertUserProgress, BotSettings, InsertBotSettings, Channel, InsertChannel, NewsChannel, InsertNewsChannel, ListeningChannel, InsertListeningChannel, ReadingChannel, InsertReadingChannel, VoiceProfile } from "@shared/schema";
+import { users, weatherCache, userProgress, botSettings, channels, newsChannels, listeningChannels, readingChannels, voiceProfiles, learningContentHistory, learningDeliveryClaims, learningTests } from "@shared/schema";
+import type { User, InsertUser, WeatherCache, InsertWeatherCache, UserProgress, InsertUserProgress, BotSettings, InsertBotSettings, Channel, InsertChannel, NewsChannel, InsertNewsChannel, ListeningChannel, InsertListeningChannel, ReadingChannel, InsertReadingChannel, VoiceProfile, LearningTest, InsertLearningTest } from "@shared/schema";
 import { and, desc, eq } from "drizzle-orm";
 
 export const DEFAULT_VOICE_IDS = [
@@ -84,6 +84,9 @@ export interface IStorage {
   claimLearningDelivery(channelId: string, contentType: "listening" | "reading", dateKey: string): Promise<boolean>;
   completeLearningDelivery(channelId: string, contentType: "listening" | "reading", dateKey: string): Promise<void>;
   releaseLearningDelivery(channelId: string, contentType: "listening" | "reading", dateKey: string): Promise<void>;
+  getLearningTests(filters?: { contentType?: "listening" | "reading"; level?: "A1A2" | "B1B2"; limit?: number }): Promise<LearningTest[]>;
+  getLearningTest(id: string): Promise<LearningTest | undefined>;
+  createLearningTest(test: InsertLearningTest): Promise<LearningTest>;
 }
 
 export class DatabaseStorage implements IStorage {
@@ -449,6 +452,29 @@ export class DatabaseStorage implements IStorage {
         eq(learningDeliveryClaims.contentType, contentType),
         eq(learningDeliveryClaims.dateKey, dateKey),
       ));
+  }
+
+  async getLearningTests(filters: { contentType?: "listening" | "reading"; level?: "A1A2" | "B1B2"; limit?: number } = {}): Promise<LearningTest[]> {
+    const conditions = [];
+    if (filters.contentType) conditions.push(eq(learningTests.contentType, filters.contentType));
+    if (filters.level) conditions.push(eq(learningTests.level, filters.level));
+
+    return await db
+      .select()
+      .from(learningTests)
+      .where(conditions.length ? and(...conditions) : undefined)
+      .orderBy(desc(learningTests.testDate), desc(learningTests.createdAt))
+      .limit(Math.min(Math.max(filters.limit || 100, 1), 100));
+  }
+
+  async getLearningTest(id: string): Promise<LearningTest | undefined> {
+    const [test] = await db.select().from(learningTests).where(eq(learningTests.id, id)).limit(1);
+    return test;
+  }
+
+  async createLearningTest(test: InsertLearningTest): Promise<LearningTest> {
+    const [created] = await db.insert(learningTests).values(test).returning();
+    return created;
   }
 }
 

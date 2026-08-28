@@ -161,11 +161,29 @@ export const learningDeliveryClaims = pgTable("learning_delivery_claims", {
   ),
 }));
 
+export const learningTests = pgTable("learning_tests", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  contentType: text("content_type").notNull(),
+  titleAr: text("title_ar").notNull(),
+  titleUz: text("title_uz").notNull(),
+  testDate: text("test_date").notNull(),
+  level: text("level").notNull(),
+  channelId: text("channel_id").notNull(),
+  channelTitle: text("channel_title"),
+  payload: text("payload").notNull(),
+  createdAt: timestamp("created_at").defaultNow(),
+});
+
 export const insertVoiceProfileSchema = createInsertSchema(voiceProfiles).omit({
   createdAt: true,
 });
 
 export const insertLearningContentHistorySchema = createInsertSchema(learningContentHistory).omit({
+  id: true,
+  createdAt: true,
+});
+
+export const insertLearningTestSchema = createInsertSchema(learningTests).omit({
   id: true,
   createdAt: true,
 });
@@ -191,3 +209,5 @@ export type VoiceProfile = typeof voiceProfiles.$inferSelect;
 export type InsertLearningContentHistory = z.infer<typeof insertLearningContentHistorySchema>;
 export type LearningContentHistory = typeof learningContentHistory.$inferSelect;
 export type LearningDeliveryClaim = typeof learningDeliveryClaims.$inferSelect;
+export type InsertLearningTest = z.infer<typeof insertLearningTestSchema>;
+export type LearningTest = typeof learningTests.$inferSelect;

@@ -7,6 +7,7 @@ import { generateWeatherAdvice, generateVocabularyExample, generateNewVocabulary
 import { updateWeatherCache } from "./lib/weather";
 import { generateVoicePreview } from "./lib/listening";
 import { isValidScheduledTime, normalizeWeekdayLevelSchedule, serializeScheduledDays, serializeWeekdayLevelSchedule } from "./lib/learning-schedule";
+import { createLearningTestDocx, type LearningTestPayload } from "./lib/learning-docx";
 import { regions } from "../client/src/data/regions";
 import { vocabulary } from "../client/src/data/vocabulary";
 
@@ -75,6 +76,76 @@ export async function registerRoutes(
   // Health check endpoint for keep-alive pings
   app.get("/api/health", (req, res) => {
     res.json({ status: "ok", timestamp: new Date().toISOString() });
+  });
+
+  // Public learning test archive. Payloads are intentionally excluded from the list response.
+  app.get("/api/tests", async (req, res) => {
+    try {
+      const requestedType = typeof req.query.type === "string" ? req.query.type : undefined;
+      const requestedLevel = typeof req.query.level === "string" ? req.query.level : undefined;
+      if (requestedType && requestedType !== "listening" && requestedType !== "reading") {
+        return res.status(400).json({ error: "type must be listening or reading" });
+      }
+      if (requestedLevel && requestedLevel !== "A1A2" && requestedLevel !== "B1B2") {
+        return res.status(400).json({ error: "level must be A1A2 or B1B2" });
+      }
+      const rawLimit = Number(req.query.limit || 100);
+      const limit = Number.isFinite(rawLimit) ? Math.min(Math.max(Math.floor(rawLimit), 1), 100) : 100;
+      const tests = await storage.getLearningTests({
+        contentType: requestedType as "listening" | "reading" | undefined,
+        level: requestedLevel as "A1A2" | "B1B2" | undefined,
+        limit,
+      });
+      res.json(tests.map(test => ({
+        id: test.id,
+        contentType: test.contentType,
+        titleAr: test.titleAr,
+        titleUz: test.titleUz,
+        testDate: test.testDate,
+        level: test.level,
+      })));
+    } catch (error) {
+      console.error("Failed to fetch learning tests:", error);
+      res.status(500).json({ error: "Failed to fetch learning tests" });
+    }
+  });
+
+  app.get("/api/tests/:id/docx", async (req, res) => {
+    try {
+      const test = await storage.getLearningTest(req.params.id);
+      if (!test) return res.status(404).json({ error: "Test not found" });
+
+      let payload: LearningTestPayload;
+      try {
+        payload = JSON.parse(test.payload) as LearningTestPayload;
+      } catch {
+        return res.status(500).json({ error: "Stored test payload is invalid" });
+      }
+      const document = await createLearningTestDocx({
+        contentType: test.contentType as "listening" | "reading",
+        titleAr: test.titleAr,
+        titleUz: test.titleUz,
+        testDate: test.testDate,
+        level: test.level,
+        channelTitle: test.channelTitle,
+      }, payload);
+
+      const safeName = test.titleUz
+        .normalize("NFKD")
+        .replace(/[^A-Za-z0-9\s-]/g, "")
+        .trim()
+        .replace(/\s+/g, "-")
+        .slice(0, 70) || "arabic-test";
+      const typeName = test.contentType === "listening" ? "tinglash" : "oqish";
+      const filename = `${typeName}-${test.testDate}-${safeName}.docx`;
+      res.setHeader("Content-Type", "application/vnd.openxmlformats-officedocument.wordprocessingml.document");
+      res.setHeader("Content-Disposition", `attachment; filename="${filename}"; filename*=UTF-8''${encodeURIComponent(filename)}`);
+      res.setHeader("Cache-Control", "public, max-age=3600");
+      res.send(document);
+    } catch (error) {
+      console.error("Failed to create learning test document:", error);
+      res.status(500).json({ error: "Failed to create test document" });
+    }
   });
 
   // Weather API - Get all weather data
