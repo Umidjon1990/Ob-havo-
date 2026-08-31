@@ -14,14 +14,14 @@ import type { LearningDocumentItem, LearningDocumentMeta, LearningTestPayload } 
 
 const runtimeRequire = createRequire(join(process.cwd(), "package.json"));
 const regularFont = runtimeRequire.resolve(
-  "@fontsource/noto-naskh-arabic/files/noto-naskh-arabic-arabic-400-normal.woff",
+  "@fontsource/noto-kufi-arabic/files/noto-kufi-arabic-arabic-400-normal.woff",
 );
 const boldFont = runtimeRequire.resolve(
-  "@fontsource/noto-naskh-arabic/files/noto-naskh-arabic-arabic-700-normal.woff",
+  "@fontsource/noto-kufi-arabic/files/noto-kufi-arabic-arabic-700-normal.woff",
 );
 
 Font.register({
-  family: "ArabicArchive",
+  family: "ArabicReadable",
   fonts: [
     { src: regularFont, fontWeight: 400 },
     { src: boldFont, fontWeight: 700 },
@@ -37,7 +37,7 @@ const styles = StyleSheet.create({
     paddingLeft: 42,
     color: "#172033",
     backgroundColor: "#FFFFFF",
-    fontFamily: "ArabicArchive",
+    fontFamily: "ArabicReadable",
   },
   kicker: {
     fontFamily: "Helvetica-Bold",

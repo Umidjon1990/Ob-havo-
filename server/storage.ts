@@ -109,6 +109,7 @@ export interface IStorage {
   getLearningTest(id: string): Promise<LearningTest | undefined>;
   getLearningTestsByIds(ids: string[]): Promise<LearningTest[]>;
   createLearningTest(test: InsertLearningTest): Promise<LearningTest>;
+  updateLearningTestAudio(id: string, audioBase64: string, audioMimeType: string): Promise<void>;
 }
 
 export class DatabaseStorage implements IStorage {
@@ -521,6 +522,13 @@ export class DatabaseStorage implements IStorage {
   async createLearningTest(test: InsertLearningTest): Promise<LearningTest> {
     const [created] = await db.insert(learningTests).values(test).returning();
     return created;
+  }
+
+  async updateLearningTestAudio(id: string, audioBase64: string, audioMimeType: string): Promise<void> {
+    await db
+      .update(learningTests)
+      .set({ audioBase64, audioMimeType })
+      .where(eq(learningTests.id, id));
   }
 }
 

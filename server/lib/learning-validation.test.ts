@@ -318,12 +318,12 @@ test("learning exports create combined DOCX and RTL-capable PDF files", async ()
   const basePassage = makeReadingPassage("A1A2");
   const passage = {
     ...basePassage,
-    fullAr: basePassage.paragraphsAr.join("\n\n"),
+    fullAr: `يَتَغَيَّرُ الطَّقْسُ فِي بِلَادِنَا خِلَالَ فُصُولِ السَّنَةِ.\n\n${basePassage.paragraphsAr.join("\n\n")}`,
     fullUz: basePassage.paragraphsUz.join("\n\n"),
   };
   const meta = {
     contentType: "reading" as const,
-    titleAr: passage.titleAr,
+    titleAr: "الطَّقْسُ وَالْفُصُولُ الْأَرْبَعَةُ",
     titleUz: passage.titleUz,
     testDate: "2026-08-31",
     level: "A1A2",

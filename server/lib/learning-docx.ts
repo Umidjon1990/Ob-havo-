@@ -59,11 +59,14 @@ function arabicRun(
 ): TextRun {
   return new TextRun({
     text,
-    font: ARABIC_FONT,
+    font: { ascii: ARABIC_FONT, hAnsi: ARABIC_FONT, cs: ARABIC_FONT },
     size: options.size ?? BODY_SIZE,
+    sizeComplexScript: options.size ?? BODY_SIZE,
     bold: options.bold,
+    boldComplexScript: options.bold,
     color: options.color ?? INK,
     rightToLeft: true,
+    language: { value: "ar-SA", bidirectional: "ar-SA" },
   });
 }
 
@@ -258,7 +261,14 @@ export async function createLearningTestsDocx(items: LearningDocumentItem[]): Pr
     styles: {
       default: {
         document: {
-          run: { font: ARABIC_FONT, size: BODY_SIZE, color: INK },
+          run: {
+            font: { ascii: ARABIC_FONT, hAnsi: ARABIC_FONT, cs: ARABIC_FONT },
+            size: BODY_SIZE,
+            sizeComplexScript: BODY_SIZE,
+            rightToLeft: true,
+            language: { value: "ar-SA", bidirectional: "ar-SA" },
+            color: INK,
+          },
           paragraph: {
             alignment: AlignmentType.RIGHT,
             spacing: { line: 300, after: 120 },

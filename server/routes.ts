@@ -5,7 +5,7 @@ import { storage } from "./storage";
 import { handleTelegramUpdate, sendTelegramMessage, setTelegramWebhook, sendDailyNewsToChannel, sendDailyListeningToChannel, sendDailyReadingToChannel } from "./lib/telegram";
 import { generateWeatherAdvice, generateVocabularyExample, generateNewVocabulary } from "./lib/openai";
 import { updateWeatherCache } from "./lib/weather";
-import { generateVoicePreview } from "./lib/listening";
+import { generateVoicePreview, textToSpeechArabic } from "./lib/listening";
 import { isValidScheduledTime, normalizeWeekdayLevelSchedule, serializeScheduledDays, serializeWeekdayLevelSchedule } from "./lib/learning-schedule";
 import {
   createLearningTestDocx,
@@ -24,6 +24,7 @@ const ADMIN_PASSWORD = process.env.ADMIN_PASSWORD;
 
 // Simple token storage (in production use Redis/DB)
 const validTokens = new Set<string>();
+const archiveAudioGenerations = new Map<string, Promise<Buffer | null>>();
 
 function generateToken(): string {
   return randomBytes(32).toString("base64url");
@@ -49,6 +50,37 @@ function parseLearningPayload(value: string): LearningTestPayload | null {
   } catch {
     return null;
   }
+}
+
+async function getOrCreateArchiveAudio(
+  test: {
+    id: string;
+    contentType: string;
+    channelId: string;
+    audioBase64: string | null;
+  },
+  payload: LearningTestPayload,
+): Promise<Buffer | null> {
+  if (test.audioBase64) return Buffer.from(test.audioBase64, "base64");
+  if (test.contentType !== "listening" || payload.contentType !== "listening") return null;
+
+  const activeGeneration = archiveAudioGenerations.get(test.id);
+  if (activeGeneration) return activeGeneration;
+
+  const generation = (async () => {
+    const channel = await storage.getListeningChannel(test.channelId);
+    const audio = await textToSpeechArabic(payload.passage, {
+      maleVoiceId: channel?.maleVoiceId,
+      femaleVoiceId: channel?.femaleVoiceId,
+    });
+    if (audio) {
+      await storage.updateLearningTestAudio(test.id, audio.toString("base64"), "audio/mpeg");
+    }
+    return audio;
+  })().finally(() => archiveAudioGenerations.delete(test.id));
+
+  archiveAudioGenerations.set(test.id, generation);
+  return generation;
 }
 
 function learningDocumentMeta(test: {
@@ -206,9 +238,16 @@ export async function registerRoutes(
     try {
       const test = await storage.getLearningTest(req.params.id);
       if (!test) return res.status(404).json({ error: "Test not found" });
-      if (!test.audioBase64) return res.status(404).json({ error: "Audio is not available for this test" });
+      if (test.contentType !== "listening") {
+        return res.status(404).json({ error: "Audio is available only for listening tests" });
+      }
+      const payload = parseLearningPayload(test.payload);
+      if (!payload || payload.contentType !== "listening") {
+        return res.status(500).json({ error: "Stored listening test payload is invalid" });
+      }
 
-      const audio = Buffer.from(test.audioBase64, "base64");
+      const audio = await getOrCreateArchiveAudio(test, payload);
+      if (!audio) return res.status(503).json({ error: "Audio generation is temporarily unavailable" });
       const filename = `tinglash-${test.testDate}-${safeTestName(test.titleUz)}.mp3`;
       setDownloadHeaders(res, test.audioMimeType || "audio/mpeg", filename, true);
       res.setHeader("Content-Length", audio.length);

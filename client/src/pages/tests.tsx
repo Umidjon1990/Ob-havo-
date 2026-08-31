@@ -292,9 +292,10 @@ export default function Tests() {
                     </div>
                     <div className="grid grid-cols-3 gap-2">
                       <a
-                        href={test.hasAudio ? `/api/tests/${encodeURIComponent(test.id)}/audio` : undefined}
-                        aria-disabled={!test.hasAudio}
-                        className={`inline-flex h-9 items-center justify-center rounded-md border px-2 text-xs font-semibold transition-colors ${test.hasAudio ? "border-violet-200 bg-violet-50 text-violet-700 hover:bg-violet-100" : "cursor-not-allowed border-slate-200 bg-slate-50 text-slate-400"}`}
+                        href={isListening ? `/api/tests/${encodeURIComponent(test.id)}/audio` : undefined}
+                        aria-disabled={!isListening}
+                        title={isListening && !test.hasAudio ? "Audio birinchi yuklashda avtomatik yaratiladi" : undefined}
+                        className={`inline-flex h-9 items-center justify-center rounded-md border px-2 text-xs font-semibold transition-colors ${isListening ? "border-violet-200 bg-violet-50 text-violet-700 hover:bg-violet-100" : "cursor-not-allowed border-slate-200 bg-slate-50 text-slate-400"}`}
                         download
                       >
                         <FileAudio className="mr-1.5 h-4 w-4" /> Audio
@@ -339,4 +340,3 @@ export default function Tests() {
     </main>
   );
 }
-
