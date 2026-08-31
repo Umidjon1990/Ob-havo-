@@ -55,6 +55,9 @@ const LISTENING_PASSAGE_JSON_SCHEMA = {
 
 // ─── ElevenLabs Voices ────────────────────────────────────────────────────────
 const ELEVENLABS_MODEL = "eleven_multilingual_v2";
+const OPENAI_TTS_MODEL = "gpt-4o-mini-tts";
+const OPENAI_MALE_VOICE = "onyx";
+const OPENAI_FEMALE_VOICE = "coral";
 
 export interface SpeakerVoices {
   maleVoiceId?: string | null;
@@ -241,7 +244,16 @@ function replaceNumerals(text: string): string {
   return text;
 }
 
-async function ttsLine(text: string, voiceId: string, apiKey: string): Promise<Buffer | null> {
+interface TtsAttempt {
+  audio: Buffer | null;
+  retryable: boolean;
+}
+
+function isRetryableTtsStatus(status: number): boolean {
+  return status === 408 || status === 409 || status === 425 || status === 429 || status >= 500;
+}
+
+async function elevenLabsTtsLine(text: string, voiceId: string, apiKey: string): Promise<TtsAttempt> {
   // 1. Strip harakat  2. Convert numerals to Arabic words  → clean text for ElevenLabs
   const cleanText = replaceNumerals(stripHarakat(text));
   try {
@@ -269,72 +281,146 @@ async function ttsLine(text: string, voiceId: string, apiKey: string): Promise<B
     if (!response.ok) {
       const errText = await response.text();
       console.warn(`ElevenLabs TTS error ${response.status} (voice ${voiceId}):`, errText);
-      return null;
+      return { audio: null, retryable: isRetryableTtsStatus(response.status) };
     }
-    return Buffer.from(await response.arrayBuffer());
+    return { audio: Buffer.from(await response.arrayBuffer()), retryable: false };
   } catch (err: any) {
     console.warn("ElevenLabs TTS line failed:", err?.message || err);
-    return null;
+    return { audio: null, retryable: true };
   }
+}
+
+function getOpenAiSpeechConfig(): { apiKey: string; baseUrl: string } | null {
+  const integrationKey = process.env.AI_INTEGRATIONS_OPENAI_API_KEY?.trim();
+  const standardKey = process.env.OPENAI_API_KEY?.trim();
+  const apiKey = integrationKey || standardKey;
+  if (!apiKey) return null;
+
+  const configuredBaseUrl = integrationKey
+    ? process.env.AI_INTEGRATIONS_OPENAI_BASE_URL?.trim()
+    : undefined;
+  return {
+    apiKey,
+    baseUrl: (configuredBaseUrl || "https://api.openai.com/v1").replace(/\/$/, ""),
+  };
+}
+
+async function openAiTtsLine(text: string, speaker: "M" | "F"): Promise<TtsAttempt> {
+  const config = getOpenAiSpeechConfig();
+  if (!config) {
+    console.warn("OpenAI TTS skipped: OPENAI_API_KEY is not set");
+    return { audio: null, retryable: false };
+  }
+
+  const cleanText = replaceNumerals(stripHarakat(text));
+  const voice = speaker === "M" ? OPENAI_MALE_VOICE : OPENAI_FEMALE_VOICE;
+  const voiceDescription = speaker === "M" ? "adult male teacher" : "adult female teacher";
+
+  try {
+    const response = await fetch(`${config.baseUrl}/audio/speech`, {
+      method: "POST",
+      headers: {
+        Authorization: `Bearer ${config.apiKey}`,
+        "Content-Type": "application/json",
+        Accept: "audio/mpeg",
+      },
+      body: JSON.stringify({
+        model: OPENAI_TTS_MODEL,
+        input: cleanText,
+        voice,
+        instructions: `Speak in clear Modern Standard Arabic as a calm ${voiceDescription}. Use a natural conversational pace, pronounce every word accurately, and do not add any words.`,
+        response_format: "mp3",
+        speed: 0.95,
+      }),
+    });
+
+    if (!response.ok) {
+      const errText = await response.text();
+      console.warn(`OpenAI TTS error ${response.status} (voice ${voice}):`, errText);
+      return { audio: null, retryable: isRetryableTtsStatus(response.status) };
+    }
+
+    return { audio: Buffer.from(await response.arrayBuffer()), retryable: false };
+  } catch (err: any) {
+    console.warn("OpenAI TTS line failed:", err?.message || err);
+    return { audio: null, retryable: true };
+  }
+}
+
+async function renderDialogAudio(
+  passage: ListeningPassage,
+  providerName: "ElevenLabs" | "OpenAI",
+  synthesize: (line: DialogLine) => Promise<TtsAttempt>,
+): Promise<Buffer | null> {
+  const parts: Buffer[] = [];
+
+  for (let i = 0; i < passage.dialog.length; i++) {
+    const line = passage.dialog[i];
+    let result = await synthesize(line);
+    if (!result.audio && result.retryable) {
+      console.warn(`${providerName} TTS line ${i + 1} failed, retrying...`);
+      await new Promise(resolve => setTimeout(resolve, 1000));
+      result = await synthesize(line);
+    }
+    if (!result.audio) {
+      console.warn(`${providerName} TTS line ${i + 1} failed — aborting this provider`);
+      return null;
+    }
+
+    parts.push(result.audio);
+    console.log(`✓ ${providerName} TTS line ${i + 1}/${passage.dialog.length} (${line.speaker})`);
+    if (i < passage.dialog.length - 1) {
+      await new Promise(resolve => setTimeout(resolve, providerName === "ElevenLabs" ? 400 : 150));
+    }
+  }
+
+  if (parts.length === 0) return null;
+  const combined = concatMp3(parts);
+  console.log(`✓ ${providerName} dialog audio ready: ${parts.length} lines, ${combined.length} bytes`);
+  return combined;
 }
 
 // Generate dialog audio: each line with correct gendered voice, then properly concatenate
 export async function generateVoicePreview(voiceId: string): Promise<Buffer | null> {
   const apiKey = process.env.ELEVENLABS_API_KEY;
   if (!apiKey) throw new Error("ELEVENLABS_API_KEY not set");
-  return ttsLine("مرحباً، هذا نموذج قصير للاستماع إلى الصوت العربي.", voiceId, apiKey);
+  return (await elevenLabsTtsLine(
+    "مرحباً، هذا نموذج قصير للاستماع إلى الصوت العربي.",
+    voiceId,
+    apiKey,
+  )).audio;
 }
 
 export async function textToSpeechArabic(passage: ListeningPassage, voices: SpeakerVoices = {}): Promise<Buffer | null> {
-  const apiKey = process.env.ELEVENLABS_API_KEY;
-  if (!apiKey) {
-    console.warn("ELEVENLABS_API_KEY not set — skipping TTS");
-    return null;
-  }
+  const apiKey = process.env.ELEVENLABS_API_KEY?.trim();
   const maleVoiceId = voices.maleVoiceId?.trim();
   const femaleVoiceId = voices.femaleVoiceId?.trim();
-  if (!maleVoiceId || !femaleVoiceId) {
-    console.warn("TTS skipped: this channel must have both a male and female voice selected");
-    return null;
-  }
-  if (maleVoiceId === femaleVoiceId) {
-    console.warn("TTS skipped: male and female speakers cannot use the same selected voice");
-    return null;
-  }
-  console.log(`TTS selected voices: M=${maleVoiceId}, F=${femaleVoiceId}`);
+  const canUseElevenLabs = Boolean(
+    apiKey && maleVoiceId && femaleVoiceId && maleVoiceId !== femaleVoiceId,
+  );
 
-  const parts: Buffer[] = [];
-
-  for (let i = 0; i < passage.dialog.length; i++) {
-    const line = passage.dialog[i];
-    const voiceId = line.speaker === "M"
-      ? maleVoiceId
-      : femaleVoiceId;
-    let buf = await ttsLine(line.text, voiceId, apiKey);
-    // Retry once on failure
-    if (!buf) {
-      console.warn(`TTS line ${i + 1} failed, retrying...`);
-      await new Promise(r => setTimeout(r, 1000));
-      buf = await ttsLine(line.text, voiceId, apiKey);
-    }
-    if (!buf) {
-      console.warn(`TTS line ${i + 1} failed after retry — aborting audio`);
-      return null;
-    }
-    parts.push(buf);
-    console.log(`✓ TTS line ${i + 1}/${passage.dialog.length} (${line.speaker})`);
-    // Avoid ElevenLabs rate limits
-    if (i < passage.dialog.length - 1) {
-      await new Promise(r => setTimeout(r, 400));
-    }
+  if (canUseElevenLabs) {
+    console.log(`TTS selected ElevenLabs voices: M=${maleVoiceId}, F=${femaleVoiceId}`);
+    const elevenLabsAudio = await renderDialogAudio(
+      passage,
+      "ElevenLabs",
+      line => elevenLabsTtsLine(
+        line.text,
+        line.speaker === "M" ? maleVoiceId! : femaleVoiceId!,
+        apiKey!,
+      ),
+    );
+    if (elevenLabsAudio) return elevenLabsAudio;
+    console.warn("ElevenLabs TTS unavailable — switching the full dialog to OpenAI TTS");
+  } else {
+    console.warn("ElevenLabs TTS is not configured correctly — using OpenAI TTS fallback");
   }
 
-  if (parts.length === 0) return null;
-
-  // Properly concatenate: strip ID3 tags from all but first chunk
-  const combined = concatMp3(parts);
-  console.log(`✓ Dialog audio ready: ${parts.length} lines, ${combined.length} bytes`);
-  return combined;
+  return renderDialogAudio(
+    passage,
+    "OpenAI",
+    line => openAiTtsLine(line.text, line.speaker),
+  );
 }
 
 // ─── Listening Passage Generation ─────────────────────────────────────────────

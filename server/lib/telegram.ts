@@ -713,20 +713,14 @@ export async function sendDailyListeningToChannel(
   if (quizzes.length < 3) throw new Error(`Could not generate 3 quizzes (got ${quizzes.length})`);
   quizzes = quizzes.slice(0, 3);
 
-  // 3. Generate dialog audio (ElevenLabs — male+female voices) — skip if unavailable
-  if (!channel.maleVoiceId || !channel.femaleVoiceId) {
-    throw new Error("Tinglash audiosi uchun kanalga erkak va ayol voice tanlang");
-  }
-  if (channel.maleVoiceId === channel.femaleVoiceId) {
-    throw new Error("Erkak va ayol speaker uchun turli voice tanlang");
-  }
+  // 3. Generate dialog audio (ElevenLabs first, OpenAI TTS fallback)
   const audioBuffer = await textToSpeechArabic(passage, {
     maleVoiceId: channel.maleVoiceId,
     femaleVoiceId: channel.femaleVoiceId,
   });
   if (!audioBuffer) {
     console.warn(`TTS unavailable for ${channelId} — skipping listening run`);
-    throw new Error("ElevenLabs TTS unavailable — listening run skipped");
+    throw new Error("Barcha TTS xizmatlari ishlamadi — listening run skipped");
   }
 
   const date = getListeningDateString();
@@ -736,6 +730,7 @@ ${levelLabel}
 🏷 <b>${passage.topicUz}</b> | ${passage.topicAr}
 
 👨 المتحدث الأول  ·  👩 المتحدثة الثانية
+🤖 <i>Ovoz sun'iy intellekt yordamida yaratilgan.</i>
 🎵 <i>Dialogni diqqat bilan tinglang, so'ng savollarga javob bering!</i>
 ⬇️ Quyidagi testlarga javob bering`;
 
