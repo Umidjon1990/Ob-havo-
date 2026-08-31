@@ -7,6 +7,10 @@ import { resolve } from "path";
 // which helps cold start times
 const allowlist = [
   "@react-pdf/renderer",
+  // Keep React in the same production bundle as react-pdf's reconciler.
+  // Mixing a bundled production reconciler with an external development React
+  // instance causes dispatcher.getOwner runtime failures on Railway.
+  "react",
   "@google/generative-ai",
   "axios",
   "connect-pg-simple",
