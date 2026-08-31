@@ -29,6 +29,30 @@ export interface ListeningQuiz {
   explanation: string;
 }
 
+const LISTENING_PASSAGE_JSON_SCHEMA = {
+  type: "object",
+  properties: {
+    dialog: {
+      type: "array",
+      minItems: 12,
+      maxItems: 16,
+      items: {
+        type: "object",
+        properties: {
+          speaker: { type: "string", enum: ["M", "F"] },
+          text: { type: "string" },
+        },
+        required: ["speaker", "text"],
+        additionalProperties: false,
+      },
+    },
+    topicAr: { type: "string" },
+    topicUz: { type: "string" },
+  },
+  required: ["dialog", "topicAr", "topicUz"],
+  additionalProperties: false,
+} as const;
+
 // ─── ElevenLabs Voices ────────────────────────────────────────────────────────
 const ELEVENLABS_MODEL = "eleven_multilingual_v2";
 
@@ -443,7 +467,7 @@ function getProfessionalDialogValidationError(dialog: unknown, level: ListeningL
   if (!Array.isArray(dialog)) return "dialog is not an array";
   if (dialog.length < 12 || dialog.length > 16) return `expected 12–16 lines, got ${dialog.length}`;
   const [minWords, maxWords, minTotal, maxTotal] = level === "A1A2"
-    ? [6, 16, 80, 205]
+    ? [5, 18, 80, 205]
     : [6, 26, 110, 330];
   const maleLines = dialog.filter(line => line?.speaker === "M").length;
   const femaleLines = dialog.filter(line => line?.speaker === "F").length;
@@ -523,8 +547,8 @@ export async function generateListeningPassage(
 شروط لا تقبل الاستثناء:
 - الحوار موقف واقعي مكتمل، وليس درساً أو قائمة معلومات.
 - المتحدثان رجل [M] وامرأة [F]. لا تذكر أي اسم شخص داخل الحوار أو العنوان.
-- اكتب 12 إلى 16 مداخلة متوازنة؛ لكل متحدث أربع مداخلات على الأقل.
- - ${level === "A1A2" ? "كل مداخلة من 6 إلى 16 كلمة." : "كل مداخلة من 12 إلى 23 كلمة."}
+- اكتب 14 مداخلة متوازنة (المسموح فقط 12 إلى 16)؛ لكل متحدث أربع مداخلات على الأقل.
+ - ${level === "A1A2" ? "استهدف 8 إلى 14 كلمة في كل مداخلة، ولا تقل أي مداخلة عن 5 كلمات." : "استهدف 14 إلى 20 كلمة في كل مداخلة."}
 - ${level === "A1A2" ? "استهدف 90 إلى 145 كلمة عربية في الحوار كاملاً." : "استهدف 140 إلى 280 كلمة عربية في الحوار كاملاً."}
 - اجعل الحقائق الداخلية متسقة تماماً. لا تخترع أخباراً أو إحصاءات واقعية حديثة؛ استخدم سيناريو تعليمياً واضحاً عند الحاجة إلى أرقام.
 - تضمّن تفاصيل قابلة للاختبار: وقتاً أو رقماً، مكاناً أو خدمة، ترتيباً زمنياً، مقارنة، ورأياً منسوباً بوضوح لأحد المتحدثين.
@@ -541,47 +565,68 @@ export async function generateListeningPassage(
   "topicUz": "Mavzu o‘zbekcha qisqa"
 }`;
 
-  // Retry the supported model: a single otherwise-valid dialog can be rejected
-  // when it happens to include a personal name despite the prompt.
   const models = ["gpt-4o", "gpt-4o", "gpt-4o"];
-  for (const model of models) {
+  let retryFeedback = "";
+  for (let attempt = 0; attempt < models.length; attempt++) {
+    const model = models[attempt];
     try {
-      console.log(`Listening passage model: ${model}`);
+      console.log(`Listening passage model: ${model} (attempt ${attempt + 1}/${models.length})`);
       const response = await openai.chat.completions.create({
         model,
-        messages: [{ role: "user", content: prompt }],
+        messages: [
+          {
+            role: "system",
+            content: "أعد كائن JSON واحداً يطابق المخطط بدقة. لا تضف Markdown أو أي نص خارج JSON.",
+          },
+          { role: "user", content: `${prompt}${retryFeedback}` },
+        ],
+        response_format: {
+          type: "json_schema",
+          json_schema: {
+            name: "listening_passage",
+            strict: true,
+            schema: LISTENING_PASSAGE_JSON_SCHEMA,
+          },
+        },
+        temperature: 0.3,
         max_completion_tokens: 2500,
       });
       const content = response.choices[0]?.message?.content || "";
-      if (!content) continue;
-      const jsonMatch = content.match(/\{[\s\S]*\}/);
-      if (jsonMatch) {
-        const sanitized = jsonMatch[0].replace(/[\x00-\x08\x0b\x0c\x0e-\x1f]/g, " ");
-        const parsed = JSON.parse(sanitized);
-        const dialogError = getProfessionalDialogValidationError(parsed.dialog, level);
-        const topicIsValid = typeof parsed.topicAr === "string" && hasEnoughArabic(parsed.topicAr) &&
-          typeof parsed.topicUz === "string" && parsed.topicUz.trim().length >= 3;
-        if (!dialogError && topicIsValid) {
-          const dialog: DialogLine[] = parsed.dialog.map((l: any) => ({
-            speaker: l.speaker as "M" | "F",
-            text: anonymizeKnownPersonalNames(l.text.trim()),
-          }));
-          const arabicText = dialog.map(l => `[${l.speaker}] ${l.text}`).join("\n");
-          const topicAr = anonymizeKnownPersonalNames(parsed.topicAr.trim());
-          if (await failsPersonalNameAudit(`${arabicText}\n${topicAr}\n${parsed.topicUz}`)) {
-            console.warn(`Listening passage model ${model} returned a personal name or failed name audit`);
-            continue;
-          }
-          console.log(`✓ Dialog generated (${model}), ${dialog.length} lines`);
-          return {
-            arabicText,
-            dialog,
-            topicAr,
-            topicUz: parsed.topicUz.trim(),
-          };
-        }
-        console.warn(`Listening passage model ${model} rejected: ${dialogError || "invalid topic fields"}`);
+      if (!content) {
+        retryFeedback = "\n\nالمحاولة السابقة لم تُرجع محتوى. أعد إنشاء الحوار كاملاً مع 14 مداخلة.";
+        continue;
       }
+
+      const sanitized = content.replace(/[\x00-\x08\x0b\x0c\x0e-\x1f]/g, " ");
+      const parsed = JSON.parse(sanitized);
+      const dialogError = getProfessionalDialogValidationError(parsed.dialog, level);
+      const topicIsValid = typeof parsed.topicAr === "string" && hasEnoughArabic(parsed.topicAr) &&
+        typeof parsed.topicUz === "string" && parsed.topicUz.trim().length >= 3;
+      if (!dialogError && topicIsValid) {
+        const dialog: DialogLine[] = parsed.dialog.map((l: any) => ({
+          speaker: l.speaker as "M" | "F",
+          text: anonymizeKnownPersonalNames(l.text.trim()),
+        }));
+        const arabicText = dialog.map(l => `[${l.speaker}] ${l.text}`).join("\n");
+        const topicAr = anonymizeKnownPersonalNames(parsed.topicAr.trim());
+        if (await failsPersonalNameAudit(`${arabicText}\n${topicAr}\n${parsed.topicUz}`)) {
+          const reason = "personal name or failed name audit";
+          console.warn(`Listening passage model ${model} rejected: ${reason}`);
+          retryFeedback = `\n\nرفض المدقق المحاولة السابقة بسبب: ${reason}. لا تستخدم أي اسم شخص، وأنشئ حواراً جديداً كاملاً.`;
+          continue;
+        }
+        console.log(`✓ Dialog generated (${model}), ${dialog.length} lines`);
+        return {
+          arabicText,
+          dialog,
+          topicAr,
+          topicUz: parsed.topicUz.trim(),
+        };
+      }
+
+      const reason = dialogError || "invalid topic fields";
+      console.warn(`Listening passage model ${model} rejected: ${reason}`);
+      retryFeedback = `\n\nرفض المدقق المحاولة السابقة بسبب: ${reason}. أصلح هذا الخطأ تحديداً، وأنشئ الحوار كاملاً من جديد مع 14 مداخلة.`;
     } catch (e: any) {
       console.warn(`Listening passage model ${model} failed:`, e?.message || e);
     }

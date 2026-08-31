@@ -183,6 +183,15 @@ for (const level of ["A1A2", "B1B2"] as const) {
   });
 }
 
+test("A1A2 listening validator tolerates a natural five-word line", () => {
+  const dialog = makeDialog("A1A2");
+  dialog[0] = { ...dialog[0], text: arabicWords(5) };
+  assert.equal(isProfessionalDialog(dialog, "A1A2"), true);
+
+  dialog[0] = { ...dialog[0], text: arabicWords(4) };
+  assert.equal(isProfessionalDialog(dialog, "A1A2"), false);
+});
+
 test("listening validator rejects fewer than three quizzes", () => {
   assert.notEqual(validateListeningQuizzes(makeListeningQuizzes()), null);
   assert.equal(validateListeningQuizzes(makeListeningQuizzes().slice(0, 2)), null);
