@@ -183,12 +183,12 @@ for (const level of ["A1A2", "B1B2"] as const) {
   });
 }
 
-test("A1A2 listening validator tolerates a natural five-word line", () => {
+test("A1A2 listening validator tolerates a natural four-word line", () => {
   const dialog = makeDialog("A1A2");
-  dialog[0] = { ...dialog[0], text: arabicWords(5) };
+  dialog[0] = { ...dialog[0], text: arabicWords(4) };
   assert.equal(isProfessionalDialog(dialog, "A1A2"), true);
 
-  dialog[0] = { ...dialog[0], text: arabicWords(4) };
+  dialog[0] = { ...dialog[0], text: arabicWords(3) };
   assert.equal(isProfessionalDialog(dialog, "A1A2"), false);
 });
 

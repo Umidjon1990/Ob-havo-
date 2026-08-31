@@ -467,7 +467,7 @@ function getProfessionalDialogValidationError(dialog: unknown, level: ListeningL
   if (!Array.isArray(dialog)) return "dialog is not an array";
   if (dialog.length < 12 || dialog.length > 16) return `expected 12–16 lines, got ${dialog.length}`;
   const [minWords, maxWords, minTotal, maxTotal] = level === "A1A2"
-    ? [5, 18, 80, 205]
+    ? [4, 18, 80, 205]
     : [6, 26, 110, 330];
   const maleLines = dialog.filter(line => line?.speaker === "M").length;
   const femaleLines = dialog.filter(line => line?.speaker === "F").length;
@@ -548,7 +548,7 @@ export async function generateListeningPassage(
 - الحوار موقف واقعي مكتمل، وليس درساً أو قائمة معلومات.
 - المتحدثان رجل [M] وامرأة [F]. لا تذكر أي اسم شخص داخل الحوار أو العنوان.
 - اكتب 14 مداخلة متوازنة (المسموح فقط 12 إلى 16)؛ لكل متحدث أربع مداخلات على الأقل.
- - ${level === "A1A2" ? "استهدف 8 إلى 14 كلمة في كل مداخلة، ولا تقل أي مداخلة عن 5 كلمات." : "استهدف 14 إلى 20 كلمة في كل مداخلة."}
+- ${level === "A1A2" ? "استهدف 8 إلى 14 كلمة في كل مداخلة، وتُقبل المداخلة الطبيعية القصيرة من 4 كلمات على الأقل." : "استهدف 14 إلى 20 كلمة في كل مداخلة."}
 - ${level === "A1A2" ? "استهدف 90 إلى 145 كلمة عربية في الحوار كاملاً." : "استهدف 140 إلى 280 كلمة عربية في الحوار كاملاً."}
 - اجعل الحقائق الداخلية متسقة تماماً. لا تخترع أخباراً أو إحصاءات واقعية حديثة؛ استخدم سيناريو تعليمياً واضحاً عند الحاجة إلى أرقام.
 - تضمّن تفاصيل قابلة للاختبار: وقتاً أو رقماً، مكاناً أو خدمة، ترتيباً زمنياً، مقارنة، ورأياً منسوباً بوضوح لأحد المتحدثين.
