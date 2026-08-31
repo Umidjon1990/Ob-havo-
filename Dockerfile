@@ -1,10 +1,11 @@
 FROM node:20.20.0-bookworm-slim AS build
 
 WORKDIR /app
-ENV NODE_ENV=development
 
 COPY package.json package-lock.json ./
-RUN npm ci --include=dev --no-audit --no-fund \
+RUN npm install --global npm@10.9.9 --no-audit --no-fund \
+    && npm --version
+RUN npm ci --omit=dev --no-audit --no-fund \
     && npm exec --offline -- tsx --version
 
 COPY . .
