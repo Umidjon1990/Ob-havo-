@@ -226,7 +226,7 @@ export async function registerRoutes(
       const document = await createLearningTestPdf(learningDocumentMeta(test), payload);
       const typeName = test.contentType === "listening" ? "tinglash" : "oqish";
       const filename = `${typeName}-${test.testDate}-${safeTestName(test.titleUz)}.pdf`;
-      setDownloadHeaders(res, "application/pdf", filename, true);
+      setDownloadHeaders(res, "application/pdf", filename);
       res.send(document);
     } catch (error) {
       console.error("Failed to create learning test PDF:", error);
