@@ -259,6 +259,7 @@ async function migrate() {
   
   console.log("Database tables created successfully!");
   await client.end();
+  process.exit(0);
 }
 
 migrate().catch(err => {
