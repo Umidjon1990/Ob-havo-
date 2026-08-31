@@ -12,6 +12,7 @@ import {
   Loader2,
   RefreshCw,
   Search,
+  ShieldCheck,
   X,
 } from "lucide-react";
 import { Link } from "wouter";
@@ -145,11 +146,18 @@ export default function Tests() {
                 Yaratilgan o‘qish va tinglash testlarini mavzu yoki sana bo‘yicha toping. Audio, PDF va DOCX fayllarini alohida yoki tanlanganlarini bitta faylda yuklab oling.
               </p>
             </div>
-            <Link href="/">
-              <Button variant="outline" className="shrink-0 gap-2 bg-white">
-                <ArrowLeft className="h-4 w-4" /> Bosh sahifa
-              </Button>
-            </Link>
+            <div className="flex flex-wrap gap-2">
+              <Link href="/admin">
+                <Button className="shrink-0 gap-2 bg-blue-700 hover:bg-blue-800">
+                  <ShieldCheck className="h-4 w-4" /> Admin panel
+                </Button>
+              </Link>
+              <Link href="/">
+                <Button variant="outline" className="shrink-0 gap-2 bg-white">
+                  <ArrowLeft className="h-4 w-4" /> Bosh sahifa
+                </Button>
+              </Link>
+            </div>
           </div>
 
           <div className="mt-6 grid grid-cols-3 gap-3 border-t border-slate-100 pt-5">
@@ -331,3 +339,4 @@ export default function Tests() {
     </main>
   );
 }
+

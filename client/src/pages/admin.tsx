@@ -1,5 +1,5 @@
 import { useState, useEffect } from "react";
-import { ArrowLeft, Save, RefreshCw, Send, Radio, Plus, Trash2, Users, Cloud, LogOut, Lock, Newspaper, Headphones, BookOpen } from "lucide-react";
+import { ArrowLeft, Save, RefreshCw, Send, Radio, Plus, Trash2, Users, Cloud, LogOut, Lock, Newspaper, Headphones, BookOpen, FileArchive, ExternalLink } from "lucide-react";
 import { Link } from "wouter";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -587,7 +587,7 @@ export default function Admin() {
   return (
     <div className="min-h-screen w-full bg-background p-4 md:p-8 font-sans">
       <div className="max-w-2xl mx-auto space-y-6">
-        <div className="flex items-center justify-between mb-8">
+        <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between mb-8">
           <div className="flex items-center gap-4">
             <Link href="/">
               <Button variant="ghost" size="icon">
@@ -596,10 +596,38 @@ export default function Admin() {
             </Link>
             <h1 className="text-2xl font-bold font-display">Admin Panel</h1>
           </div>
-          <Button variant="outline" size="sm" onClick={handleLogout} data-testid="button-admin-logout">
-            <LogOut className="w-4 h-4 mr-2" /> Chiqish
-          </Button>
+          <div className="flex items-center gap-2">
+            <Link href="/tests" className="flex-1 sm:flex-none">
+              <Button className="w-full gap-2 bg-blue-700 hover:bg-blue-800" data-testid="button-tests-archive">
+                <FileArchive className="h-4 w-4" /> Testlar arxivi
+              </Button>
+            </Link>
+            <Button variant="outline" size="sm" onClick={handleLogout} data-testid="button-admin-logout">
+              <LogOut className="w-4 h-4 mr-2" /> Chiqish
+            </Button>
+          </div>
         </div>
+
+        <Card className="overflow-hidden border-blue-200 bg-gradient-to-br from-blue-50 via-white to-indigo-50 shadow-sm">
+          <CardContent className="flex flex-col gap-4 p-5 sm:flex-row sm:items-center sm:justify-between">
+            <div className="flex items-start gap-4">
+              <div className="grid h-11 w-11 shrink-0 place-items-center rounded-xl bg-blue-700 text-white shadow-sm">
+                <FileArchive className="h-5 w-5" />
+              </div>
+              <div>
+                <h2 className="text-lg font-bold text-slate-950">Testlar va arxiv</h2>
+                <p className="mt-1 text-sm leading-6 text-slate-600">
+                  Yaratilgan o‘qish va tinglash testlarini ko‘ring, filtrlang va Audio, PDF yoki DOCX shaklida yuklab oling.
+                </p>
+              </div>
+            </div>
+            <Link href="/tests" className="shrink-0">
+              <Button variant="outline" className="w-full gap-2 border-blue-200 bg-white text-blue-800 hover:bg-blue-50 sm:w-auto">
+                Arxivni ochish <ExternalLink className="h-4 w-4" />
+              </Button>
+            </Link>
+          </CardContent>
+        </Card>
 
         <Card className="glass-panel border-white/20">
           <CardHeader className="flex flex-row items-center justify-between">
@@ -1435,3 +1463,4 @@ export default function Admin() {
     </div>
   );
 }
+
