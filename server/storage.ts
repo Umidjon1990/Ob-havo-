@@ -1,7 +1,28 @@
 import { db } from "./db";
 import { users, weatherCache, userProgress, botSettings, channels, newsChannels, listeningChannels, readingChannels, voiceProfiles, learningContentHistory, learningDeliveryClaims, learningTests } from "@shared/schema";
 import type { User, InsertUser, WeatherCache, InsertWeatherCache, UserProgress, InsertUserProgress, BotSettings, InsertBotSettings, Channel, InsertChannel, NewsChannel, InsertNewsChannel, ListeningChannel, InsertListeningChannel, ReadingChannel, InsertReadingChannel, VoiceProfile, LearningTest, InsertLearningTest } from "@shared/schema";
-import { and, desc, eq } from "drizzle-orm";
+import { and, desc, eq, gte, ilike, inArray, lte, or, sql } from "drizzle-orm";
+
+export interface LearningTestSummary {
+  id: string;
+  contentType: string;
+  titleAr: string;
+  titleUz: string;
+  testDate: string;
+  level: string;
+  channelTitle: string | null;
+  createdAt: Date | null;
+  hasAudio: boolean;
+}
+
+export interface LearningTestFilters {
+  contentType?: "listening" | "reading";
+  level?: "A1A2" | "B1B2";
+  topic?: string;
+  dateFrom?: string;
+  dateTo?: string;
+  limit?: number;
+}
 
 export const DEFAULT_VOICE_IDS = [
   "G1HOkzin3NMwRHSq60UI",
@@ -84,8 +105,9 @@ export interface IStorage {
   claimLearningDelivery(channelId: string, contentType: "listening" | "reading", dateKey: string): Promise<boolean>;
   completeLearningDelivery(channelId: string, contentType: "listening" | "reading", dateKey: string): Promise<void>;
   releaseLearningDelivery(channelId: string, contentType: "listening" | "reading", dateKey: string): Promise<void>;
-  getLearningTests(filters?: { contentType?: "listening" | "reading"; level?: "A1A2" | "B1B2"; limit?: number }): Promise<LearningTest[]>;
+  getLearningTests(filters?: LearningTestFilters): Promise<LearningTestSummary[]>;
   getLearningTest(id: string): Promise<LearningTest | undefined>;
+  getLearningTestsByIds(ids: string[]): Promise<LearningTest[]>;
   createLearningTest(test: InsertLearningTest): Promise<LearningTest>;
 }
 
@@ -454,13 +476,32 @@ export class DatabaseStorage implements IStorage {
       ));
   }
 
-  async getLearningTests(filters: { contentType?: "listening" | "reading"; level?: "A1A2" | "B1B2"; limit?: number } = {}): Promise<LearningTest[]> {
+  async getLearningTests(filters: LearningTestFilters = {}): Promise<LearningTestSummary[]> {
     const conditions = [];
     if (filters.contentType) conditions.push(eq(learningTests.contentType, filters.contentType));
     if (filters.level) conditions.push(eq(learningTests.level, filters.level));
+    if (filters.dateFrom) conditions.push(gte(learningTests.testDate, filters.dateFrom));
+    if (filters.dateTo) conditions.push(lte(learningTests.testDate, filters.dateTo));
+    if (filters.topic?.trim()) {
+      const pattern = `%${filters.topic.trim()}%`;
+      conditions.push(or(
+        ilike(learningTests.titleAr, pattern),
+        ilike(learningTests.titleUz, pattern),
+      )!);
+    }
 
     return await db
-      .select()
+      .select({
+        id: learningTests.id,
+        contentType: learningTests.contentType,
+        titleAr: learningTests.titleAr,
+        titleUz: learningTests.titleUz,
+        testDate: learningTests.testDate,
+        level: learningTests.level,
+        channelTitle: learningTests.channelTitle,
+        createdAt: learningTests.createdAt,
+        hasAudio: sql<boolean>`${learningTests.audioBase64} IS NOT NULL`,
+      })
       .from(learningTests)
       .where(conditions.length ? and(...conditions) : undefined)
       .orderBy(desc(learningTests.testDate), desc(learningTests.createdAt))
@@ -470,6 +511,11 @@ export class DatabaseStorage implements IStorage {
   async getLearningTest(id: string): Promise<LearningTest | undefined> {
     const [test] = await db.select().from(learningTests).where(eq(learningTests.id, id)).limit(1);
     return test;
+  }
+
+  async getLearningTestsByIds(ids: string[]): Promise<LearningTest[]> {
+    if (ids.length === 0) return [];
+    return await db.select().from(learningTests).where(inArray(learningTests.id, ids));
   }
 
   async createLearningTest(test: InsertLearningTest): Promise<LearningTest> {

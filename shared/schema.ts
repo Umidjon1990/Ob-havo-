@@ -171,6 +171,8 @@ export const learningTests = pgTable("learning_tests", {
   channelId: text("channel_id").notNull(),
   channelTitle: text("channel_title"),
   payload: text("payload").notNull(),
+  audioBase64: text("audio_base64"),
+  audioMimeType: text("audio_mime_type"),
   createdAt: timestamp("created_at").defaultNow(),
 });
 

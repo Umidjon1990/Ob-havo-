@@ -31,6 +31,7 @@ async function archiveLearningTest(
   titleAr: string,
   titleUz: string,
   payload: LearningTestPayload,
+  audioBuffer?: Buffer,
 ): Promise<void> {
   await storage.createLearningTest({
     contentType,
@@ -41,6 +42,8 @@ async function archiveLearningTest(
     channelId: channel.chatId,
     channelTitle: channel.title || channel.chatId,
     payload: JSON.stringify(payload),
+    audioBase64: audioBuffer?.toString("base64") || null,
+    audioMimeType: audioBuffer ? "audio/mpeg" : null,
   });
 }
 
@@ -730,7 +733,7 @@ ${levelLabel}
 🏷 <b>${passage.topicUz}</b> | ${passage.topicAr}
 
 👨 المتحدث الأول  ·  👩 المتحدثة الثانية
-🤖 <i>Ovoz sun'iy intellekt yordamida yaratilgan.</i>
+🤖 AI ovozi
 🎵 <i>Dialogni diqqat bilan tinglang, so'ng savollarga javob bering!</i>
 ⬇️ Quyidagi testlarga javob bering`;
 
@@ -764,6 +767,7 @@ ${levelLabel}
       passage.topicAr,
       passage.topicUz,
       { contentType: "listening", passage, quizzes: quizzesForDelivery },
+      audioBuffer,
     );
     await storage.updateListeningChannelAfterSend(channelId);
     await storage.recordTopic(channelId, "listening", passage.topicAr);

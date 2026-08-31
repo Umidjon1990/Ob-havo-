@@ -547,16 +547,25 @@ export interface LearningTest {
   titleUz: string;
   testDate: string;
   level: "A1A2" | "B1B2";
+  channelTitle: string | null;
+  createdAt: string | null;
+  hasAudio: boolean;
 }
 
 export async function getLearningTests(filters: {
   contentType?: "listening" | "reading";
   level?: "A1A2" | "B1B2";
+  topic?: string;
+  dateFrom?: string;
+  dateTo?: string;
 } = {}): Promise<LearningTest[]> {
   try {
     const params = new URLSearchParams();
     if (filters.contentType) params.set("type", filters.contentType);
     if (filters.level) params.set("level", filters.level);
+    if (filters.topic) params.set("topic", filters.topic);
+    if (filters.dateFrom) params.set("dateFrom", filters.dateFrom);
+    if (filters.dateTo) params.set("dateTo", filters.dateTo);
     const response = await fetch(`/api/tests${params.toString() ? `?${params}` : ""}`);
     if (!response.ok) throw new Error("Failed to fetch learning tests");
     return await response.json();
@@ -564,6 +573,19 @@ export async function getLearningTests(filters: {
     console.error("Error fetching learning tests:", error);
     throw error;
   }
+}
+
+export async function exportLearningTests(
+  ids: string[],
+  format: "docx" | "pdf",
+): Promise<Blob> {
+  const response = await fetch("/api/tests/export", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ ids, format }),
+  });
+  if (!response.ok) throw new Error("Failed to export learning tests");
+  return response.blob();
 }
 
 // Admin authentication

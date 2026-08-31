@@ -7,7 +7,14 @@ import { generateWeatherAdvice, generateVocabularyExample, generateNewVocabulary
 import { updateWeatherCache } from "./lib/weather";
 import { generateVoicePreview } from "./lib/listening";
 import { isValidScheduledTime, normalizeWeekdayLevelSchedule, serializeScheduledDays, serializeWeekdayLevelSchedule } from "./lib/learning-schedule";
-import { createLearningTestDocx, type LearningTestPayload } from "./lib/learning-docx";
+import {
+  createLearningTestDocx,
+  createLearningTestsDocx,
+  type LearningDocumentItem,
+  type LearningDocumentMeta,
+  type LearningTestPayload,
+} from "./lib/learning-docx";
+import { createLearningTestPdf, createLearningTestsPdf } from "./lib/learning-pdf";
 import { regions } from "../client/src/data/regions";
 import { vocabulary } from "../client/src/data/vocabulary";
 
@@ -34,6 +41,47 @@ function requireAdmin(req: Request, res: Response, next: NextFunction): void {
     return;
   }
   next();
+}
+
+function parseLearningPayload(value: string): LearningTestPayload | null {
+  try {
+    return JSON.parse(value) as LearningTestPayload;
+  } catch {
+    return null;
+  }
+}
+
+function learningDocumentMeta(test: {
+  contentType: string;
+  titleAr: string;
+  titleUz: string;
+  testDate: string;
+  level: string;
+  channelTitle: string | null;
+}): LearningDocumentMeta {
+  return {
+    contentType: test.contentType as "listening" | "reading",
+    titleAr: test.titleAr,
+    titleUz: test.titleUz,
+    testDate: test.testDate,
+    level: test.level,
+    channelTitle: test.channelTitle,
+  };
+}
+
+function safeTestName(value: string): string {
+  return value
+    .normalize("NFKD")
+    .replace(/[^A-Za-z0-9\s-]/g, "")
+    .trim()
+    .replace(/\s+/g, "-")
+    .slice(0, 70) || "arabic-test";
+}
+
+function setDownloadHeaders(res: Response, mimeType: string, filename: string, cache = false): void {
+  res.setHeader("Content-Type", mimeType);
+  res.setHeader("Content-Disposition", `attachment; filename="${filename}"; filename*=UTF-8''${encodeURIComponent(filename)}`);
+  res.setHeader("Cache-Control", cache ? "public, max-age=3600" : "private, no-store");
 }
 
 export async function registerRoutes(
@@ -83,27 +131,33 @@ export async function registerRoutes(
     try {
       const requestedType = typeof req.query.type === "string" ? req.query.type : undefined;
       const requestedLevel = typeof req.query.level === "string" ? req.query.level : undefined;
+      const topic = typeof req.query.topic === "string" ? req.query.topic.trim().slice(0, 120) : undefined;
+      const dateFrom = typeof req.query.dateFrom === "string" ? req.query.dateFrom : undefined;
+      const dateTo = typeof req.query.dateTo === "string" ? req.query.dateTo : undefined;
       if (requestedType && requestedType !== "listening" && requestedType !== "reading") {
         return res.status(400).json({ error: "type must be listening or reading" });
       }
       if (requestedLevel && requestedLevel !== "A1A2" && requestedLevel !== "B1B2") {
         return res.status(400).json({ error: "level must be A1A2 or B1B2" });
       }
+      const datePattern = /^\d{4}-\d{2}-\d{2}$/;
+      if ((dateFrom && !datePattern.test(dateFrom)) || (dateTo && !datePattern.test(dateTo))) {
+        return res.status(400).json({ error: "Dates must use YYYY-MM-DD format" });
+      }
+      if (dateFrom && dateTo && dateFrom > dateTo) {
+        return res.status(400).json({ error: "dateFrom cannot be after dateTo" });
+      }
       const rawLimit = Number(req.query.limit || 100);
       const limit = Number.isFinite(rawLimit) ? Math.min(Math.max(Math.floor(rawLimit), 1), 100) : 100;
       const tests = await storage.getLearningTests({
         contentType: requestedType as "listening" | "reading" | undefined,
         level: requestedLevel as "A1A2" | "B1B2" | undefined,
+        topic,
+        dateFrom,
+        dateTo,
         limit,
       });
-      res.json(tests.map(test => ({
-        id: test.id,
-        contentType: test.contentType,
-        titleAr: test.titleAr,
-        titleUz: test.titleUz,
-        testDate: test.testDate,
-        level: test.level,
-      })));
+      res.json(tests);
     } catch (error) {
       console.error("Failed to fetch learning tests:", error);
       res.status(500).json({ error: "Failed to fetch learning tests" });
@@ -115,36 +169,93 @@ export async function registerRoutes(
       const test = await storage.getLearningTest(req.params.id);
       if (!test) return res.status(404).json({ error: "Test not found" });
 
-      let payload: LearningTestPayload;
-      try {
-        payload = JSON.parse(test.payload) as LearningTestPayload;
-      } catch {
-        return res.status(500).json({ error: "Stored test payload is invalid" });
-      }
-      const document = await createLearningTestDocx({
-        contentType: test.contentType as "listening" | "reading",
-        titleAr: test.titleAr,
-        titleUz: test.titleUz,
-        testDate: test.testDate,
-        level: test.level,
-        channelTitle: test.channelTitle,
-      }, payload);
+      const payload = parseLearningPayload(test.payload);
+      if (!payload) return res.status(500).json({ error: "Stored test payload is invalid" });
+      const document = await createLearningTestDocx(learningDocumentMeta(test), payload);
 
-      const safeName = test.titleUz
-        .normalize("NFKD")
-        .replace(/[^A-Za-z0-9\s-]/g, "")
-        .trim()
-        .replace(/\s+/g, "-")
-        .slice(0, 70) || "arabic-test";
+      const safeName = safeTestName(test.titleUz);
       const typeName = test.contentType === "listening" ? "tinglash" : "oqish";
       const filename = `${typeName}-${test.testDate}-${safeName}.docx`;
-      res.setHeader("Content-Type", "application/vnd.openxmlformats-officedocument.wordprocessingml.document");
-      res.setHeader("Content-Disposition", `attachment; filename="${filename}"; filename*=UTF-8''${encodeURIComponent(filename)}`);
-      res.setHeader("Cache-Control", "public, max-age=3600");
+      setDownloadHeaders(res, "application/vnd.openxmlformats-officedocument.wordprocessingml.document", filename, true);
       res.send(document);
     } catch (error) {
       console.error("Failed to create learning test document:", error);
       res.status(500).json({ error: "Failed to create test document" });
+    }
+  });
+
+  app.get("/api/tests/:id/pdf", async (req, res) => {
+    try {
+      const test = await storage.getLearningTest(req.params.id);
+      if (!test) return res.status(404).json({ error: "Test not found" });
+      const payload = parseLearningPayload(test.payload);
+      if (!payload) return res.status(500).json({ error: "Stored test payload is invalid" });
+
+      const document = await createLearningTestPdf(learningDocumentMeta(test), payload);
+      const typeName = test.contentType === "listening" ? "tinglash" : "oqish";
+      const filename = `${typeName}-${test.testDate}-${safeTestName(test.titleUz)}.pdf`;
+      setDownloadHeaders(res, "application/pdf", filename, true);
+      res.send(document);
+    } catch (error) {
+      console.error("Failed to create learning test PDF:", error);
+      res.status(500).json({ error: "Failed to create test PDF" });
+    }
+  });
+
+  app.get("/api/tests/:id/audio", async (req, res) => {
+    try {
+      const test = await storage.getLearningTest(req.params.id);
+      if (!test) return res.status(404).json({ error: "Test not found" });
+      if (!test.audioBase64) return res.status(404).json({ error: "Audio is not available for this test" });
+
+      const audio = Buffer.from(test.audioBase64, "base64");
+      const filename = `tinglash-${test.testDate}-${safeTestName(test.titleUz)}.mp3`;
+      setDownloadHeaders(res, test.audioMimeType || "audio/mpeg", filename, true);
+      res.setHeader("Content-Length", audio.length);
+      res.send(audio);
+    } catch (error) {
+      console.error("Failed to download learning test audio:", error);
+      res.status(500).json({ error: "Failed to download test audio" });
+    }
+  });
+
+  app.post("/api/tests/export", async (req, res) => {
+    try {
+      const format = req.body?.format;
+      const requestedIds = Array.isArray(req.body?.ids) ? req.body.ids : [];
+      if (format !== "docx" && format !== "pdf") {
+        return res.status(400).json({ error: "format must be docx or pdf" });
+      }
+      const ids = Array.from(new Set<string>(
+        requestedIds.filter((id: unknown): id is string => typeof id === "string" && id.length <= 200),
+      ));
+      if (ids.length === 0 || ids.length > 30) {
+        return res.status(400).json({ error: "Select between 1 and 30 tests" });
+      }
+
+      const found = await storage.getLearningTestsByIds(ids);
+      const byId = new Map(found.map(test => [test.id, test]));
+      const ordered = ids.map(id => byId.get(id)).filter((test): test is NonNullable<typeof test> => Boolean(test));
+      if (ordered.length !== ids.length) return res.status(404).json({ error: "One or more tests were not found" });
+
+      const items: LearningDocumentItem[] = ordered.map(test => {
+        const payload = parseLearningPayload(test.payload);
+        if (!payload) throw new Error(`Stored test payload is invalid: ${test.id}`);
+        return { meta: learningDocumentMeta(test), payload };
+      });
+
+      const document = format === "docx"
+        ? await createLearningTestsDocx(items)
+        : await createLearningTestsPdf(items);
+      const mimeType = format === "docx"
+        ? "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
+        : "application/pdf";
+      const filename = `arab-tili-testlari-${items.length}-ta.${format}`;
+      setDownloadHeaders(res, mimeType, filename);
+      res.send(document);
+    } catch (error) {
+      console.error("Failed to export selected learning tests:", error);
+      res.status(500).json({ error: "Failed to export selected tests" });
     }
   });
 

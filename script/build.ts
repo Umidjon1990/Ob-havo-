@@ -1,10 +1,12 @@
 import { build as esbuild } from "esbuild";
 import { build as viteBuild } from "vite";
 import { rm, readFile } from "fs/promises";
+import { resolve } from "path";
 
 // server deps to bundle to reduce openat(2) syscalls
 // which helps cold start times
 const allowlist = [
+  "@react-pdf/renderer",
   "@google/generative-ai",
   "axios",
   "connect-pg-simple",
@@ -33,10 +35,11 @@ const allowlist = [
 ];
 
 async function buildAll() {
+  const projectRoot = process.cwd();
   await rm("dist", { recursive: true, force: true });
 
   console.log("building client...");
-  await viteBuild();
+  await viteBuild({ configLoader: "runner" });
 
   console.log("building server...");
   const pkg = JSON.parse(await readFile("package.json", "utf-8"));
@@ -47,7 +50,8 @@ async function buildAll() {
   const externals = allDeps.filter((dep) => !allowlist.includes(dep));
 
   await esbuild({
-    entryPoints: ["server/index.ts"],
+    absWorkingDir: projectRoot,
+    entryPoints: [resolve(projectRoot, "server/index.ts")],
     platform: "node",
     bundle: true,
     format: "cjs",
@@ -62,7 +66,8 @@ async function buildAll() {
 
   console.log("building migrate script...");
   await esbuild({
-    entryPoints: ["server/migrate.ts"],
+    absWorkingDir: projectRoot,
+    entryPoints: [resolve(projectRoot, "server/migrate.ts")],
     platform: "node",
     bundle: true,
     format: "cjs",

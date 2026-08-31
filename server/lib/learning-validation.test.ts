@@ -18,7 +18,8 @@ import {
   validateReadingQuizzes,
 } from "./reading";
 import { shuffleQuizOptions } from "./quiz-quality";
-import { createLearningTestDocx } from "./learning-docx";
+import { createLearningTestDocx, createLearningTestsDocx } from "./learning-docx";
+import { createLearningTestPdf, createLearningTestsPdf } from "./learning-pdf";
 
 const arabicWords = (count: number): string =>
   Array.from({ length: count }, (_, index) => `كلمة${index + 1}`).join(" ");
@@ -311,4 +312,37 @@ test("learning DOCX generator creates a document and rejects incomplete archives
     }),
     /incomplete/,
   );
+});
+
+test("learning exports create combined DOCX and RTL-capable PDF files", async () => {
+  const basePassage = makeReadingPassage("A1A2");
+  const passage = {
+    ...basePassage,
+    fullAr: basePassage.paragraphsAr.join("\n\n"),
+    fullUz: basePassage.paragraphsUz.join("\n\n"),
+  };
+  const meta = {
+    contentType: "reading" as const,
+    titleAr: passage.titleAr,
+    titleUz: passage.titleUz,
+    testDate: "2026-08-31",
+    level: "A1A2",
+    channelTitle: "Arab tili",
+  };
+  const payload = {
+    contentType: "reading" as const,
+    passage,
+    quizzes: makeReadingQuizzes(),
+  };
+  const items = [{ meta, payload }, { meta: { ...meta, titleUz: "Ikkinchi test" }, payload }];
+
+  const singlePdf = await createLearningTestPdf(meta, payload);
+  const combinedPdf = await createLearningTestsPdf(items);
+  const combinedDocx = await createLearningTestsDocx(items);
+
+  assert.equal(singlePdf.subarray(0, 5).toString(), "%PDF-");
+  assert.equal(combinedPdf.subarray(0, 5).toString(), "%PDF-");
+  assert.ok(combinedPdf.length > singlePdf.length);
+  assert.equal(combinedDocx.subarray(0, 2).toString(), "PK");
+  assert.ok(combinedDocx.length > 1000);
 });
