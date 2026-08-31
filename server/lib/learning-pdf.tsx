@@ -14,16 +14,20 @@ import type { LearningDocumentItem, LearningDocumentMeta, LearningTestPayload } 
 
 const runtimeRequire = createRequire(join(process.cwd(), "package.json"));
 const regularFont = runtimeRequire.resolve(
-  "@fontsource/noto-naskh-arabic/files/noto-naskh-arabic-arabic-400-normal.woff",
+  "@fontsource/scheherazade-new/files/scheherazade-new-arabic-400-normal.woff",
+);
+const mediumFont = runtimeRequire.resolve(
+  "@fontsource/scheherazade-new/files/scheherazade-new-arabic-500-normal.woff",
 );
 const boldFont = runtimeRequire.resolve(
-  "@fontsource/noto-naskh-arabic/files/noto-naskh-arabic-arabic-700-normal.woff",
+  "@fontsource/scheherazade-new/files/scheherazade-new-arabic-700-normal.woff",
 );
 
 Font.register({
-  family: "TimesStyleArabic",
+  family: "ArabicTextbook",
   fonts: [
     { src: regularFont, fontWeight: 400 },
+    { src: mediumFont, fontWeight: 500 },
     { src: boldFont, fontWeight: 700 },
   ],
 });
@@ -32,12 +36,12 @@ Font.registerHyphenationCallback(word => [word]);
 const styles = StyleSheet.create({
   page: {
     paddingTop: 42,
-    paddingRight: 42,
+    paddingRight: 58,
     paddingBottom: 50,
-    paddingLeft: 42,
+    paddingLeft: 58,
     color: "#172033",
     backgroundColor: "#FFFFFF",
-    fontFamily: "TimesStyleArabic",
+    fontFamily: "ArabicTextbook",
   },
   kicker: {
     fontFamily: "Helvetica-Bold",
@@ -67,6 +71,7 @@ const styles = StyleSheet.create({
     fontSize: 11,
     color: "#263247",
     textAlign: "center",
+    marginTop: 12,
     marginBottom: 5,
   },
   metadata: {
@@ -82,7 +87,7 @@ const styles = StyleSheet.create({
     marginBottom: 10,
   },
   sectionArabic: {
-    fontSize: 20,
+    fontSize: 22,
     fontWeight: 700,
     color: "#0F766E",
     textAlign: "right",
@@ -94,33 +99,34 @@ const styles = StyleSheet.create({
     fontSize: 9.5,
     color: "#0F766E",
     textAlign: "right",
+    marginTop: 12,
     marginBottom: 5,
   },
   bodyArabic: {
-    fontSize: 18,
-    fontWeight: 400,
+    fontSize: 20,
+    fontWeight: 500,
     textAlign: "right",
-    lineHeight: 1.38,
-    marginBottom: 6,
+    lineHeight: 1.55,
+    marginBottom: 10,
   },
   question: {
-    fontSize: 18,
+    fontSize: 20,
     fontWeight: 700,
     textAlign: "right",
-    lineHeight: 1.32,
-    marginTop: 4,
-    marginBottom: 1,
+    lineHeight: 1.45,
+    marginTop: 7,
+    marginBottom: 2,
   },
   option: {
-    fontSize: 18,
-    fontWeight: 400,
+    fontSize: 20,
+    fontWeight: 500,
     textAlign: "right",
-    lineHeight: 1.25,
-    marginBottom: 0,
-    paddingRight: 9,
+    lineHeight: 1.4,
+    marginBottom: 1,
+    paddingRight: 12,
   },
   speaker: {
-    fontSize: 18,
+    fontSize: 20,
     fontWeight: 700,
     color: "#7C3AED",
     textAlign: "right",
@@ -128,10 +134,11 @@ const styles = StyleSheet.create({
     marginTop: 5,
   },
   helperArabic: {
-    fontSize: 18,
+    fontSize: 20,
+    fontWeight: 500,
     color: "#64748B",
     textAlign: "right",
-    lineHeight: 1.45,
+    lineHeight: 1.55,
     marginBottom: 8,
   },
   footer: {
@@ -270,3 +277,4 @@ export async function createLearningTestPdf(
 ): Promise<Buffer> {
   return createLearningTestsPdf([{ meta, payload }]);
 }
+

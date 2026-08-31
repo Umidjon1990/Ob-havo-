@@ -300,7 +300,7 @@ export default function Tests() {
                       >
                         <FileAudio className="mr-1.5 h-4 w-4" /> Audio
                       </a>
-                      <a href={`/api/tests/${encodeURIComponent(test.id)}/pdf?v=times-serif-1`} className="inline-flex h-9 items-center justify-center rounded-md border border-rose-200 bg-rose-50 px-2 text-xs font-semibold text-rose-700 transition-colors hover:bg-rose-100" download>
+                      <a href={`/api/tests/${encodeURIComponent(test.id)}/pdf?v=readable-arabic-2`} className="inline-flex h-9 items-center justify-center rounded-md border border-rose-200 bg-rose-50 px-2 text-xs font-semibold text-rose-700 transition-colors hover:bg-rose-100" download>
                         <Download className="mr-1.5 h-4 w-4" /> PDF
                       </a>
                       <a href={`/api/tests/${encodeURIComponent(test.id)}/docx`} className="inline-flex h-9 items-center justify-center rounded-md bg-blue-700 px-2 text-xs font-semibold text-white transition-colors hover:bg-blue-800" download>
@@ -340,3 +340,4 @@ export default function Tests() {
     </main>
   );
 }
+

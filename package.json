@@ -16,7 +16,7 @@
     "db:push": "drizzle-kit push"
   },
   "dependencies": {
-    "@fontsource/noto-naskh-arabic": "5.3.0",
+    "@fontsource/scheherazade-new": "5.3.0",
     "@hookform/resolvers": "^3.10.0",
     "@jridgewell/trace-mapping": "^0.3.25",
     "@radix-ui/react-accordion": "^1.2.12",
@@ -115,3 +115,4 @@
     "bufferutil": "^4.0.8"
   }
 }
+
