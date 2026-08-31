@@ -48,6 +48,10 @@ async function buildAll() {
     ...Object.keys(pkg.devDependencies || {}),
   ];
   const externals = allDeps.filter((dep) => !allowlist.includes(dep));
+  // pdfkit resolves bundled data files (for example its ICC colour profile)
+  // relative to its own module URL. Keeping it external preserves that URL in
+  // Railway's Node runtime while @react-pdf/renderer itself remains bundled.
+  const serverExternals = [...externals, "pdfkit"];
 
   await esbuild({
     absWorkingDir: projectRoot,
@@ -60,7 +64,7 @@ async function buildAll() {
       "process.env.NODE_ENV": '"production"',
     },
     minify: true,
-    external: externals,
+    external: serverExternals,
     logLevel: "info",
   });
 
@@ -72,7 +76,7 @@ async function buildAll() {
     bundle: true,
     format: "cjs",
     outfile: "dist/migrate.cjs",
-    external: externals,
+    external: serverExternals,
     logLevel: "info",
   });
 }
@@ -81,3 +85,4 @@ buildAll().catch((err) => {
   console.error(err);
   process.exit(1);
 });
+
