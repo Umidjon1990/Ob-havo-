@@ -1,23 +1,22 @@
-FROM node:20.20.0-bookworm-slim AS build
+FROM node:20.20.0-bookworm-slim AS base
 
 WORKDIR /app
+RUN corepack enable \
+    && corepack prepare pnpm@9.15.9 --activate
 
-COPY package.json package-lock.json ./
-RUN npm install --global npm@10.9.9 --no-audit --no-fund \
-    && npm --version
-RUN npm ci --omit=dev --no-audit --no-fund \
-    && npm exec --offline -- tsx --version
+FROM base AS build
+
+COPY package.json pnpm-lock.yaml ./
+RUN pnpm install --prod --frozen-lockfile
 
 COPY . .
-RUN npm run build
+RUN pnpm run build
 
-FROM node:20.20.0-bookworm-slim AS production
-
-WORKDIR /app
+FROM base AS production
 ENV NODE_ENV=production
 
-COPY package.json package-lock.json ./
-RUN npm ci --omit=dev && npm cache clean --force
+COPY package.json pnpm-lock.yaml ./
+RUN pnpm install --prod --frozen-lockfile
 
 COPY --from=build /app/dist ./dist
 
