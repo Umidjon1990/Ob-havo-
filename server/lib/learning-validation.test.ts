@@ -19,7 +19,7 @@ import {
 } from "./reading";
 import { shuffleQuizOptions } from "./quiz-quality";
 import { createLearningTestDocx, createLearningTestsDocx } from "./learning-docx";
-import { createLearningTestPdf, createLearningTestsPdf } from "./learning-pdf";
+import { createLearningTestPdf, createLearningTestsPdf, learningTestsHtml } from "./learning-pdf";
 
 const arabicWords = (count: number): string =>
   Array.from({ length: count }, (_, index) => `كلمة${index + 1}`).join(" ");
@@ -345,4 +345,20 @@ test("learning exports create combined DOCX and RTL-capable PDF files", async ()
   assert.ok(combinedPdf.length > singlePdf.length);
   assert.equal(combinedDocx.subarray(0, 2).toString(), "PK");
   assert.ok(combinedDocx.length > 1000);
+});
+
+
+test("PDF HTML preserves Arabic text and option order while escaping stored markup", () => {
+  const fullAr = 'تَعَلُّمُ اللُّغَاتِ <script>alert(1)</script> & نصّ';
+  const meta = { contentType: "reading" as const, titleAr: "عنوان", titleUz: '<img src="https://example.com">', testDate: "2026-09-28", level: "A1A2" };
+  const base = makeReadingPassage("A1A2");
+  const payload = { contentType: "reading" as const, passage: { ...base, fullAr, fullUz: "" }, quizzes: makeReadingQuizzes() };
+  const html = learningTestsHtml([{ meta, payload }]);
+  assert.ok(html.includes('dir="rtl" lang="ar"'));
+  assert.ok(html.includes('تَعَلُّمُ اللُّغَاتِ &lt;script&gt;alert(1)&lt;/script&gt; &amp; نصّ'));
+  assert.ok(!html.includes('<img src='));
+  assert.ok(html.indexOf("الفكرة الأولى") < html.indexOf("الفكرة الثانية"));
+  assert.ok(html.includes("data:font/woff2;base64,"));
+  assert.throws(() => learningTestsHtml([]), /At least one/);
+  assert.throws(() => learningTestsHtml([{ meta, payload: { ...payload, quizzes: [] } }]), /incomplete/);
 });
