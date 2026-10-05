@@ -49,6 +49,7 @@ export async function setupTelegramWebhook() {
   try {
     const response = await fetch('/api/telegram/setup-webhook', {
       method: 'POST',
+      headers: adminHeaders(),
     });
     return await response.json();
   } catch (error) {
@@ -59,7 +60,7 @@ export async function setupTelegramWebhook() {
 
 export async function getBotSettings() {
   try {
-    const response = await fetch('/api/bot-settings');
+    const response = await fetch('/api/bot-settings', { headers: adminHeaders() });
     return await response.json();
   } catch (error) {
     console.error('Error fetching bot settings:', error);
@@ -71,7 +72,7 @@ export async function updateBotSettings(settings: any) {
   try {
     const response = await fetch('/api/bot-settings', {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      headers: adminHeaders({ 'Content-Type': 'application/json' }),
       body: JSON.stringify(settings),
     });
     return await response.json();
@@ -85,7 +86,7 @@ export async function testChannelMessage(channelId: string) {
   try {
     const response = await fetch('/api/telegram/test-channel', {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      headers: adminHeaders({ 'Content-Type': 'application/json' }),
       body: JSON.stringify({ channelId }),
     });
     return await response.json();
@@ -108,7 +109,7 @@ export interface Channel {
 
 export async function getChannels(): Promise<Channel[]> {
   try {
-    const response = await fetch('/api/channels');
+    const response = await fetch('/api/channels', { headers: adminHeaders() });
     return await response.json();
   } catch (error) {
     console.error('Error fetching channels:', error);
@@ -120,7 +121,7 @@ export async function addChannel(chatId: string, title: string, type: string = '
   try {
     const response = await fetch('/api/channels', {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      headers: adminHeaders({ 'Content-Type': 'application/json' }),
       body: JSON.stringify({ chatId, title, type }),
     });
     return await response.json();
@@ -134,6 +135,7 @@ export async function removeChannel(chatId: string): Promise<boolean> {
   try {
     const response = await fetch(`/api/channels/${encodeURIComponent(chatId)}`, {
       method: 'DELETE',
+      headers: adminHeaders(),
     });
     return response.ok;
   } catch (error) {
@@ -146,7 +148,7 @@ export async function toggleChannel(chatId: string, enabled: boolean): Promise<C
   try {
     const response = await fetch(`/api/channels/${encodeURIComponent(chatId)}`, {
       method: 'PATCH',
-      headers: { 'Content-Type': 'application/json' },
+      headers: adminHeaders({ 'Content-Type': 'application/json' }),
       body: JSON.stringify({ enabled }),
     });
     return await response.json();
@@ -160,7 +162,7 @@ export async function updateChannelSchedule(chatId: string, scheduledTime: strin
   try {
     const response = await fetch(`/api/channels/${encodeURIComponent(chatId)}/schedule`, {
       method: 'PATCH',
-      headers: { 'Content-Type': 'application/json' },
+      headers: adminHeaders({ 'Content-Type': 'application/json' }),
       body: JSON.stringify({ scheduledTime }),
     });
     return response.ok ? await response.json() : null;
@@ -174,6 +176,7 @@ export async function refreshWeatherData(): Promise<{ success: boolean; message:
   try {
     const response = await fetch('/api/weather/refresh', {
       method: 'POST',
+      headers: adminHeaders(),
     });
     return await response.json();
   } catch (error) {
@@ -192,7 +195,7 @@ export async function generateNewVocabulary(count: number = 5): Promise<Generate
   try {
     const response = await fetch('/api/vocabulary/generate', {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      headers: adminHeaders({ 'Content-Type': 'application/json' }),
       body: JSON.stringify({ count }),
     });
     const data = await response.json();
@@ -215,7 +218,7 @@ export interface NewsChannel {
 
 export async function getNewsChannels(): Promise<NewsChannel[]> {
   try {
-    const response = await fetch('/api/news-channels');
+    const response = await fetch('/api/news-channels', { headers: adminHeaders() });
     return await response.json();
   } catch (error) {
     console.error('Error fetching news channels:', error);
@@ -227,7 +230,7 @@ export async function addNewsChannel(chatId: string, title: string): Promise<New
   try {
     const response = await fetch('/api/news-channels', {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      headers: adminHeaders({ 'Content-Type': 'application/json' }),
       body: JSON.stringify({ chatId, title }),
     });
     return await response.json();
@@ -241,6 +244,7 @@ export async function removeNewsChannel(chatId: string): Promise<boolean> {
   try {
     const response = await fetch(`/api/news-channels/${encodeURIComponent(chatId)}`, {
       method: 'DELETE',
+      headers: adminHeaders(),
     });
     return response.ok;
   } catch (error) {
@@ -253,7 +257,7 @@ export async function toggleNewsChannel(chatId: string, enabled: boolean): Promi
   try {
     const response = await fetch(`/api/news-channels/${encodeURIComponent(chatId)}`, {
       method: 'PATCH',
-      headers: { 'Content-Type': 'application/json' },
+      headers: adminHeaders({ 'Content-Type': 'application/json' }),
       body: JSON.stringify({ enabled }),
     });
     return await response.json();
@@ -267,7 +271,7 @@ export async function updateNewsChannelSchedule(chatId: string, scheduledTime: s
   try {
     const response = await fetch(`/api/news-channels/${encodeURIComponent(chatId)}/schedule`, {
       method: 'PATCH',
-      headers: { 'Content-Type': 'application/json' },
+      headers: adminHeaders({ 'Content-Type': 'application/json' }),
       body: JSON.stringify({ scheduledTime }),
     });
     return response.ok ? await response.json() : null;
@@ -281,6 +285,7 @@ export async function sendNewsNow(chatId: string): Promise<{ ok: boolean; error?
   try {
     const response = await fetch(`/api/news-channels/${encodeURIComponent(chatId)}/send-now`, {
       method: 'POST',
+      headers: adminHeaders(),
     });
     const data = await response.json();
     if (response.ok) return { ok: true };

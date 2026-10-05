@@ -5,6 +5,7 @@ import { createServer } from "http";
 
 const app = express();
 const httpServer = createServer(app);
+app.set("trust proxy", 1);
 
 declare module "http" {
   interface IncomingMessage {
@@ -36,21 +37,11 @@ export function log(message: string, source = "express") {
 app.use((req, res, next) => {
   const start = Date.now();
   const path = req.path;
-  let capturedJsonResponse: Record<string, any> | undefined = undefined;
-
-  const originalResJson = res.json;
-  res.json = function (bodyJson, ...args) {
-    capturedJsonResponse = bodyJson;
-    return originalResJson.apply(res, [bodyJson, ...args]);
-  };
 
   res.on("finish", () => {
     const duration = Date.now() - start;
     if (path.startsWith("/api")) {
       let logLine = `${req.method} ${path} ${res.statusCode} in ${duration}ms`;
-      if (capturedJsonResponse) {
-        logLine += ` :: ${JSON.stringify(capturedJsonResponse)}`;
-      }
 
       log(logLine);
     }
@@ -60,25 +51,42 @@ app.use((req, res, next) => {
 });
 
 (async () => {
+  const { pool } = await import("./db");
+  const { ensureMediaTables } = await import("./modules/media/schema");
+  await ensureMediaTables(pool);
   // Start weather update schedule
   const { startWeatherUpdateSchedule } = await import("./lib/weather");
-  startWeatherUpdateSchedule();
-  
+  if (process.env.DISABLE_SCHEDULERS !== "true") startWeatherUpdateSchedule();
+
   // Start daily message scheduler for Telegram channel
-  const { startDailyMessageScheduler, startDailyNewsScheduler, startListeningScheduler, startReadingScheduler } = await import("./lib/telegram");
-  startDailyMessageScheduler();
-  startDailyNewsScheduler();
-  startListeningScheduler();
-  startReadingScheduler();
-  
+  const {
+    startDailyMessageScheduler,
+    startDailyNewsScheduler,
+    startListeningScheduler,
+    startReadingScheduler,
+  } = await import("./lib/telegram");
+  if (process.env.DISABLE_SCHEDULERS !== "true") {
+    startDailyMessageScheduler();
+    startDailyNewsScheduler();
+    startListeningScheduler();
+    startReadingScheduler();
+  }
+
   await registerRoutes(httpServer, app);
+  const { startMediaWorker } = await import("./modules/media/worker");
+  startMediaWorker();
 
   app.use((err: any, _req: Request, res: Response, _next: NextFunction) => {
     const status = err.status || err.statusCode || 500;
-    const message = err.message || "Internal Server Error";
+    const message =
+      status === 413
+        ? "Fayl 50 MB dan katta."
+        : status >= 500
+          ? "Server amali bajarilmadi."
+          : err.message || "So‘rov noto‘g‘ri.";
 
     res.status(status).json({ message });
-    throw err;
+    if (status >= 500) console.error("Request failed:", err.name || "Error");
   });
 
   // importantly only setup vite in development and after

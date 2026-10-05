@@ -1,4 +1,5 @@
 import pg from "pg";
+import { ensureMediaTables } from "./modules/media/schema";
 
 const DATABASE_URL = process.env.DATABASE_URL;
 
@@ -13,6 +14,7 @@ async function migrate() {
   await client.connect();
   
   console.log("Creating database tables...");
+  await ensureMediaTables(client);
   
   // Only additive, repeat-safe migrations are allowed here. Existing production
   // data must never be removed automatically during a deploy.

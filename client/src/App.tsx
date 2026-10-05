@@ -4,7 +4,8 @@ import { QueryClientProvider } from "@tanstack/react-query";
 import { Toaster } from "@/components/ui/toaster";
 import NotFound from "@/pages/not-found";
 import Home from "@/pages/home";
-import Admin from "@/pages/admin";
+import { lazy, Suspense } from "react";
+const Admin = lazy(() => import("@/pages/admin"));
 import Forecast from "@/pages/forecast";
 import Tests from "@/pages/tests";
 
@@ -12,7 +13,17 @@ function Router() {
   return (
     <Switch>
       <Route path="/" component={Home} />
-      <Route path="/admin" component={Admin} />
+      <Route path="/admin">
+        <Suspense
+          fallback={
+            <div className="min-h-screen grid place-items-center">
+              Boshqaruv yuklanmoqda…
+            </div>
+          }
+        >
+          <Admin />
+        </Suspense>
+      </Route>
       <Route path="/forecast" component={Forecast} />
       <Route path="/tests" component={Tests} />
       <Route component={NotFound} />
