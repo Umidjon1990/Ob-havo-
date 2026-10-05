@@ -39,3 +39,13 @@ test("catalog loads paginated account voices including professional clones and f
     const c=await audioCatalog(); assert.equal(c.models.length,1); assert.equal(c.voices.length,2); assert.equal(c.voices[1].name,"Umidjon");
   } finally { global.fetch=oldFetch; if(oldKey===undefined) delete process.env.ELEVENLABS_API_KEY; else process.env.ELEVENLABS_API_KEY=oldKey; }
 });
+
+test("model listing permission is optional when voice listing is allowed", async () => {
+  const oldFetch=global.fetch, oldKey=process.env.ELEVENLABS_API_KEY;
+  process.env.ELEVENLABS_API_KEY="test";
+  global.fetch=(async (url:any) => String(url).endsWith("/models")
+    ? new Response(JSON.stringify({detail:{status:"missing_permissions"}}),{status:401})
+    : new Response(JSON.stringify({voices:[{voice_id:"clone",name:"Umidjon",category:"professional"}],has_more:false}))) as typeof fetch;
+  try { const c=await audioCatalog(); assert.equal(c.models[0].id,"eleven_v4"); assert.equal(c.voices[0].name,"Umidjon"); }
+  finally { global.fetch=oldFetch; if(oldKey===undefined) delete process.env.ELEVENLABS_API_KEY; else process.env.ELEVENLABS_API_KEY=oldKey; }
+});

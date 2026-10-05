@@ -29,7 +29,7 @@ async function eleven(path: string, body?: unknown) {
     let code = "";
     try { const data = await response.json(); code = String(data?.detail?.status || data?.detail?.code || data?.detail?.type || ""); } catch {}
     if (/missing_permissions|insufficient_permissions/i.test(code))
-      throw new AudioError(403, "ElevenLabs kalitida kerakli ruxsat yetishmaydi. Models va Voices uchun Read, Text to Speech uchun Access ruxsatini yoqing.");
+      throw new AudioError(403, "ElevenLabs kalitida kerakli ruxsat yetishmaydi. Ovoz ro‘yxati uchun Voices Read, audio yaratish uchun Text to Speech ruxsatini tekshiring.");
     if (/quota_exceeded|payment|subscription/i.test(code))
       throw new AudioError(402, "ElevenLabs krediti yoki tarifini tekshiring.");
     const messages: Record<number, string> = {
@@ -45,7 +45,13 @@ async function eleven(path: string, body?: unknown) {
   return response;
 }
 export async function audioCatalog() {
-  const models = await (await eleven("/v1/models")).json();
+  let models: any[];
+  try { models = await (await eleven("/v1/models")).json(); }
+  catch (e) {
+    // Model-list permission is optional; generation still verifies actual access.
+    if (!(e instanceof AudioError) || e.status !== 403) throw e;
+    models = [{model_id:"eleven_v4",name:"Eleven v4"},{model_id:"eleven_v4_turbo",name:"Eleven v4 Turbo"}];
+  }
   const voices: any[] = [];
   let token = "";
   const seen = new Set<string>();
