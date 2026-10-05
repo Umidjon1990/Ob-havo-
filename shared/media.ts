@@ -112,7 +112,13 @@ export function validatePublication(
   if (post.format === "article") {
     if (platform !== "telegram" || !caption.trim())
       return "Article uchun Telegram va HTML mazmun kerak.";
-    if (mimes.length) return "Article media fayllarini HTML ichida URL orqali joylang.";
+    const refs = Array.from(caption.matchAll(/\{\{asset:([a-f0-9-]+)\}\}/g), m => m[1]);
+    if (refs.some(id => !post.asset_ids.includes(id)))
+      return "Article ichidagi media fayl postga biriktirilmagan.";
+    if (post.asset_ids.some(id => !refs.includes(id)))
+      return "Biriktirilgan Article faylini {{asset:ID}} bilan HTML ichida ishlating.";
+    if (mimes.some(m => !["image/jpeg", "image/png", "audio/mpeg", "video/mp4"].includes(m)))
+      return "Article uchun JPG, PNG, MP3 yoki MP4 kerak.";
     return null;
   }
   if (platform === "telegram" && caption.length > (mimes.length ? 1024 : 4096))

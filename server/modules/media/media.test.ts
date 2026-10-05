@@ -507,6 +507,9 @@ test("Article is restricted to Telegram rich content", () => {
   assert.equal(validatePublication(article, "telegram", []), null);
   assert.ok(validatePublication(article, "instagram", []));
   assert.ok(validatePublication(article, "youtube", []));
-  assert.ok(validatePublication(article, "telegram", ["image/jpeg"]));
+  const id = "11111111-1111-4111-8111-111111111111";
+  assert.equal(validatePublication({...article, asset_ids: [id], caption: `<img src="{{asset:${id}}}"/>`}, "telegram", ["image/jpeg"]), null);
+  assert.ok(validatePublication({...article, caption: `<img src="{{asset:${id}}}"/>`}, "telegram", []));
+  assert.ok(validatePublication({...article, asset_ids: [id]}, "telegram", ["image/jpeg"]));
   assert.ok(validatePublication({...article, caption: " "}, "telegram", []));
 });

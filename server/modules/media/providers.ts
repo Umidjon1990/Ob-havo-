@@ -195,7 +195,10 @@ export async function publish(
     if (post.format === "article")
       r = await telegram("sendRichMessage", {
         ...common,
-        rich_message: { html: caption },
+        rich_message: { html: caption.replace(/\{\{asset:([a-f0-9-]+)\}\}/g, (_match, id) => {
+          if (!assets.some(a => a.id === id)) throw new PublishError("Article media fayli topilmadi.");
+          return publicAsset(id).replace(/&/g, "&amp;");
+        }) },
       }, true);
     else if (!assets.length)
       r = await telegram("sendMessage", { ...common, text: caption }, true);

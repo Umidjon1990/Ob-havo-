@@ -1453,7 +1453,7 @@ function PostEditor({
             </select>
           </Field>
           {format === "article" && (
-            <div className="media-alert">Telegram Article: quyidagi maydonga sarlavha, jadval va details bloklari bilan HTML kiriting. Faqat Telegramga yuboriladi.</div>
+            <div className="media-alert">Telegram Article: quyidagi maydonga sarlavha, jadval va details bloklari bilan HTML kiriting. Media uchun <code>{'src="{{asset:ID}}"'}</code> yozing va faylni pastda belgilang. Faqat Telegramga yuboriladi.</div>
           )}
           <Field label="Asosiy post matni">
             <textarea
