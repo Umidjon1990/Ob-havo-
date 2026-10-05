@@ -192,7 +192,12 @@ export async function publish(
   if (account.platform === "telegram") {
     const common = { chat_id: account.external_id };
     let r: any;
-    if (!assets.length)
+    if (post.format === "article")
+      r = await telegram("sendRichMessage", {
+        ...common,
+        rich_message: { html: caption },
+      }, true);
+    else if (!assets.length)
       r = await telegram("sendMessage", { ...common, text: caption }, true);
     else if (assets.length > 1)
       r = await telegram(

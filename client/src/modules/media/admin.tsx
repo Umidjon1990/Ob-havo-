@@ -86,6 +86,7 @@ const nav = [
 ] as const;
 const formats: Record<string, string> = {
   text: "Matnli post",
+  article: "Telegram Article",
   image: "Rasmli post",
   video: "Reels / Shorts",
   carousel: "Karusel",
@@ -1451,6 +1452,9 @@ function PostEditor({
               ))}
             </select>
           </Field>
+          {format === "article" && (
+            <div className="media-alert">Telegram Article: quyidagi maydonga sarlavha, jadval va details bloklari bilan HTML kiriting. Faqat Telegramga yuboriladi.</div>
+          )}
           <Field label="Asosiy post matni">
             <textarea
               className="media-input"

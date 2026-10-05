@@ -2,6 +2,7 @@ import { z } from "zod";
 export const platformSchema = z.enum(["telegram", "instagram", "youtube"]);
 export const formatSchema = z.enum([
   "text",
+  "article",
   "image",
   "video",
   "carousel",
@@ -108,6 +109,12 @@ export function validatePublication(
   const caption =
     post.variants[platform as "telegram" | "instagram" | "youtube"] ??
     post.caption;
+  if (post.format === "article") {
+    if (platform !== "telegram" || !caption.trim())
+      return "Article uchun Telegram va HTML mazmun kerak.";
+    if (mimes.length) return "Article media fayllarini HTML ichida URL orqali joylang.";
+    return null;
+  }
   if (platform === "telegram" && caption.length > (mimes.length ? 1024 : 4096))
     return `Telegram matni ${mimes.length ? 1024 : 4096} belgidan oshmasin.`;
   if (platform === "instagram" && caption.length > 2200)

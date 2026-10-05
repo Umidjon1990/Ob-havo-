@@ -501,3 +501,12 @@ test("Instagram resumes the saved container and YouTube resumes an interrupted u
     globalThis.fetch = nativeFetch;
   }
 });
+
+test("Article is restricted to Telegram rich content", () => {
+  const article = postSchema.parse({title: "Dars", format: "article", caption: "<h1>Dars</h1><table><tr><td>كِتَابٌ</td></tr></table>"});
+  assert.equal(validatePublication(article, "telegram", []), null);
+  assert.ok(validatePublication(article, "instagram", []));
+  assert.ok(validatePublication(article, "youtube", []));
+  assert.ok(validatePublication(article, "telegram", ["image/jpeg"]));
+  assert.ok(validatePublication({...article, caption: " "}, "telegram", []));
+});
