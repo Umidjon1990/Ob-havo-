@@ -1,6 +1,7 @@
 import type { Express, NextFunction, Request, Response } from "express";
 import { createServer, type Server } from "http";
-import { randomBytes } from "crypto";
+import { requireAdmin, issueSession, revokeSession, isAuthenticated, sameOrigin, equalSecret } from "./modules/media/security";
+import { registerMediaRoutes } from "./modules/media/routes";
 import { storage } from "./storage";
 import { handleTelegramUpdate, sendTelegramMessage, setTelegramWebhook, sendDailyNewsToChannel, sendDailyListeningToChannel, sendDailyReadingToChannel } from "./lib/telegram";
 import { generateWeatherAdvice, generateVocabularyExample, generateNewVocabulary } from "./lib/openai";
@@ -22,27 +23,8 @@ import { vocabulary } from "../client/src/data/vocabulary";
 const ADMIN_USERNAME = process.env.ADMIN_USERNAME;
 const ADMIN_PASSWORD = process.env.ADMIN_PASSWORD;
 
-// Simple token storage (in production use Redis/DB)
-const validTokens = new Set<string>();
 const archiveAudioGenerations = new Map<string, Promise<Buffer | null>>();
-
-function generateToken(): string {
-  return randomBytes(32).toString("base64url");
-}
-
-function verifyToken(token: string | undefined): boolean {
-  if (!token) return false;
-  return validTokens.has(token);
-}
-
-function requireAdmin(req: Request, res: Response, next: NextFunction): void {
-  const token = req.headers.authorization?.replace("Bearer ", "");
-  if (!verifyToken(token)) {
-    res.status(401).json({ error: "Admin authentication required" });
-    return;
-  }
-  next();
-}
+const loginAttempts = new Map<string, { count: number; resetAt: number }>();
 
 function parseLearningPayload(value: string): LearningTestPayload | null {
   try {
@@ -121,36 +103,27 @@ export async function registerRoutes(
   app: Express
 ): Promise<Server> {
   
-  // Admin login
-  app.post("/api/admin/login", (req, res) => {
-    const { username, password } = req.body;
-    if (!ADMIN_USERNAME || !ADMIN_PASSWORD) {
-      return res.status(503).json({ success: false, error: "Admin credentials are not configured" });
-    }
-    if (username === ADMIN_USERNAME && password === ADMIN_PASSWORD) {
-      const token = generateToken();
-      validTokens.add(token);
-      res.json({ success: true, token });
-    } else {
-      res.status(401).json({ success: false, error: "Login yoki parol xato" });
-    }
+  registerMediaRoutes(app);
+  // Durable, revocable admin sessions. Keep the legacy bearer response compatible.
+  app.post("/api/admin/login", async (req, res) => {
+    try {
+      if (!sameOrigin(req)) return res.status(403).json({ success: false, error: "Kirish manzili noto‘g‘ri." });
+      const { username, password } = req.body || {};
+      if (!ADMIN_USERNAME || !ADMIN_PASSWORD) return res.status(503).json({success:false,error:"Admin kirishi sozlanmagan."});
+      const ip=req.ip || 'unknown',now=Date.now();
+      if(loginAttempts.size>1000) for(const [key,value] of Array.from(loginAttempts)) if(value.resetAt<now)loginAttempts.delete(key);
+      const attempt=loginAttempts.get(ip);
+      if(attempt && attempt.resetAt>now && attempt.count>=10) return res.status(429).json({success:false,error:"Ko‘p urinish. 15 daqiqadan keyin qayta kiring."});
+      if(typeof username==='string' && typeof password==='string' && equalSecret(username,ADMIN_USERNAME) && equalSecret(password,ADMIN_PASSWORD)) {
+        const token=await issueSession(res);loginAttempts.delete(ip);return res.json({success:true,token});
+      }
+      loginAttempts.set(ip,{count:attempt&&attempt.resetAt>now?attempt.count+1:1,resetAt:attempt&&attempt.resetAt>now?attempt.resetAt:now+900000});
+      res.status(401).json({success:false,error:"Login yoki parol xato"});
+    }catch{res.status(503).json({success:false,error:"Kirish xizmatiga ulanib bo‘lmadi."});}
   });
-
-  // Verify token
-  app.post("/api/admin/verify", (req, res) => {
-    const token = req.headers.authorization?.replace("Bearer ", "");
-    if (verifyToken(token)) {
-      res.json({ valid: true });
-    } else {
-      res.status(401).json({ valid: false });
-    }
-  });
-
-  // Admin logout
-  app.post("/api/admin/logout", (req, res) => {
-    const token = req.headers.authorization?.replace("Bearer ", "");
-    if (token) validTokens.delete(token);
-    res.json({ success: true });
+  app.post("/api/admin/verify", requireAdmin, (_req,res)=>res.json({valid:true}));
+  app.post("/api/admin/logout", requireAdmin, async(req,res)=>{
+    try{await revokeSession(req,res);res.json({success:true});}catch{res.status(503).json({error:"Chiqish bajarilmadi."});}
   });
 
   // Health check endpoint for keep-alive pings
@@ -357,7 +330,7 @@ export async function registerRoutes(
   });
 
   // Manual weather refresh endpoint
-  app.post("/api/weather/refresh", async (req, res) => {
+  app.post("/api/weather/refresh", requireAdmin, async (req, res) => {
     try {
       await updateWeatherCache();
       res.json({ success: true, message: "Weather data refreshed successfully" });
@@ -388,7 +361,7 @@ export async function registerRoutes(
   });
 
   // Generate new vocabulary words using AI
-  app.post("/api/vocabulary/generate", async (req, res) => {
+  app.post("/api/vocabulary/generate", requireAdmin, async (req, res) => {
     try {
       const { count } = req.body;
       const words = await generateNewVocabulary(count || 5);
@@ -447,7 +420,7 @@ export async function registerRoutes(
   });
 
   // Setup Telegram webhook
-  app.post("/api/telegram/setup-webhook", async (req, res) => {
+  app.post("/api/telegram/setup-webhook", requireAdmin, async (req, res) => {
     try {
       // Priority: APP_URL > RAILWAY_PUBLIC_DOMAIN > request host
       let appUrl = process.env.APP_URL;
@@ -472,8 +445,14 @@ export async function registerRoutes(
     }
   });
 
+  app.post("/api/telegram/test-channel", requireAdmin, async(req,res)=>{
+    const channelId=String(req.body?.channelId||'');
+    if(!/^(@[A-Za-z][A-Za-z0-9_]{4,31}|-?\d+)$/.test(channelId))return res.status(400).json({error:"Kanal @username yoki chat ID kiriting."});
+    try{await sendTelegramMessage(channelId,"✅ Zamonaviy Media Agent: kanal ulanishi ishlayapti.");res.json({ok:true});}catch{res.status(400).json({error:"Botning kanalga xabar yuborish huquqini tekshiring."});}
+  });
+
   // Bot settings
-  app.get("/api/bot-settings", async (req, res) => {
+  app.get("/api/bot-settings", requireAdmin, async (req, res) => {
     try {
       const settings = await storage.getBotSettings();
       res.json(settings || {});
@@ -482,7 +461,7 @@ export async function registerRoutes(
     }
   });
 
-  app.post("/api/bot-settings", async (req, res) => {
+  app.post("/api/bot-settings", requireAdmin, async (req, res) => {
     try {
       const settings = await storage.updateBotSettings(req.body);
       res.json(settings);
@@ -492,7 +471,7 @@ export async function registerRoutes(
   });
 
   // Update channel schedule time
-  app.patch("/api/channels/:chatId/schedule", async (req, res) => {
+  app.patch("/api/channels/:chatId/schedule", requireAdmin, async (req, res) => {
     try {
       const { chatId } = req.params;
       const { scheduledTime } = req.body;
@@ -504,7 +483,7 @@ export async function registerRoutes(
   });
 
   // Channels API
-  app.get("/api/channels", async (req, res) => {
+  app.get("/api/channels", requireAdmin, async (req, res) => {
     try {
       const channelsList = await storage.getChannels();
       res.json(channelsList);
@@ -513,7 +492,7 @@ export async function registerRoutes(
     }
   });
 
-  app.post("/api/channels", async (req, res) => {
+  app.post("/api/channels", requireAdmin, async (req, res) => {
     try {
       const { chatId, title, type } = req.body;
       const channel = await storage.addChannel({ chatId, title, type, enabled: true });
@@ -523,7 +502,7 @@ export async function registerRoutes(
     }
   });
 
-  app.delete("/api/channels/:chatId", async (req, res) => {
+  app.delete("/api/channels/:chatId", requireAdmin, async (req, res) => {
     try {
       const { chatId } = req.params;
       await storage.removeChannel(chatId);
@@ -533,7 +512,7 @@ export async function registerRoutes(
     }
   });
 
-  app.patch("/api/channels/:chatId", async (req, res) => {
+  app.patch("/api/channels/:chatId", requireAdmin, async (req, res) => {
     try {
       const { chatId } = req.params;
       const { enabled } = req.body;
@@ -545,7 +524,7 @@ export async function registerRoutes(
   });
 
   // News channels API
-  app.get("/api/news-channels", async (req, res) => {
+  app.get("/api/news-channels", requireAdmin, async (req, res) => {
     try {
       const list = await storage.getNewsChannels();
       res.json(list);
@@ -554,7 +533,7 @@ export async function registerRoutes(
     }
   });
 
-  app.post("/api/news-channels", async (req, res) => {
+  app.post("/api/news-channels", requireAdmin, async (req, res) => {
     try {
       const { chatId, title } = req.body;
       const channel = await storage.addNewsChannel({ chatId, title, enabled: true });
@@ -564,7 +543,7 @@ export async function registerRoutes(
     }
   });
 
-  app.delete("/api/news-channels/:chatId", async (req, res) => {
+  app.delete("/api/news-channels/:chatId", requireAdmin, async (req, res) => {
     try {
       const { chatId } = req.params;
       await storage.removeNewsChannel(chatId);
@@ -574,7 +553,7 @@ export async function registerRoutes(
     }
   });
 
-  app.patch("/api/news-channels/:chatId", async (req, res) => {
+  app.patch("/api/news-channels/:chatId", requireAdmin, async (req, res) => {
     try {
       const { chatId } = req.params;
       const { enabled } = req.body;
@@ -585,7 +564,7 @@ export async function registerRoutes(
     }
   });
 
-  app.patch("/api/news-channels/:chatId/schedule", async (req, res) => {
+  app.patch("/api/news-channels/:chatId/schedule", requireAdmin, async (req, res) => {
     try {
       const { chatId } = req.params;
       const { scheduledTime } = req.body;
@@ -597,7 +576,7 @@ export async function registerRoutes(
   });
 
   // Send test news to a channel immediately
-  app.post("/api/news-channels/:chatId/send-now", async (req, res) => {
+  app.post("/api/news-channels/:chatId/send-now", requireAdmin, async (req, res) => {
     const { chatId } = req.params;
     try {
       await sendDailyNewsToChannel(chatId);
