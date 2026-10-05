@@ -43,7 +43,7 @@ export async function renderExplainer(plan:ExplainerPlan, images:Map<string,{mim
       if(await page.evaluate(()=>document.body.scrollHeight>1280)) throw new Error("Scene text does not fit. Shorten the scene."); const png=join(dir,`scene-${i}.png`); await writeFile(png,await page.screenshot({type:"png"}));
       const motion=scene.motion==="pop" ? "1+0.025*exp(-on/10)*abs(sin(on/3))+0.00008*on" : "min(1.035,1+on*0.00015)";
       const xpos=scene.motion==="slide" ? "(iw-iw/zoom)*min(1,on/24)" : "iw/2-iw/zoom/2";
-      const vf=`zoompan=z='${motion}':x='${xpos}':y='ih/2-ih/zoom/2':d=${Math.ceil(duration*24)}:s=720x1280:fps=24,fade=t=in:st=0:d=0.18:color=0xf6f1e8,format=yuv420p`;
+      const vf=`zoompan=z='${motion}':x='${xpos}':y='ih/2-ih/zoom/2':d=${Math.ceil(duration*24)}:s=720x1280:fps=24${i>0?",fade=t=in:st=0:d=0.18:color=0xf6f1e8":""},format=yuv420p`;
       const args=["-hide_banner","-loglevel","error","-y","-threads","1","-i",png,"-i",mp3];
       let af="[1:a]apad,aresample=44100[a]";
       if(scene.sfx!=="none") {
