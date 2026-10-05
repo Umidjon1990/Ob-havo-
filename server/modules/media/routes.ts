@@ -24,6 +24,7 @@ import {
 } from "./security";
 import { appBaseUrl, verifyAccount } from "./providers";
 import { schedulePublications, ScheduleError } from "./scheduling";
+import { registerExplainerRoutes } from "./explainer";
 import { audioInput, audioCatalog, generateAudio, AudioError } from "./audio";
 const uuid = z.string().uuid();
 let generatingAudio = false;
@@ -88,6 +89,7 @@ export function registerMediaRoutes(app: Express) {
     }),
   );
   app.use("/api/media", requireAdmin);
+  registerExplainerRoutes(app, route);
   app.get("/api/media/audio/catalog", route(async (_req, res) => res.json(await audioCatalog())));
   app.post("/api/media/audio/generate", route(async (req, res) => {
     const input = audioInput.parse(req.body);
@@ -193,7 +195,7 @@ export function registerMediaRoutes(app: Express) {
     route(async (req, res) => {
       const id = uuid.parse(req.params.id);
       const r = await pool.query(
-        "DELETE FROM media_assets a WHERE id=$1 AND NOT EXISTS(SELECT 1 FROM media_posts p WHERE p.asset_ids ? a.id::text) RETURNING id",
+        "DELETE FROM media_assets a WHERE id=$1 AND NOT EXISTS(SELECT 1 FROM media_posts p WHERE p.asset_ids ? a.id::text OR p.variants::text LIKE '%'||a.id::text||'%') RETURNING id",
         [id],
       );
       if (!r.rowCount) {
@@ -287,13 +289,13 @@ export function registerMediaRoutes(app: Express) {
           "SELECT 1 FROM media_deliveries WHERE post_id=$1 AND status<>'cancelled' LIMIT 1",
           [id],
         );
-        if (locked.rowCount) {
+        if (locked.rowCount || (await client.query("SELECT 1 FROM media_jobs WHERE kind='explainer' AND status IN ('queued','running') AND payload->>'post_id'=$1",[id])).rowCount) {
           await client.query("ROLLBACK");
           res
             .status(409)
             .json({
               error:
-                "Rejalashtirilgan yoki yuborilgan postni o‘zgartirib bo‘lmaydi. Rejani bekor qiling yoki nusxa yarating.",
+                "Yaratilayotgan, rejalashtirilgan yoki yuborilgan postni o‘zgartirib bo‘lmaydi. Rejani bekor qiling yoki nusxa yarating.",
             });
           return;
         }
@@ -324,7 +326,7 @@ export function registerMediaRoutes(app: Express) {
     route(async (req, res) => {
       const id = uuid.parse(req.params.id);
       const r = await pool.query(
-        "DELETE FROM media_posts WHERE id=$1 AND NOT EXISTS(SELECT 1 FROM media_deliveries WHERE post_id=$1 AND status<>'cancelled') RETURNING id",
+        "DELETE FROM media_posts WHERE id=$1 AND NOT EXISTS(SELECT 1 FROM media_deliveries WHERE post_id=$1 AND status<>'cancelled') AND NOT EXISTS(SELECT 1 FROM media_jobs WHERE kind='explainer' AND status IN ('queued','running') AND payload->>'post_id'=$1) RETURNING id",
         [id],
       );
       if (!r.rowCount) {
@@ -691,7 +693,7 @@ export function registerMediaRoutes(app: Express) {
       res.json(
         (
           await pool.query(
-            "SELECT id,kind,status,result,error,created_at FROM media_jobs ORDER BY created_at DESC LIMIT 30",
+            "SELECT id,kind,status,result,error,created_at,jsonb_build_object('post_id',payload->>'post_id') AS payload FROM media_jobs ORDER BY created_at DESC LIMIT 30",
           )
         ).rows,
       ),

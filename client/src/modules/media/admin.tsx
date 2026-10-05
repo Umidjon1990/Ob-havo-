@@ -62,10 +62,12 @@ import {
   postSchema,
 } from "@shared/media";
 import "./media.css";
+import ExplainerStudio from "./explainer-studio";
 type Section =
   | "overview"
   | "posts"
   | "calendar"
+  | "explainer"
   | "audio"
   | "assets"
   | "accounts"
@@ -80,6 +82,7 @@ const nav = [
   ["calendar", "Nashr taqvimi", CalendarDays],
   ["assets", "Media kutubxonasi", FolderOpen],
   ["audio", "Audio yaratish", Mic],
+  ["explainer", "Explainer video", Video],
   ["accounts", "Platformalar", Link2],
   ["rules", "Agent xotirasi", Brain],
   ["references", "Namunalar", Sparkles],
@@ -399,6 +402,7 @@ export default function MediaAdmin() {
     overview: "Barcha ishlaringiz bir joyda. Navbatdagi kontentdan boshlaymiz.",
     posts: "G‘oyadan tayyor postgacha. Har bir platformaga mos matn va media.",
     calendar: "Nashrlar sanasi va har bir kanaldagi natija. Toshkent vaqti.",
+    explainer: "Post → ssenariy → klon ovoz → audioga mos video.",
     audio: "ElevenLabs v4 · O‘zbekcha va arabcha · Shaxsiy va boshqa ovozlar.",
     assets: "Yaratilgan rasm, video va audiolaringiz uchun doimiy saqlash.",
     accounts: "Instagram, Telegram va YouTube ulanishlarini boshqaring.",
@@ -836,6 +840,7 @@ export default function MediaAdmin() {
               />
             )}
             {section === "audio" && <AudioStudio onSaved={refresh} />}
+            {section === "explainer" && <ExplainerStudio data={data} onSaved={refresh} />}
             {section === "assets" && (
               <>
                 <div className="media-upload">

@@ -44,6 +44,7 @@ export async function schedulePublications(
     if (posts.length !== items.length)
       throw new ScheduleError("Post topilmadi.", 404);
     for (const post of posts) {
+      if ((await client.query("SELECT 1 FROM media_jobs WHERE kind='explainer' AND status IN ('queued','running') AND payload->>'post_id'=$1",[post.id])).rowCount) throw new ScheduleError(`${post.title}: video tayyorlanishini kuting.`,409);
       const assets = (
         await client.query(
           "SELECT id,mime_type FROM media_assets WHERE id=ANY($1::uuid[])",

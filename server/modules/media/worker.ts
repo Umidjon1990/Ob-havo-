@@ -1,3 +1,4 @@
+import { processExplainer } from "./explainer";
 import { randomUUID } from "node:crypto";
 import { z } from "zod";
 import { pool } from "../../db";
@@ -116,11 +117,11 @@ export async function processGeneration() {
   let job: any;
   try {
     await pool.query(
-      "UPDATE media_jobs SET status='failed',error='AI jarayoni uzildi. Tayyor bo‘lgan qoralamalar kutubxonada saqlangan.' WHERE status='running' AND started_at<now()-interval '10 minutes'",
+      "UPDATE media_jobs SET status='failed',error='AI jarayoni uzildi. Tayyor bo‘lgan qoralamalar kutubxonada saqlangan.' WHERE kind='campaign' AND status='running' AND started_at<now()-interval '10 minutes'",
     );
     job = (
       await pool.query(
-        "UPDATE media_jobs SET status='running',started_at=now() WHERE id=(SELECT id FROM media_jobs WHERE status='queued' ORDER BY created_at FOR UPDATE SKIP LOCKED LIMIT 1) RETURNING *",
+        "UPDATE media_jobs SET status='running',started_at=now() WHERE id=(SELECT id FROM media_jobs WHERE kind='campaign' AND status='queued' ORDER BY created_at FOR UPDATE SKIP LOCKED LIMIT 1) RETURNING *",
       )
     ).rows[0];
     if (!job) return;
@@ -225,8 +226,10 @@ export function startMediaWorker() {
   const timer = setInterval(() => {
     void processDelivery();
     void processGeneration();
+    void processExplainer();
   }, 15000);
   timer.unref();
   void processDelivery();
   void processGeneration();
+  void processExplainer();
 }

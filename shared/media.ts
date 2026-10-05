@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { explainerPlanSchema } from "./explainer";
 export const platformSchema = z.enum(["telegram", "instagram", "youtube"]);
 export const formatSchema = z.enum([
   "text",
@@ -15,6 +16,9 @@ export const postSchema = z.object({
   asset_ids: z.array(z.string().uuid()).max(10).default([]),
   variants: z
     .object({
+      explainer: explainerPlanSchema.optional(),
+      explainer_audio_id: z.string().uuid().optional(),
+      explainer_video_id: z.string().uuid().optional(),
       telegram: z.string().max(15000).optional(),
       instagram: z.string().max(2200).optional(),
       youtube: z.string().max(5000).optional(),
@@ -91,7 +95,8 @@ export type MediaJob = {
   kind: string;
   error: string | null;
   created_at: string;
-  result: { post_ids?: string[] } | null;
+  payload?: { post_id?: string };
+  result: { post_ids?: string[]; post_id?: string; duration?: number; timings?: {start:number;duration:number;title:string}[] } | null;
 };
 export const deliveryLabels: Record<string, string> = {
   scheduled: "Rejalashtirilgan",
