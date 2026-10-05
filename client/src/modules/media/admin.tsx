@@ -1,5 +1,6 @@
 import { useEffect, useState, type FormEvent, type ReactNode } from "react";
 import {
+  Mic,
   LayoutDashboard,
   CalendarDays,
   Files,
@@ -65,6 +66,7 @@ type Section =
   | "overview"
   | "posts"
   | "calendar"
+  | "audio"
   | "assets"
   | "accounts"
   | "rules"
@@ -77,6 +79,7 @@ const nav = [
   ["posts", "Kontentlar", Files],
   ["calendar", "Nashr taqvimi", CalendarDays],
   ["assets", "Media kutubxonasi", FolderOpen],
+  ["audio", "Audio yaratish", Mic],
   ["accounts", "Platformalar", Link2],
   ["rules", "Agent xotirasi", Brain],
   ["references", "Namunalar", Sparkles],
@@ -396,6 +399,7 @@ export default function MediaAdmin() {
     overview: "Barcha ishlaringiz bir joyda. Navbatdagi kontentdan boshlaymiz.",
     posts: "G‘oyadan tayyor postgacha. Har bir platformaga mos matn va media.",
     calendar: "Nashrlar sanasi va har bir kanaldagi natija. Toshkent vaqti.",
+    audio: "ElevenLabs v4 · O‘zbekcha va arabcha · Shaxsiy va boshqa ovozlar.",
     assets: "Yaratilgan rasm, video va audiolaringiz uchun doimiy saqlash.",
     accounts: "Instagram, Telegram va YouTube ulanishlarini boshqaring.",
     rules: "Keyingi topshiriqlarda qayta aytishingiz shart bo‘lmagan talablar.",
@@ -831,6 +835,7 @@ export default function MediaAdmin() {
                 busy={busy}
               />
             )}
+            {section === "audio" && <AudioStudio onSaved={refresh} />}
             {section === "assets" && (
               <>
                 <div className="media-upload">
@@ -1546,7 +1551,7 @@ function PostEditor({
             </small>
             <div className="max-h-40 overflow-auto">
               {assets
-                .filter((a) => a.mime_type !== "audio/mpeg")
+                .filter((a) => a.mime_type !== "audio/mpeg" || format === "article")
                 .map((a) => (
                   <label className="media-check" key={a.id}>
                     <input
@@ -2257,4 +2262,59 @@ function Calendar({
       </section>
     </>
   );
+}
+
+
+type AudioCatalog = { models: { id: string; name: string }[]; voices: { id: string; name: string; category: string; labels: Record<string, string> }[] };
+function AudioStudio({ onSaved }: { onSaved: () => Promise<unknown> }) {
+  const [catalog, setCatalog] = useState<AudioCatalog | null>(null);
+  const [error, setError] = useState("");
+  const [busy, setBusy] = useState(false);
+  const [loading, setLoading] = useState(false);
+  const [name, setName] = useState("Lug‘at audiosi");
+  const [text, setText] = useState("");
+  const [voice, setVoice] = useState("");
+  const [language, setLanguage] = useState("uz");
+  const [model, setModel] = useState("eleven_v4");
+  const [result, setResult] = useState<MediaAsset | null>(null);
+  async function reload() {
+    setLoading(true); setError("");
+    try {
+      const c = await mediaApi<AudioCatalog>("/audio/catalog");
+      setCatalog(c);
+      setVoice(previous => c.voices.some(v => v.id === previous) ? previous : c.voices.find(v => /umidjon/i.test(v.name))?.id || "");
+      setModel(previous => c.models.some(m => m.id === previous) ? previous : c.models[0]?.id || "");
+    } catch(e) { setError((e as Error).message); }
+    finally { setLoading(false); }
+  }
+  useEffect(() => { void reload(); }, []);
+  async function submit(e: FormEvent) {
+    e.preventDefault(); if(busy) return;
+    setBusy(true); setError(""); setResult(null);
+    try {
+      const asset = await mediaApi<MediaAsset>("/audio/generate", "POST", { name, text, voice_id: voice, language, model });
+      setResult(asset);
+      await onSaved();
+    } catch(e) { setError((e as Error).message); }
+    finally { setBusy(false); }
+  }
+  const voices = [...(catalog?.voices || [])].sort((a,b) => Number(!["cloned","professional"].includes(a.category)) - Number(!["cloned","professional"].includes(b.category)) || a.name.localeCompare(b.name));
+  return <section className="media-panel">
+    <div className="media-actions"><h2>Audio yaratish</h2><Button secondary small disabled={loading || busy} onClick={() => void reload()}><RefreshCw size={15} /> Ovozlarni yangilash</Button></div>
+    <p className="media-subtle">Hisobingizdagi klon va boshqa ovozlar ElevenLabs’dan olinadi. Har bir yaratish hisobingizdagi kreditni sarflaydi.</p>
+    {error && <div role="alert" className="media-alert">{error}</div>}
+    {loading && <p role="status">Modellar va ovozlar yuklanmoqda…</p>}
+    {catalog && !catalog.models.length && <p className="media-alert">Bu API hisobida v4 modeli ko‘rinmadi. ElevenLabs model ruxsatlarini tekshiring.</p>}
+    <form onSubmit={submit} className="space-y-4 mt-4">
+      <Field label="Audio nomi"><input className="media-input" required maxLength={170} value={name} onChange={e => setName(e.target.value)} disabled={busy} /></Field>
+      <div className="grid gap-4 sm:grid-cols-2">
+        <Field label="Til"><select className="media-input" value={language} onChange={e => setLanguage(e.target.value)} disabled={busy}><option value="uz">O‘zbekcha</option><option value="ar">Arabcha</option></select></Field>
+        <Field label="Model"><select className="media-input" required value={model} onChange={e => setModel(e.target.value)} disabled={busy || loading}>{catalog?.models.map(m => <option key={m.id} value={m.id}>{m.name}</option>)}</select></Field>
+      </div>
+      <Field label="Ovoz" hint="Klon ovozlar ro‘yxat boshida. Boshqa o‘zbek ovozi hisobingizga qo‘shilgan bo‘lsa, yangilash orqali chiqadi."><select className="media-input" required value={voice} onChange={e => setVoice(e.target.value)} disabled={busy || loading}><option value="">Ovozni tanlang</option>{voices.map(v => <option key={v.id} value={v.id}>{v.name}{["professional","cloned"].includes(v.category) ? " · Klon" : ""}{v.labels.language ? ` · ${v.labels.language}` : ""}</option>)}</select></Field>
+      <Field label="O‘qiladigan matn" hint={`${text.length} / 2000 belgi. Arabcha harakatlar va o‘zbekcha matn saqlanadi.`}><textarea className="media-input" rows={7} dir="auto" required maxLength={2000} value={text} onChange={e => setText(e.target.value)} disabled={busy} /></Field>
+      <Button type="submit" disabled={busy || loading || !model || !voice || !catalog?.models.length}>{busy ? "Audio yaratilmoqda… Sahifani yopmang" : "Audio yaratish va saqlash"}</Button>
+    </form>
+    {result && <div className="mt-5 space-y-3" role="status"><strong>{result.name} · Kutubxonaga saqlandi</strong><audio controls src={`/api/media/assets/${result.id}`} className="w-full" /><a className="media-btn secondary" href={`/api/media/assets/${result.id}`} download={result.name}>MP3 yuklab olish</a><p className="media-subtle">Telegram Article tahririda shu audioni tanlang va HTML ichida quyidagi manzilni ishlating:</p><code>{`<audio src="{{asset:${result.id}}}"></audio>`}</code></div>}
+  </section>;
 }

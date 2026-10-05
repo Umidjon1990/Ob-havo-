@@ -24,14 +24,16 @@ import {
 } from "./security";
 import { appBaseUrl, verifyAccount } from "./providers";
 import { schedulePublications, ScheduleError } from "./scheduling";
+import { audioInput, audioCatalog, generateAudio, AudioError } from "./audio";
 const uuid = z.string().uuid();
+let generatingAudio = false;
 const route =
   (fn: (req: Request, res: Response) => Promise<any>) =>
   async (req: Request, res: Response, next: NextFunction) => {
     try {
       await fn(req, res);
     } catch (e) {
-      if (e instanceof ScheduleError) {
+      if (e instanceof ScheduleError || e instanceof AudioError) {
         res.status(e.status).json({ error: e.message });
       } else if (e instanceof z.ZodError) {
         res
@@ -86,6 +88,30 @@ export function registerMediaRoutes(app: Express) {
     }),
   );
   app.use("/api/media", requireAdmin);
+  app.get("/api/media/audio/catalog", route(async (_req, res) => res.json(await audioCatalog())));
+  app.post("/api/media/audio/generate", route(async (req, res) => {
+    const input = audioInput.parse(req.body);
+    if (generatingAudio) throw new AudioError(409, "Audio yaratilmoqda. Tugashini kuting.");
+    generatingAudio = true;
+    try {
+      const quota = await pool.query("SELECT COALESCE(SUM(size),0) AS used FROM media_assets");
+      if (Number(quota.rows[0].used) > 1024 * 1024 * 1024 - 50 * 1024 * 1024)
+        throw new AudioError(413, "Audio uchun kutubxonada kamida 50 MB bo‘sh joy kerak.");
+      const audio = await generateAudio(input);
+      const client = await pool.connect();
+      try {
+        await client.query("BEGIN");
+        await client.query("SELECT pg_advisory_xact_lock(761281)");
+        const used = await client.query("SELECT COALESCE(SUM(size),0) AS used FROM media_assets");
+        if (Number(used.rows[0].used) + audio.length > 1024 * 1024 * 1024)
+          throw new AudioError(413, "Audio yaratildi, ammo kutubxonaga sig‘madi. ElevenLabs tarixidan yuklab oling.");
+        const r = await client.query(`INSERT INTO media_assets(name,mime_type,size,data) VALUES($1,'audio/mpeg',$2,$3) RETURNING ${meta}`, [input.name.replace(/\.mp3$/i, "") + ".mp3", audio.length, audio]);
+        await client.query("COMMIT");
+        res.status(201).json(r.rows[0]);
+      } catch (e) { await client.query("ROLLBACK"); throw e; }
+      finally { client.release(); }
+    } finally { generatingAudio = false; }
+  }));
   app.post(
     "/api/media/assets",
     express.raw({

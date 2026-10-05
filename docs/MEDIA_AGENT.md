@@ -80,3 +80,11 @@ The local sandbox's PDF browser test used a test-only Puppeteer pipe/minimal-lau
 ## Next integrations
 
 Complete Google/Meta account consent, run an administrator-chosen live publication, add token renewal, and connect server-accessible creative APIs with explicit usage budgets. Recurring autonomous generation of finished videos, all-chat automatic memory synchronization, Instagram DM/comment automation and Metricool integration are not enabled merely by installing this panel.
+
+## Audio studio (6 October 2026)
+
+Private admin → Audio yaratish loads account voices (including professional/instant clones) from ElevenLabs `/v2/voices` and v4 models from `/v1/models`. Uses the existing server-only `ELEVENLABS_API_KEY`; it must allow voice/model reads and audio generation for the same workspace that owns the clone. Voices from the library appear after they are added to that account and refreshed.
+
+Uzbek/Arabic narration uses `/v1/text-to-dialogue` with explicit `eleven_v4` or `eleven_v4_turbo`, selected voice ID and `uz`/`ar` language code. Input is limited to 2,000 characters; original diacritics/numerals are preserved. No automatic paid retries or provider/voice fallback. Generated MP3 is stored in existing media_assets under the 1 GB quota; preview and download stay behind admin authentication. One audio generation runs at a time per server process. Repeated requests after completion create separate audio assets and consume credits; if the connection is lost check ElevenLabs history before regenerating.
+
+Articles can now attach MP3 assets; HTML references use `<audio src="{{asset:ASSET_UUID}}"></audio>`. Existing weekly Arabic listening remains on its previous model and voice settings.
