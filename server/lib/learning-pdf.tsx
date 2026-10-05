@@ -34,7 +34,7 @@ function header(meta: LearningDocumentMeta, part: string): string {
     <div class="eyebrow"><span>${reading ? "O‘QIB TUSHUNISH" : "TINGLAB TUSHUNISH"}</span><span class="badge">${level}</span></div>
     <h1 dir="rtl" lang="ar">${escapeHtml(meta.titleAr)}</h1>
     <p class="subtitle">${escapeHtml(meta.titleUz)}</p>
-    <div class="meta"><span>${escapeHtml(date)}</span><span>${escapeHtml(part)}</span><span>${escapeHtml(meta.channelTitle || "Zamonaviy Ta’lim")}</span></div>
+    <div class="meta"><span>${escapeHtml(date)}</span><span>${escapeHtml(part)}</span><span>Zamonaviy Ta’lim</span></div>
   </header>`;
 }
 

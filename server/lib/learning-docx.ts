@@ -160,7 +160,7 @@ function titleBlock(meta: LearningDocumentMeta, part: string): Paragraph[] {
     }),
     arabicParagraph(meta.titleAr, { bold: true, size: TITLE_SIZE, style: "Title", keepNext: true, spacingAfter: 40 }),
     latinParagraph(meta.titleUz, { bold: true, color: INK, spacingAfter: 100 }),
-    latinParagraph([date, part, meta.channelTitle || "Zamonaviy Ta’lim"].join("   ·   "), { spacingAfter: 80 }),
+    latinParagraph([date, part, "Zamonaviy Ta’lim"].join("   ·   "), { spacingAfter: 80 }),
     divider(0, 140),
   ];
 }
