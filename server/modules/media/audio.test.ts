@@ -19,6 +19,8 @@ test("v4 uses dialogue endpoint with selected clone and preserves Uzbek/Arabic t
     global.fetch = (async () => { requests.push({url:"error",body:null}); return new Response("test-secret private payload",{status:403}); }) as typeof fetch;
     await assert.rejects(generateAudio(input), e => e instanceof AudioError && e.status === 403 && !e.message.includes("test-secret"));
     assert.equal(requests.length,2);
+    global.fetch = (async () => new Response(JSON.stringify({detail:{status:"missing_permissions",message:"secret payload"}}),{status:401})) as typeof fetch;
+    await assert.rejects(generateAudio(input), e => e instanceof AudioError && e.status === 403 && e.message.includes("ruxsat") && !e.message.includes("secret payload"));
     assert.equal(audioInput.safeParse({...input,text:"a".repeat(2001)}).success,false);
   } finally { global.fetch=oldFetch; if(oldKey === undefined) delete process.env.ELEVENLABS_API_KEY; else process.env.ELEVENLABS_API_KEY=oldKey; }
 });

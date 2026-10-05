@@ -25,7 +25,13 @@ async function eleven(path: string, body?: unknown) {
     throw new AudioError(504, "ElevenLabs javobi olinmadi. Audio yaratishda kredit sarflangan bo‘lishi mumkin; qayta yaratishdan oldin ElevenLabs tarixini tekshiring.");
   }
   if (!response.ok) {
-    // Never return provider payloads: they can contain private text or credentials.
+    // Inspect only provider error codes; never expose raw provider payloads.
+    let code = "";
+    try { const data = await response.json(); code = String(data?.detail?.status || data?.detail?.code || data?.detail?.type || ""); } catch {}
+    if (/missing_permissions|insufficient_permissions/i.test(code))
+      throw new AudioError(403, "ElevenLabs kalitida kerakli ruxsat yetishmaydi. Models va Voices uchun Read, Text to Speech uchun Access ruxsatini yoqing.");
+    if (/quota_exceeded|payment|subscription/i.test(code))
+      throw new AudioError(402, "ElevenLabs krediti yoki tarifini tekshiring.");
     const messages: Record<number, string> = {
       401: "ElevenLabs API kaliti yaroqsiz.",
       402: "ElevenLabs krediti yoki tarifini tekshiring.",
