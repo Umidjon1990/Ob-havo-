@@ -921,6 +921,7 @@ export default function MediaAdmin() {
                       >
                         <ExternalLink size={14} />
                       </a>
+                      <AssetDownload asset={a} />
                       <button
                         className="media-icon-button"
                         aria-label="Faylni o‘chirish"
@@ -2292,6 +2293,26 @@ function Calendar({
 
 
 type AudioCatalog = { models: { id: string; name: string }[]; voices: { id: string; name: string; category: string; labels: Record<string, string> }[] };
+function AssetDownload({ asset }: { asset: MediaAsset }) {
+  const [downloading, setDownloading] = useState(false);
+  const [error, setError] = useState("");
+  async function download() {
+    if (downloading) return;
+    setDownloading(true); setError("");
+    try {
+      const response = await fetch(`/api/media/assets/${asset.id}`, { credentials: "same-origin" });
+      if (!response.ok) throw new Error("Faylni yuklab bo‘lmadi. Hisobga qayta kirib ko‘ring.");
+      const url = URL.createObjectURL(await response.blob());
+      const link = document.createElement("a");
+      link.href = url; link.download = asset.name;
+      document.body.appendChild(link); link.click(); link.remove();
+      window.setTimeout(() => URL.revokeObjectURL(url), 60000);
+    } catch (e) { setError((e as Error).message); }
+    finally { setDownloading(false); }
+  }
+  return <span><Button secondary small disabled={downloading} onClick={() => void download()}><Download size={14} />{downloading ? "Yuklanmoqda…" : "Faylni yuklab olish"}</Button>{error && <span role="alert" className="media-alert">{error}</span>}</span>;
+}
+
 function AudioStudio({ onSaved }: { onSaved: () => Promise<unknown> }) {
   const [catalog, setCatalog] = useState<AudioCatalog | null>(null);
   const [error, setError] = useState("");
@@ -2341,6 +2362,6 @@ function AudioStudio({ onSaved }: { onSaved: () => Promise<unknown> }) {
       <Field label="O‘qiladigan matn" hint={`${text.length} / 2000 belgi. Arabcha harakatlar va o‘zbekcha matn saqlanadi.`}><textarea className="media-input" rows={7} dir="auto" required maxLength={2000} value={text} onChange={e => setText(e.target.value)} disabled={busy} /></Field>
       <Button type="submit" disabled={busy || loading || !model || !voice || !catalog?.models.length}>{busy ? "Audio yaratilmoqda… Sahifani yopmang" : "Audio yaratish va saqlash"}</Button>
     </form>
-    {result && <div className="mt-5 space-y-3" role="status"><strong>{result.name} · Kutubxonaga saqlandi</strong><audio controls src={`/api/media/assets/${result.id}`} className="w-full" /><a className="media-btn secondary" href={`/api/media/assets/${result.id}`} download={result.name}>MP3 yuklab olish</a><p className="media-subtle">Telegram Article tahririda shu audioni tanlang va HTML ichida quyidagi manzilni ishlating:</p><code>{`<audio src="{{asset:${result.id}}}"></audio>`}</code></div>}
+    {result && <div className="mt-5 space-y-3" role="status"><strong>{result.name} · Kutubxonaga saqlandi</strong><audio controls src={`/api/media/assets/${result.id}`} className="w-full" /><AssetDownload asset={result} /><p className="media-subtle">Telegram Article tahririda shu audioni tanlang va HTML ichida quyidagi manzilni ishlating:</p><code>{`<audio src="{{asset:${result.id}}}"></audio>`}</code></div>}
   </section>;
 }
