@@ -1,5 +1,6 @@
 import { pool } from "../../db";
 import { validatePublication, platformPost } from "../../../shared/media";
+import { checkReelAssets } from "./reels";
 export class ScheduleError extends Error {
   constructor(
     message: string,
@@ -44,7 +45,8 @@ export async function schedulePublications(
     if (posts.length !== items.length)
       throw new ScheduleError("Post topilmadi.", 404);
     for (const post of posts) {
-      if ((await client.query("SELECT 1 FROM media_jobs WHERE kind='explainer' AND status IN ('queued','running') AND payload->>'post_id'=$1",[post.id])).rowCount) throw new ScheduleError(`${post.title}: video tayyorlanishini kuting.`,409);
+      if(post.variants.reels) await checkReelAssets(post.variants.reels,post.variants.instagram_cover_id);
+      if ((await client.query("SELECT 1 FROM media_jobs WHERE kind IN ('explainer','reels_audio','reels_render') AND status IN ('queued','running') AND payload->>'post_id'=$1",[post.id])).rowCount) throw new ScheduleError(`${post.title}: video tayyorlanishini kuting.`,409);
       for (const a of accounts) {
         const selected = platformPost(post, a.platform);
         const assets = (await client.query("SELECT id,mime_type FROM media_assets WHERE id=ANY($1::uuid[])",[selected.asset_ids])).rows;

@@ -1,6 +1,7 @@
 import { automaticQuality } from "./quality";
 import { processInteractions, processInsights } from "./growth";
 import { processExplainer } from "./explainer";
+import { processReelJobs } from "./reels";
 import { randomUUID } from "node:crypto";
 import { z } from "zod";
 import { pool } from "../../db";
@@ -239,9 +240,11 @@ export function startMediaWorker() {
     void processDelivery();
     void processGeneration();
     void processExplainer();
+    void processReelJobs();
   }, 15000);
   timer.unref();
   void processDelivery();
   void processGeneration();
   void processExplainer();
+  void processReelJobs();
 }

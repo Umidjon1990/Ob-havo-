@@ -28,6 +28,7 @@ import { registerExplainerRoutes } from "./explainer";
 import { audioInput, audioCatalog, generateAudio, AudioError } from "./audio";
 import { registerGrowthRoutes } from "./growth";
 import { registerQualityRoutes } from "./quality";
+import { registerReelRoutes, checkReelAssets } from "./reels";
 const uuid = z.string().uuid();
 let generatingAudio = false;
 const route =
@@ -94,6 +95,7 @@ export function registerMediaRoutes(app: Express) {
   app.use("/api/media", requireAdmin);
   registerQualityRoutes(app, route);
   registerExplainerRoutes(app, route);
+  registerReelRoutes(app, route);
   app.get("/api/media/audio/catalog", route(async (_req, res) => res.json(await audioCatalog())));
   app.post("/api/media/audio/generate", route(async (req, res) => {
     const input = audioInput.parse(req.body);
@@ -262,6 +264,7 @@ export function registerMediaRoutes(app: Express) {
         if (ids) await checkAssets(ids);
       }
       await checkInstagramCover(p);
+      if(p.variants.reels) await checkReelAssets(p.variants.reels,p.variants.instagram_cover_id);
       const r = await pool.query(
         "INSERT INTO media_posts(title,caption,format,asset_ids,variants,production_notes) VALUES($1,$2,$3,$4,$5,$6) RETURNING *",
         [
@@ -287,6 +290,7 @@ export function registerMediaRoutes(app: Express) {
         if (ids) await checkAssets(ids);
       }
       await checkInstagramCover(p);
+      if(p.variants.reels) await checkReelAssets(p.variants.reels,p.variants.instagram_cover_id);
       const client = await pool.connect();
       try {
         await client.query("BEGIN");
@@ -303,7 +307,7 @@ export function registerMediaRoutes(app: Express) {
           "SELECT 1 FROM media_deliveries WHERE post_id=$1 AND status<>'cancelled' LIMIT 1",
           [id],
         );
-        if (locked.rowCount || (await client.query("SELECT 1 FROM media_jobs WHERE kind='explainer' AND status IN ('queued','running') AND payload->>'post_id'=$1",[id])).rowCount) {
+        if (locked.rowCount || (await client.query("SELECT 1 FROM media_jobs WHERE kind IN ('explainer','reels_audio','reels_render') AND status IN ('queued','running') AND payload->>'post_id'=$1",[id])).rowCount) {
           await client.query("ROLLBACK");
           res
             .status(409)
@@ -340,7 +344,7 @@ export function registerMediaRoutes(app: Express) {
     route(async (req, res) => {
       const id = uuid.parse(req.params.id);
       const r = await pool.query(
-        "DELETE FROM media_posts WHERE id=$1 AND NOT EXISTS(SELECT 1 FROM media_deliveries WHERE post_id=$1 AND status<>'cancelled') AND NOT EXISTS(SELECT 1 FROM media_jobs WHERE kind='explainer' AND status IN ('queued','running') AND payload->>'post_id'=$1::text) RETURNING id",
+        "DELETE FROM media_posts WHERE id=$1 AND NOT EXISTS(SELECT 1 FROM media_deliveries WHERE post_id=$1 AND status<>'cancelled') AND NOT EXISTS(SELECT 1 FROM media_jobs WHERE kind IN ('explainer','reels_audio','reels_render') AND status IN ('queued','running') AND payload->>'post_id'=$1::text) RETURNING id",
         [id],
       );
       if (!r.rowCount) {

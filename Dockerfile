@@ -1,4 +1,4 @@
-FROM node:20.20.0-bookworm-slim AS base
+FROM node:22-bookworm-slim AS base
 
 WORKDIR /app
 RUN corepack enable \
@@ -6,7 +6,7 @@ RUN corepack enable \
 
 FROM base AS build
 
-COPY package.json pnpm-lock.yaml ./
+COPY package.json pnpm-lock.yaml pnpm-workspace.yaml ./
 RUN pnpm install --prod --frozen-lockfile
 
 COPY . .
@@ -19,10 +19,10 @@ ENV NODE_ENV=production
 RUN apt-get update && apt-get install -y --no-install-recommends \
     libnss3 libnspr4 libatk1.0-0 libatk-bridge2.0-0 libcups2 \
     libdbus-1-3 libdrm2 libxkbcommon0 libxcomposite1 libxdamage1 \
-    libxfixes3 libxrandr2 libgbm1 libasound2 libpango-1.0-0 libcairo2 ffmpeg \
+    libxfixes3 libxrandr2 libgbm1 libasound2 libpango-1.0-0 libcairo2 ffmpeg chromium \
     && rm -rf /var/lib/apt/lists/*
 
-COPY package.json pnpm-lock.yaml ./
+COPY package.json pnpm-lock.yaml pnpm-workspace.yaml ./
 RUN pnpm install --prod --frozen-lockfile
 
 COPY --from=build /app/dist ./dist

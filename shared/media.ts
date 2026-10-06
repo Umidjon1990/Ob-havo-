@@ -1,5 +1,6 @@
 import { z } from "zod";
 import { explainerPlanSchema } from "./explainer";
+import { reelPackageSchema, reelPublicationError } from "./reels";
 export const platformSchema = z.enum(["telegram", "instagram", "youtube"]);
 export const formatSchema = z.enum([
   "text",
@@ -16,6 +17,7 @@ export const postSchema = z.object({
   asset_ids: z.array(z.string().uuid()).max(10).default([]),
   variants: z
     .object({
+      reels: reelPackageSchema.optional(),
       explainer: explainerPlanSchema.optional(),
       explainer_audio_id: z.string().uuid().optional(),
       explainer_video_id: z.string().uuid().optional(),
@@ -116,6 +118,10 @@ export function validatePublication(
   platform: string,
   mimes: string[],
 ) {
+  if (post.variants.reels) {
+    const error = reelPublicationError(post.variants.reels, platform, post.asset_ids, post.variants.instagram_cover_id);
+    if (error) return error;
+  }
   const caption =
     post.variants[platform as "telegram" | "instagram" | "youtube"] ??
     post.caption;

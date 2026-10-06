@@ -4,6 +4,7 @@ import { z } from 'zod';
 import { pool } from '../../db';
 import { seal, unseal, requireAdmin, equalSecret } from './security';
 import { appBaseUrl } from './providers';
+import { syncReelAutomations } from './reel-automations';
 import { automationSchema, keywordMatch, withinWindow } from '../../../shared/media-growth';
 const id = z.string().uuid();
 const external = z.string().regex(/^\d+$/);
@@ -310,6 +311,9 @@ let busy=false;
 export async function processInteractions(){
   if(busy)return;busy=true;let currentEvent:any;
   try{
+    // A scoped Reels rule must exist before an incoming comment can fall back
+    // to a global keyword rule. Keep the event queued if binding fails.
+    await syncReelAutomations();
     await pool.query("UPDATE media_interactions SET status='needs_review',error='Jarayon uzilgan. Instagramdagi natijani tekshiring.' WHERE status='processing' AND claimed_at<now()-interval '10 minutes'");
     await pool.query("UPDATE media_follow_requests SET status='needs_review' WHERE status IN ('sending_prompt','checking') AND claimed_at<now()-interval '10 minutes'");
     await pool.query("UPDATE media_follow_requests SET status='expired' WHERE status='awaiting_follow' AND expires_at<=now()");

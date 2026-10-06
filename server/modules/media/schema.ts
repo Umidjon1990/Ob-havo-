@@ -72,6 +72,8 @@ export async function ensureMediaTables(sql: Pool | Client) {
     );
     ALTER TABLE media_interactions ADD COLUMN IF NOT EXISTS claimed_at TIMESTAMPTZ;
     ALTER TABLE media_automations ADD COLUMN IF NOT EXISTS require_follow BOOLEAN NOT NULL DEFAULT false;
+    ALTER TABLE media_automations ADD COLUMN IF NOT EXISTS source_delivery_id UUID REFERENCES media_deliveries(id) ON DELETE CASCADE;
+    CREATE UNIQUE INDEX IF NOT EXISTS media_automations_source_delivery ON media_automations(source_delivery_id);
     CREATE TABLE IF NOT EXISTS media_follow_requests (
       id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
       account_id UUID NOT NULL REFERENCES media_accounts(id),
@@ -92,6 +94,7 @@ export async function ensureMediaTables(sql: Pool | Client) {
     );
   `);
   const defaults = [
+    ["instagram-reels-studio-v1", "project", "Instagram reklama Reels qoidalari", "Reels studiyasi paketlari faqat Instagram reklamalari uchun: 40–60 soniya, 1080×1920, kuchli hook, tekshirilgan manba, asl sayt ekranlari, premium erkak 3D qahramonlar, klon ovoz va audioga mos HyperFrames/Higgsfield montaj. Avval professional ishlab chiqarish prompti yozilsin. Ushbu alohida reklamada profilga obuna va kalit so‘zli izoh CTA mumkin; ko‘p platformali lug‘at audiosi uchun platformasiz nutq talabi saqlanadi. Har paketga cover, caption, kalit so‘zlar, Direct matni, havola va obuna talabi biriktirilsin. Nashrga tayyor video bilan Reels Meta ID si olingach javob qoidasini aynan shu postga avtomatik bog‘lash. Obuna holati noaniq bo‘lsa havola berilmasin."],
     ["vocabulary-layout-v2", "brand", "So‘z boyligi post tartibi", "Kuchli hook → bugungi iboralar → rasmli karusel → video → audio va chiroyli dizaynda doim ko‘rinadigan misollar → test → Zamonaviy ta’lim. Tuzuvchi: U. Abdurayimov. Ixcham matn. Talaffuz mashqi va kichik vazifa qo‘shilmasin. Tarjimadan tashqari ma’no va kichik farqlar tushuntirilsin."],
     ["visual-cartoon-v2", "brand", "Rangli 3D dizayn", "Yorqin professional animatsion 3D cartoon, izchil erkak yoki o‘g‘il bola qahramonlar, neytral vaziyatlar, diniy misollarsiz. Sodda yoki bo‘sh maket bo‘lmasin. Coverda kuchli hook va yirik yozuv markazda; yuqori-pastki kesim va profil ko‘rinishi tekshirilsin, pastda ortiqcha bo‘sh joy bo‘lmasin."],
     ["voice-portable-v2", "brand", "Klon ovoz va platformalar", "Arabcha va o‘zbekcha matn foydalanuvchining tanlangan klon ovozida o‘qilsin. Voice ID taxmin qilinmasin. Ovoz skriptida karuselni o‘tkazing, Telegram kanalidagi kabi platformaga xos iboralar bo‘lmasin. Telegramga mos yengil video, Instagram/YouTubega yuqori sifatli nusxa. Har safar avval kuchli ishlab chiqarish prompti yozilsin."],
