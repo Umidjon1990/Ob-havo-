@@ -29,6 +29,8 @@ The connection check reads `me?fields=id,user_id,username` and account-level `su
 
 The private panel shows the last signature-verified receipt time and matched/parsed/inserted/duplicate counts. The receipt retains only account IDs, field names and counters, without raw payloads, sender IDs or message text. Runtime logs contain counters only. A callback HTTP 200 means receipt processing completed; it does not mean an inbox message was inserted. Synthetic Meta events with ID 0 stay out of the inbox.
 
+The optional comment/permission check reads the token's permission list and up to ten comments on each of the five most recent account posts. It distinguishes owner comments where Meta returns author identifiers. Unsupported or failed permission introspection remains unknown, not denied. A bounded author-field fallback applies only to Graph error 100. These fetched comments remain an explicit read-only diagnostic: they do not populate the webhook inbox, enqueue jobs, send responses or enable rules.
+
 ## Public information URLs
 
 The server serves `/privacy` and `/data-deletion` as public UTF-8 HTML before API authentication and the SPA fallback. They require no login, JavaScript or database query. Both have Uzbek and English text and use the operator contact shown in the Meta app: `umidjonabdurayimov04@gmail.com`.

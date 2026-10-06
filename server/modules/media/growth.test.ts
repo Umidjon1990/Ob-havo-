@@ -154,3 +154,25 @@ test('automatic preflight reads a real vertical MP4 and rejects corrupt media',a
     assert.ok((await automaticQuality([{mime_type:'video/mp4',data:Buffer.from('invalid')}],'instagram')).some(c=>c.level==='error'));
   }finally{await rm(dir,{recursive:true,force:true});}
 });
+test('connection inspection is read-only and separates API comments from webhook receipt',async()=>{
+  const {inspectInstagramConnection}=await import('./growth'),{seal}=await import('./security');
+  process.env.ADMIN_PASSWORD||='test-password';
+  const a={id:'11111111-1111-4111-8111-111111111111',platform:'instagram',external_id:'111',enabled:true,verified_at:new Date(),credentials:seal({access_token:'test-inspection-token'})};
+  const original=globalThis.fetch,requests:string[]=[];let permissionFails=false;
+  globalThis.fetch=(async(url:any,init:any)=>{
+    assert.equal(init.method,'GET');requests.push(String(url));
+    if(String(url).includes('me/permissions'))return permissionFails?Response.json({error:{code:100}},{status:400}):Response.json({data:[{permission:'instagram_business_manage_comments',status:'granted'}]});
+    if(String(url).includes('/777/media?'))return Response.json({data:[{id:'333',caption:'Hook\nLesson',timestamp:new Date().toISOString()}]});
+    if(String(url).includes('timestamp,from'))return Response.json({error:{code:100}},{status:400});
+    if(String(url).includes('timestamp,username'))return Response.json({data:[{id:'444',text:'Salom 2',username:'student'},{id:'445',text:'Own comment',username:'Teacher'}]});
+    throw new Error('Unexpected diagnostic API request');
+  }) as any;
+  try{
+    const identity={profile_id:'111',user_id:'777',username:'teacher'};
+    const result=await inspectInstagramConnection(a,identity);
+    assert.equal(result.permissions.known,true);assert.equal(result.posts[0].title,'Hook');assert.equal(result.posts[0].comments[0].own,false);assert.equal(result.posts[0].comments[1].own,true);
+    assert.equal(requests.length,4);assert.equal(JSON.stringify(result).includes('test-inspection-token'),false);
+    permissionFails=true;
+    const partial=await inspectInstagramConnection(a,identity);assert.equal(partial.permissions.known,false);assert.equal(partial.posts[0].comments.length,2);assert.ok(partial.errors.some(e=>e.startsWith('Token ruxsatlari:')));
+  }finally{globalThis.fetch=original;}
+});

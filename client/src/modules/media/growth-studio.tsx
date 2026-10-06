@@ -17,9 +17,19 @@ export default function GrowthStudio({data,onSaved}:{data:MediaData;onSaved:()=>
     {error&&<div role="alert" className="media-alert">{error}</div>}{notice&&<div role="status" className="media-alert media-success">{notice}</div>}
     <section className="media-panel"><h2>Instagram agent</h2><p>Izohlar, Direct, statistika va sifat nazorati. Javob qoidalarini istalgan payt o‘chirishingiz mumkin.</p>
       <label className="media-field"><span>Instagram hisob</span><select className={input} value={account} onChange={e=>{setAccount(e.target.value);setConnection(null);}}>{data.accounts.filter(a=>a.platform==='instagram').map(a=><option key={a.id} value={a.id}>{a.name}</option>)}</select></label>
-      <div className="media-actions">{button('Ulanishni tekshirish',()=>void perform(async()=>setConnection(await mediaApi('/growth/connection-check','POST',{account_id:account})),'Hisob ID va Meta obunasi tekshirildi.'),busy||!account)}</div>
+      <div className="media-actions">{button('Ulanishni tekshirish',()=>void perform(async()=>setConnection(await mediaApi('/growth/connection-check','POST',{account_id:account})),'Hisob ID va Meta obunasi tekshirildi.'),busy||!account)}
+        {button('Izohlar va ruxsatlarni tekshirish',()=>void perform(async()=>setConnection(await mediaApi('/growth/connection-check','POST',{account_id:account,inspect:true})),'Meta diagnostikasi yakunlandi.'),busy||!account)}</div>
       {connection&&<div className="growth-check"><strong>{connection.identity.username} · Hisob tasdiqlandi</strong><p>Webhook uchun professional hisob ID: {connection.identity.user_id}</p>
         {connection.apps.length?connection.apps.map((a:any)=><p key={a.id}>Meta ilova: {a.name||a.id} · Obunalar: {a.fields.length?a.fields.join(', '):'Maydonlar Meta javobida ko‘rsatilmagan'}</p>):<p>Meta’da hisob obunasi topilmadi. “Hisobni webhookga ulash” tugmasini bosing.</p>}
+      </div>}
+      {connection?.inspection&&<div className="growth-check"><strong>Meta diagnostikasi · {tashkentDate(connection.checked_at)}</strong>
+        <p>Bu tekshiruv Meta’dan izohlarni faqat o‘qiydi. Webhook kelganini bildirmaydi va avtomatik javob yubormaydi.</p>
+        {connection.inspection.permissions.known?<div><strong>Token ruxsatlari</strong>{connection.inspection.permissions.grants.map((g:any)=><p key={g.permission}>{g.permission}: {g.status}</p>)}</div>:<p>Token ruxsatlari ro‘yxati olinmadi. Buni “ruxsat berilmagan” deb hisoblamaymiz.</p>}
+        {connection.inspection.errors.map((e:string)=><p key={e}>{e}</p>)}
+        <strong>So‘nggi 5 postning izohlari</strong>
+        {connection.inspection.posts.map((p:any)=><details key={p.id} open={p.comments.some((c:any)=>/salom/i.test(c.text))}><summary>{p.title||p.id} · {p.comments.length} izoh</summary>{p.error&&<p>{p.error}</p>}
+          {p.comments.map((c:any)=><div className="growth-check" key={c.id}><strong>{c.username||'Muallif ko‘rsatilmagan'} · {c.own===true?'O‘z hisobingiz':c.own===false?'Boshqa hisob':'Hisob turi noma’lum'}</strong><p dir="auto">{c.text}</p>{c.timestamp&&<small>{tashkentDate(c.timestamp)}</small>}</div>)}
+        </details>)}
       </div>}
       {state?.webhook.last_receipt&&<div className="growth-check"><strong>Oxirgi webhook: {tashkentDate(state.webhook.last_receipt.received_at)}</strong>
         <p>Hisobga mos: {state.webhook.last_receipt.matched} · Yangi xabar: {state.webhook.last_receipt.stored} · Takror: {state.webhook.last_receipt.duplicates}</p>

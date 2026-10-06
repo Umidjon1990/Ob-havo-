@@ -53,6 +53,38 @@ export async function refreshInstagramIdentity(a:any){
   if(!saved.rowCount)throw new GrowthError('Hisob sozlamalari o‘zgardi. Tekshiruvni yangilang.',409);
   return {profile_id:profileId,user_id:userId,username:typeof profile.username==='string'?profile.username:a.name};
 }
+// Read-only diagnosis: these API comments are never inserted into the webhook
+// inbox and never trigger reply rules. Missing permissions remain unknown.
+export async function inspectInstagramConnection(a:any,identity:{profile_id:string;user_id:string;username:string}){
+  const errors:string[]=[];
+  const read=async(path:string,label:string)=>{
+    try{return await instagramRequest(a,path);}catch(e){errors.push(`${label}: ${e instanceof GrowthError?e.message:'Tekshiruv bajarilmadi.'}`);return null;}
+  };
+  const [permissions,media]=await Promise.all([
+    read('me/permissions','Token ruxsatlari'),
+    read(`${identity.user_id}/media?fields=id,caption,permalink,timestamp&limit=5`,'So‘nggi postlar'),
+  ]);
+  const grants=Array.isArray(permissions?.data)?permissions.data.filter((v:any)=>typeof v.permission==='string'&&typeof v.status==='string').map((v:any)=>({permission:v.permission,status:v.status})):[];
+  const posts=await Promise.all((Array.isArray(media?.data)?media.data:[]).slice(0,5).filter((v:any)=>typeof v.id==='string'&&/^\d+$/.test(v.id)).map(async(v:any)=>{
+    let comments:any=null,error='';
+    try{comments=await instagramRequest(a,`${v.id}/comments?fields=id,text,timestamp,from&limit=10`);}
+    catch(e){
+      // The two API paths expose different author fields. Only a read-only
+      // field-selection error permits this bounded fallback.
+      if(e instanceof GrowthError&&e.message==='Instagram ruxsati yoki limiti: 100.'){
+        try{comments=await instagramRequest(a,`${v.id}/comments?fields=id,text,timestamp,username&limit=10`);}
+        catch(next){error=next instanceof GrowthError?next.message:'Izohlar olinmadi.';}
+      }else error=e instanceof GrowthError?e.message:'Izohlar olinmadi.';
+    }
+    const rows=(Array.isArray(comments?.data)?comments.data:[]).filter((c:any)=>typeof c.id==='string'&&typeof c.text==='string').map((c:any)=>{
+      const senderId=String(c.from?.id||''),username=String(c.from?.username||c.username||'');
+      return {id:c.id,text:c.text.slice(0,5000),timestamp:typeof c.timestamp==='string'?c.timestamp:'',username,
+        own:senderId||username?[identity.profile_id,identity.user_id].includes(senderId)||username.toLowerCase()===identity.username.toLowerCase():null};
+    });
+    return {id:v.id,title:typeof v.caption==='string'?v.caption.split('\n')[0].slice(0,100):v.id,comments:rows,error};
+  }));
+  return {permissions:{known:grants.length>0,grants},posts,errors};
+}
 function webhookSummary(body:any){
   const entries=Array.isArray(body?.entry)?body.entry.slice(0,100):[];
   return {received_at:new Date().toISOString(),entry_ids:entries.map((e:any)=>String(e?.id||'')).filter((v:string)=>/^\d{1,40}$/.test(v)),
@@ -133,7 +165,8 @@ export function registerGrowthRoutes(app:Express){
     const r=await instagramRequest(a,`${identity.user_id}/subscribed_apps`);
     const apps=(Array.isArray(r.data)?r.data:[]).map((v:any)=>({id:String(v.id||v.application?.id||''),name:String(v.name||v.application?.name||''),
       fields:Array.isArray(v.subscribed_fields)?v.subscribed_fields.filter((f:any)=>typeof f==='string'):[]}));
-    res.json({identity,apps,checked_at:new Date().toISOString()});
+    const inspection=req.body.inspect===true?await inspectInstagramConnection(a,identity):null;
+    res.json({identity,apps,inspection,checked_at:new Date().toISOString()});
   }));
   app.post('/api/media/growth/rules',wrap(async(req,res)=>{
     const v=automationSchema.parse(req.body);await account(v.account_id);
