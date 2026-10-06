@@ -33,6 +33,10 @@ export function musicWave(seconds:number) {
     const fade=Math.min(1,t/1.2,(seconds-t)/1.2);data.writeInt16LE(Math.round((chord+bell+bass)*fade*12000),44+i*2);
   }return data;
 }
+export function reelAudioFilters(duration:number,starts:number[],customMusic=false) {
+  const sfx=starts.map((t,i)=>`anoisesrc=color=pink:d=0.22:r=44100,highpass=f=1500,lowpass=f=7000,afade=t=out:st=0:d=0.22,volume=0.026,adelay=${Math.round(t*1000)}:all=1[s${i}];`).join('');
+  return `[1:a]apad,aresample=44100[n];[2:a]volume=${customMusic ? .08 : .12},afade=t=in:st=0:d=1,afade=t=out:st=${Math.max(0,duration-1)}:d=1[m];${sfx}[n][m]${starts.map((_,i)=>`[s${i}]`).join('')}amix=inputs=${2+starts.length}:duration=first:normalize=0,loudnorm=I=-16:TP=-1.5:LRA=7[a]`;
+}
 export async function renderReel(reel:ReelPackage,assets:Map<string,{mime_type:string,data:Buffer}>) {
   const dir=await mkdtemp(join(tmpdir(),"reels-"));
   try {
@@ -62,8 +66,7 @@ export async function renderReel(reel:ReelPackage,assets:Map<string,{mime_type:s
     const music=reel.music_id?assets.get(reel.music_id)?.data:undefined;
     await writeFile(join(dir,music?'music.mp3':'music.wav'),music||musicWave(duration));
     const starts=reel.scenes.slice(0,-1).map((_,i)=>reel.scenes.slice(0,i+1).reduce((n,s)=>n+s.seconds,0)*duration/reel.target_seconds);
-    const sfx=starts.map((t,i)=>`anoisesrc=color=pink:d=0.22:r=44100,highpass=f=1500,lowpass=f=7000,afade=t=out:st=0:d=.22,volume=.026,adelay=${Math.round(t*1000)}:all=1[s${i}];`).join('');
-    const filters=`[1:a]apad,aresample=44100[n];[2:a]volume=${music ? .08 : .12},afade=t=in:st=0:d=1,afade=t=out:st=${duration-1}:d=1[m];${sfx}[n][m]${starts.map((_,i)=>`[s${i}]`).join('')}amix=inputs=${2+starts.length}:duration=first:normalize=0,loudnorm=I=-16:TP=-1.5:LRA=7[a]`;
+    const filters=reelAudioFilters(duration,starts,!!music);
     await run("ffmpeg",["-v","error","-y","-i",join(dir,"visual.mp4"),"-i",audioPath,"-stream_loop","-1","-i",join(dir,music?'music.mp3':'music.wav'),"-filter_complex_threads","1","-filter_complex",filters,"-map","0:v","-map","[a]","-t",String(duration),"-c:v","copy","-c:a","aac","-b:a","192k","-ar","48000","-movflags","+faststart",join(dir,"final.mp4")],{timeout:180000,maxBuffer:1024*1024});
     const video=await readFile(join(dir,"final.mp4"));if(video.length>50*1024*1024)throw new AudioError(413,"Video 50 MB dan oshdi.");
     return {video,cover:await readFile(join(dir,"cover.jpg")),duration};

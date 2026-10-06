@@ -4,6 +4,12 @@ import { reelPackageSchema,reelDates,reelPublicationError } from "../../../share
 import { qomusReel } from "../../../shared/reels-qomus";
 import { reelComposition } from "./reels-composition";
 import { keywordMatch } from "../../../shared/media-growth";
+import { reelAudioFilters } from "./reels-render";
+import { execFile } from "node:child_process";
+import { promisify } from "node:util";
+test("original music and timed SFX graph is accepted by real FFmpeg",async()=>{
+  await promisify(execFile)('ffmpeg',['-v','error','-f','lavfi','-i','color=c=black:s=16x16:d=1','-f','lavfi','-i','sine=f=400:d=1','-f','lavfi','-i','sine=f=200:d=1','-filter_complex',reelAudioFilters(1,[.3,.6]),'-map','[a]','-t','1','-f','null','-'],{timeout:15000});
+});
 test("Reels source URLs, timeline and platform readiness are validated",()=>{
   assert.equal(reelPackageSchema.safeParse({...qomusReel,link_url:'http://invalid.test'}).success,false);
   assert.equal(reelPackageSchema.safeParse({...qomusReel,source_url:'not a URL'}).success,false);
