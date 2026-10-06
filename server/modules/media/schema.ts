@@ -71,6 +71,18 @@ export async function ensureMediaTables(sql: Pool | Client) {
       created_at TIMESTAMPTZ NOT NULL DEFAULT now(), UNIQUE(account_id,event_key)
     );
     ALTER TABLE media_interactions ADD COLUMN IF NOT EXISTS claimed_at TIMESTAMPTZ;
+    ALTER TABLE media_automations ADD COLUMN IF NOT EXISTS require_follow BOOLEAN NOT NULL DEFAULT false;
+    CREATE TABLE IF NOT EXISTS media_follow_requests (
+      id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+      account_id UUID NOT NULL REFERENCES media_accounts(id),
+      rule_id UUID NOT NULL REFERENCES media_automations(id) ON DELETE CASCADE,
+      source_event_id UUID NOT NULL UNIQUE REFERENCES media_interactions(id) ON DELETE CASCADE,
+      recipient_id TEXT, code TEXT NOT NULL UNIQUE,
+      status TEXT NOT NULL DEFAULT 'sending_prompt',
+      response TEXT NOT NULL, expires_at TIMESTAMPTZ NOT NULL DEFAULT now()+interval '7 days',
+      claimed_at TIMESTAMPTZ, created_at TIMESTAMPTZ NOT NULL DEFAULT now()
+    );
+    CREATE INDEX IF NOT EXISTS media_follow_requests_recipient ON media_follow_requests(account_id,recipient_id,status);
     CREATE TABLE IF NOT EXISTS media_insights (
       delivery_id UUID PRIMARY KEY REFERENCES media_deliveries(id) ON DELETE CASCADE,
       metrics JSONB NOT NULL DEFAULT '{}', errors JSONB NOT NULL DEFAULT '{}', collected_at TIMESTAMPTZ NOT NULL DEFAULT now()

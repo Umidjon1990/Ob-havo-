@@ -21,6 +21,10 @@ test('automation refuses empty answers and invalid message actions',()=>{
   assert.equal(automationSchema.safeParse({...v,action:'private_reply'}).success,false);
   assert.equal(automationSchema.safeParse({...v,action:'hide'}).success,false);
   assert.equal(automationSchema.parse(v).enabled,false);
+  assert.equal(automationSchema.parse(v).require_follow,false);
+  assert.ok(automationSchema.safeParse({...v,require_follow:true}).success);
+  assert.equal(automationSchema.safeParse({...v,trigger:'comment',require_follow:true}).success,false);
+  assert.equal(automationSchema.safeParse({...v,media_id:'333'}).success,false);
 });
 test('webhook validates raw bytes and rejects modified, unsigned or wrong-secret requests',()=>{
   const body=Buffer.from('{"object":"instagram"}'),secret='test-webhook-secret';
@@ -175,4 +179,83 @@ test('connection inspection is read-only and separates API comments from webhook
     permissionFails=true;
     const partial=await inspectInstagramConnection(a,identity);assert.equal(partial.permissions.known,false);assert.equal(partial.posts[0].comments.length,2);assert.ok(partial.errors.some(e=>e.startsWith('Token ruxsatlari:')));
   }finally{globalThis.fetch=original;}
+});
+
+
+test('post-scoped rules and strict follow gate bind Meta recipient, never release on unknown, and deliver once', {skip:!process.env.MEDIA_TEST_PGLITE_PATH},async()=>{
+  const {PGlite}=await import(process.env.MEDIA_TEST_PGLITE_PATH!);const db=new PGlite();
+  const {pool}=await import('../../db'),{ensureMediaTables}=await import('./schema');
+  const {seal,hashToken}=await import('./security'),{processInteractions}=await import('./growth');
+  const query=async(text:string,values?:any[])=>{
+    if(!values&&text.trim().split(';').filter(Boolean).length>1){await db.exec(text);return {rows:[],rowCount:0};}
+    const r=await db.query(text,values);return {...r,rowCount:r.affectedRows||r.rows?.length||0};
+  };
+  (pool as any).query=query;(pool as any).connect=async()=>({query,release(){}});
+  process.env.ADMIN_PASSWORD='test-password';await ensureMediaTables(pool);await ensureMediaTables(pool);
+  const a=(await pool.query("INSERT INTO media_accounts(platform,name,external_id,credentials,verified_at) VALUES('instagram','Test','111',$1,now()) RETURNING id",[seal({access_token:'test-follow-token'})])).rows[0];
+  const b=(await pool.query("INSERT INTO media_accounts(platform,name,external_id,credentials,verified_at) VALUES('instagram','Other','777',$1,now()) RETURNING id",[seal({access_token:'test-other-token'})])).rows[0];
+  await pool.query("INSERT INTO media_automations(account_id,title,trigger,keywords,action,response,enabled) VALUES($1,'General','comment',$2,'private_reply','General response',true)",[a.id,JSON.stringify(['lugat'])]);
+  const session='test-follow-session';await pool.query("INSERT INTO media_sessions(token_hash,expires_at) VALUES($1,now()+interval '1 hour')",[hashToken(session)]);
+  const express=(await import('express')).default,app=express();app.use(express.json());registerGrowthRoutes(app);
+  const server=app.listen(0,'127.0.0.1');await new Promise<void>(r=>server.once('listening',r));
+  const origin=`http://127.0.0.1:${(server.address() as any).port}`,nativeFetch=globalThis.fetch,sent:any[]=[],reads:string[]=[];
+  let follow:any=false,apiError=false,missingRecipient=false,ambiguousSend=false;
+  globalThis.fetch=(async(url:any,init:any)=>{
+    if(String(url).startsWith(origin))return nativeFetch(url,init);
+    if(String(url).includes('fields=is_user_follow_business')){
+      reads.push(String(url));return apiError?Response.json({error:{code:230}},{status:400}):Response.json({is_user_follow_business:follow});
+    }
+    assert.equal(init.method,'POST');
+    const body=JSON.parse(init.body);sent.push(body);
+    if(ambiguousSend)throw new Error('Connection interrupted after send');
+    return Response.json({...(!missingRecipient?{recipient_id:'900'}:{}),message_id:'sent'});
+  }) as any;
+  const adminHeaders={'Content-Type':'application/json',Authorization:`Bearer ${session}`};
+  const call=(path:string,method:string,body:any)=>nativeFetch(`${origin}/api/media/growth${path}`,{method,headers:adminHeaders,body:JSON.stringify(body)});
+  const response='Private lesson: https://example.org/gated-lesson';
+  const ruleInput={account_id:a.id,title:'Specific lesson',trigger:'comment',keywords:['lugat'],action:'private_reply',response,media_id:'333',enabled:true,require_follow:true};
+  let n=0;
+  const event=async(kind:'comment'|'message',text:string,sender='900',media='333',accountId=a.id)=>{
+    const row=(await pool.query(`INSERT INTO media_interactions(account_id,event_key,kind,external_id,sender_id,media_id,text,occurred_at)
+      VALUES($1,$2,$3,$4,$5,$6,$7,now()) RETURNING *`,[accountId,`test:${++n}`,kind,String(400+n),sender,kind==='comment'?media:'',text])).rows[0];
+    await processInteractions();return (await pool.query('SELECT * FROM media_interactions WHERE id=$1',[row.id])).rows[0];
+  };
+  const pending=async(sourceId:string)=>(await pool.query('SELECT * FROM media_follow_requests WHERE source_event_id=$1',[sourceId])).rows[0];
+  try{
+    const created=await call('/rules','POST',ruleInput);assert.equal(created.status,201);const rule=await created.json();assert.equal(rule.require_follow,true);
+    assert.equal((await call(`/rules/${rule.id}`,'PUT',{...ruleInput,account_id:b.id})).status,404);
+    const source=await event('comment','LUG‘AT','222');assert.equal(source.status,'awaiting_follow');assert.equal(sent.length,1);assert.equal(reads.length,0);
+    assert.ok(!sent[0].message.text.includes('https:'));assert.deepEqual(sent[0].recipient,{comment_id:source.external_id});
+    const p=await pending(source.id);assert.equal(p.recipient_id,'900');assert.notEqual(p.recipient_id,source.sender_id);
+    // A stolen code or even the original comment-author ID cannot unlock a DM.
+    await event('message',`OBUNA ${p.code}`,'222');await event('message',`OBUNA ${p.code}`,'901');await event('message',`OBUNA ${p.code}`,'900','',b.id);
+    assert.equal(sent.length,1);assert.equal(reads.length,0);
+    let e=await event('message',`OBUNA ${p.code}`);assert.equal(e.status,'awaiting_follow');assert.equal(sent.at(-1).message.text.includes(response),false);
+    for(const value of [undefined,'true',1]){
+      follow=value;e=await event('message',`OBUNA ${p.code}`);assert.equal(e.status,'follow_check_failed');assert.equal(sent.at(-1).message.text.includes('https:'),false);
+    }
+    apiError=true;e=await event('message','OBUNA');assert.equal(e.status,'follow_check_failed');assert.ok(e.error.includes('230'));assert.equal(sent.at(-1).message.text.includes('https:'),false);apiError=false;
+    follow=true;e=await event('message','OBUNA');assert.equal(e.status,'handled');assert.equal(sent.at(-1).message.text,response);assert.deepEqual(sent.at(-1).recipient,{id:'900'});
+    assert.ok(reads.every(url=>url.includes('/900?fields=')));assert.equal((await pending(source.id)).status,'delivered');
+    const count=sent.length;await event('message',`OBUNA ${p.code}`);await processInteractions();assert.equal(sent.length,count);
+    const wrongPost=await event('comment','LUGAT','222','444');assert.equal(wrongPost.response,'General response');
+    const scope=(await call(`/rules/${rule.id}`,'PATCH',{enabled:false}));assert.equal(scope.status,200);
+    let saved=(await pool.query('SELECT * FROM media_automations WHERE id=$1',[rule.id])).rows[0];assert.equal(saved.require_follow,true);assert.equal(saved.media_id,'333');
+    await call(`/rules/${rule.id}`,'PATCH',{enabled:true});
+    const oldSource=await event('comment','LUGAT','222'),old=await pending(oldSource.id);
+    assert.equal((await call(`/rules/${rule.id}`,'PUT',{...ruleInput,title:'Edited lesson',response:'https://example.org/new-lesson'})).status,200);
+    assert.equal((await pending(oldSource.id)).status,'cancelled');const before=sent.length;await event('message',`OBUNA ${old.code}`);assert.equal(sent.length,before);
+    const expiredSource=await event('comment','LUGAT','222'),expired=await pending(expiredSource.id);
+    await pool.query("UPDATE media_follow_requests SET expires_at=now()-interval '1 second' WHERE id=$1",[expired.id]);const expiredCount=sent.length;await event('message',`OBUNA ${expired.code}`);assert.equal(sent.length,expiredCount);assert.equal((await pending(expiredSource.id)).status,'expired');
+    const disabledSource=await event('comment','LUGAT','222'),disabled=await pending(disabledSource.id);
+    await call(`/rules/${rule.id}`,'PATCH',{enabled:false});const disabledCount=sent.length;await event('message',`OBUNA ${disabled.code}`);assert.equal(sent.length,disabledCount);
+    await call(`/rules/${rule.id}`,'PATCH',{enabled:true});
+    missingRecipient=true;const missing=await event('comment','LUGAT','222');assert.equal(missing.status,'needs_review');assert.equal((await pending(missing.id)).status,'needs_review');assert.equal(sent.at(-1).message.text.includes('https:'),false);missingRecipient=false;
+    ambiguousSend=true;const ambiguous=await event('comment','LUGAT','222');assert.equal(ambiguous.status,'needs_review');const afterAmbiguous=sent.length;await processInteractions();assert.equal(sent.length,afterAmbiguous);ambiguousSend=false;
+    const dmCreated=await call('/rules','POST',{...ruleInput,title:'DM lesson',trigger:'message',action:'reply',keywords:['dars'],media_id:''});assert.equal(dmCreated.status,201);
+    follow=false;const dm=await event('message','DARS');assert.equal(dm.status,'awaiting_follow');assert.equal(sent.at(-1).message.text.includes('https:'),false);
+    follow=true;await event('message','DARS');assert.equal(sent.at(-1).message.text,response);
+    // Editing/deleting rules cannot release their old material requests.
+    await call(`/rules/${rule.id}`,'DELETE',{});assert.equal((await pool.query('SELECT * FROM media_follow_requests WHERE rule_id=$1',[rule.id])).rows.length,0);
+  }finally{globalThis.fetch=nativeFetch;await new Promise<void>(r=>server.close(()=>r()));await db.close();}
 });

@@ -1,5 +1,5 @@
 import type { Express, Request, Response } from 'express';
-import { createHmac, timingSafeEqual } from 'node:crypto';
+import { createHmac, randomBytes, timingSafeEqual } from 'node:crypto';
 import { z } from 'zod';
 import { pool } from '../../db';
 import { seal, unseal, requireAdmin, equalSecret } from './security';
@@ -170,12 +170,24 @@ export function registerGrowthRoutes(app:Express){
   }));
   app.post('/api/media/growth/rules',wrap(async(req,res)=>{
     const v=automationSchema.parse(req.body);await account(v.account_id);
-    const r=await pool.query(`INSERT INTO media_automations(account_id,title,trigger,keywords,action,response,media_id,enabled)
-      VALUES($1,$2,$3,$4,$5,$6,$7,$8) RETURNING *`,[v.account_id,v.title,v.trigger,JSON.stringify(v.keywords),v.action,v.response,v.media_id||'',v.enabled]);res.status(201).json(r.rows[0]);
+    const r=await pool.query(`INSERT INTO media_automations(account_id,title,trigger,keywords,action,response,media_id,enabled,require_follow)
+      VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9) RETURNING *`,[v.account_id,v.title,v.trigger,JSON.stringify(v.keywords),v.action,v.response,v.media_id||'',v.enabled,v.require_follow]);res.status(201).json(r.rows[0]);
+  }));
+  app.put('/api/media/growth/rules/:id',wrap(async(req,res)=>{
+    const v=automationSchema.parse(req.body),ruleId=id.parse(req.params.id),client=await pool.connect();
+    try{await client.query('BEGIN');
+      const r=await client.query(`UPDATE media_automations SET title=$3,trigger=$4,keywords=$5,action=$6,response=$7,media_id=$8,enabled=$9,require_follow=$10
+        WHERE id=$1 AND account_id=$2 RETURNING *`,[ruleId,v.account_id,v.title,v.trigger,JSON.stringify(v.keywords),v.action,v.response,v.media_id||'',v.enabled,v.require_follow]);
+      if(!r.rowCount)throw new GrowthError('Qoida shu hisobda topilmadi.',404);
+      // An old request must never pick up a different lesson after an edit.
+      await client.query("UPDATE media_follow_requests SET status='cancelled' WHERE rule_id=$1 AND status IN ('sending_prompt','awaiting_follow','checking')",[ruleId]);
+      await client.query('COMMIT');res.json(r.rows[0]);
+    }catch(e){await client.query('ROLLBACK');throw e;}finally{client.release();}
   }));
   app.patch('/api/media/growth/rules/:id',wrap(async(req,res)=>{
     const v=z.object({enabled:z.boolean()}).parse(req.body);
     const r=await pool.query('UPDATE media_automations SET enabled=$2 WHERE id=$1 RETURNING id',[id.parse(req.params.id),v.enabled]);
+    if(r.rowCount&&!v.enabled)await pool.query("UPDATE media_follow_requests SET status='cancelled' WHERE rule_id=$1 AND status IN ('sending_prompt','awaiting_follow','checking')",[req.params.id]);
     if(!r.rowCount)throw new GrowthError('Qoida topilmadi.',404);res.json({ok:true});
   }));
   app.delete('/api/media/growth/rules/:id',wrap(async(req,res)=>{
@@ -184,7 +196,7 @@ export function registerGrowthRoutes(app:Express){
   app.post('/api/media/growth/events/:id/action',wrap(async(req,res)=>{
     const input=z.object({action:z.enum(['reply','private_reply','hide','delete']),response:z.string().max(1000).default('')}).parse(req.body);
     if(['reply','private_reply'].includes(input.action)&&!input.response.trim())throw new GrowthError('Javob matni kerak.');
-    const e=(await pool.query("UPDATE media_interactions SET status='processing',claimed_at=now(),error=NULL WHERE id=$1 AND status NOT IN ('processing','handled','needs_review') RETURNING *",[id.parse(req.params.id)])).rows[0];
+    const e=(await pool.query("UPDATE media_interactions SET status='processing',claimed_at=now(),error=NULL WHERE id=$1 AND status NOT IN ('processing','handled','needs_review','awaiting_follow','follow_check_failed') RETURNING *",[id.parse(req.params.id)])).rows[0];
     if(!e)throw new GrowthError('Bu xabar ko‘rib chiqilgan yoki bajarilmoqda.',409);
     await executeInteraction(e,input);res.json({ok:true});
   }));
@@ -198,11 +210,94 @@ export function registerGrowthRoutes(app:Express){
     }catch(e){await client.query('ROLLBACK');throw e;}finally{client.release();}
   }));
 }
-async function executeInteraction(e:any,rule:{action:string;response:string}){
+type ReplyRule={id?:string;action:string;response:string;require_follow?:boolean};
+type FollowResult={state:'following'|'not_following'|'unknown';error?:string};
+export async function readInstagramFollow(a:any,senderId:string):Promise<FollowResult>{
+  try{
+    const r=await instagramRequest(a,`${external.parse(senderId)}?fields=is_user_follow_business`);
+    // Only Meta's explicit boolean true unlocks material. Missing fields,
+    // strings and API errors are never treated as a successful follow check.
+    if(r.is_user_follow_business===true)return {state:'following'};
+    if(r.is_user_follow_business===false)return {state:'not_following'};
+    return {state:'unknown',error:'Meta obuna holatini tasdiqlamadi.'};
+  }catch(e){return {state:'unknown',error:e instanceof GrowthError?e.message:'Obuna holati tekshirilmadi.'};}
+}
+const followPrompt=(code:string)=>`📚 Materialni olish uchun Instagram profilimizga obuna bo‘ling.\n\nSo‘ng shu Directga OBUNA ${code} deb javob yozing. Obunangiz tasdiqlangach, havola yuboriladi.`;
+async function interactionResult(eventId:string,status:string,response:string,error:string|null=null){
+  await pool.query('UPDATE media_interactions SET status=$2,response=$3,error=$4 WHERE id=$1',[eventId,status,response,error]);
+}
+async function beginFollowRequest(a:any,e:any,rule:ReplyRule,check?:FollowResult){
+  if(!rule.id)throw new GrowthError('Obuna qoidasi topilmadi.');
+  const p=(await pool.query(`INSERT INTO media_follow_requests(account_id,rule_id,source_event_id,recipient_id,code,response,claimed_at)
+    VALUES($1,$2,$3,$4,$5,$6,now()) ON CONFLICT(source_event_id) DO NOTHING RETURNING *`,
+    [a.id,rule.id,e.id,e.kind==='message'?external.parse(e.sender_id):null,randomBytes(5).toString('hex').toUpperCase(),rule.response])).rows[0];
+  if(!p)throw new GrowthError('Bu material so‘rovi avval bajarilgan. Natijani tekshiring.',409,true);
+  let sent=false;
+  try{
+    const text=followPrompt(p.code);
+    const result=await instagramRequest(a,`${a.external_id}/messages`,'POST',{recipient:e.kind==='comment'?{comment_id:external.parse(e.external_id)}:{id:e.sender_id},message:{text}});sent=true;
+    // A comment author ID need not be their messaging ID. Bind continuation
+    // only to the recipient Meta returned for the accepted private reply.
+    const recipient=e.kind==='message'?e.sender_id:result.recipient_id;
+    if(typeof recipient!=='string'||!/^\d+$/.test(recipient))throw new GrowthError('Direct yuborildi, lekin Meta qabul qiluvchi ID sini tasdiqlamadi. Havola berilmadi.',502,true);
+    const saved=await pool.query("UPDATE media_follow_requests SET recipient_id=$2,status='awaiting_follow' WHERE id=$1 AND status='sending_prompt' RETURNING id",[p.id,recipient]);
+    if(!saved.rowCount)throw new GrowthError('Qoida o‘zgardi. Eski material so‘rovi bekor qilindi.',409,true);
+    await interactionResult(e.id,check?.state==='unknown'?'follow_check_failed':'awaiting_follow',text,check?.error||null);
+  }catch(err){
+    const ambiguous=sent||err instanceof GrowthError&&err.ambiguous;
+    await pool.query("UPDATE media_follow_requests SET status=$2 WHERE id=$1 AND status='sending_prompt'",[p.id,ambiguous?'needs_review':'failed']);
+    if(ambiguous&&!(err instanceof GrowthError&&err.ambiguous))throw new GrowthError('Direct natijasi noaniq. Havola yuborilmadi; Instagramdagi natijani tekshiring.',502,true);
+    throw err;
+  }
+}
+async function continueFollowRequest(e:any):Promise<boolean>{
+  if(e.kind!=='message')return false;
+  const match=/^OBUNA(?:\s+([A-F0-9]{10}))?[.!]?$/i.exec(e.text.trim());if(!match)return false;
+  const candidates=(await pool.query(`SELECT p.* FROM media_follow_requests p JOIN media_automations r ON r.id=p.rule_id
+    WHERE p.account_id=$1 AND p.recipient_id=$2 AND p.status='awaiting_follow' AND p.expires_at>now()
+      AND r.enabled AND r.require_follow AND ($3::text IS NULL OR p.code=$3) ORDER BY p.created_at DESC LIMIT 2`,[e.account_id,e.sender_id,match[1]?.toUpperCase()||null])).rows;
+  if(!candidates.length){await interactionResult(e.id,'manual','','Faol material so‘rovi topilmadi. Postga kalit so‘zni qayta yozing.');return true;}
+  const a=await account(e.account_id);
+  if(!withinWindow('message',e.occurred_at)){await interactionResult(e.id,'failed','','Javob berish muddati tugagan.');return true;}
+  if(candidates.length>1){
+    const text='Bir nechta material so‘rovingiz bor. Kerakli xabardagi OBUNA so‘zini kodi bilan birga yuboring.';
+    await instagramRequest(a,`${a.external_id}/messages`,'POST',{recipient:{id:e.sender_id},message:{text}});
+    await interactionResult(e.id,'awaiting_follow',text);return true;
+  }
+  const p=(await pool.query("UPDATE media_follow_requests SET status='checking',claimed_at=now() WHERE id=$1 AND status='awaiting_follow' AND expires_at>now() RETURNING *",[candidates[0].id])).rows[0];
+  if(!p){await interactionResult(e.id,'manual','','Material so‘rovi hozir tekshirilmoqda.');return true;}
+  let sent=false;
+  try{
+    const check=await readInstagramFollow(a,e.sender_id);
+    const active=(await pool.query(`SELECT 1 FROM media_follow_requests p JOIN media_automations r ON r.id=p.rule_id
+      WHERE p.id=$1 AND p.status='checking' AND p.expires_at>now() AND r.enabled AND r.require_follow`,[p.id])).rowCount;
+    if(!active){await interactionResult(e.id,'manual','','Qoida o‘zgardi yoki so‘rov muddati tugadi. Postga kalit so‘zni qayta yozing.');return true;}
+    const text=check.state==='following'?p.response:check.state==='not_following'
+      ?`Obunangiz hali tasdiqlanmadi. Instagram profilimizga obuna bo‘lib, OBUNA ${p.code} deb yana yozing.`
+      :`Obunangizni hozir tekshira olmadik. Havola yuborilmadi. Birozdan keyin OBUNA ${p.code} deb qayta yozing.`;
+    await instagramRequest(a,`${a.external_id}/messages`,'POST',{recipient:{id:e.sender_id},message:{text}});sent=true;
+    const status=check.state==='following'?'handled':check.state==='unknown'?'follow_check_failed':'awaiting_follow';
+    await pool.query("UPDATE media_follow_requests SET status=$2 WHERE id=$1 AND status='checking'",[p.id,check.state==='following'?'delivered':'awaiting_follow']);
+    await interactionResult(p.source_event_id,status,text,check.error||null);
+    await interactionResult(e.id,status,text,check.error||null);
+  }catch(err){
+    const ambiguous=sent||err instanceof GrowthError&&err.ambiguous;
+    await pool.query("UPDATE media_follow_requests SET status=$2 WHERE id=$1 AND status='checking'",[p.id,ambiguous?'needs_review':'failed']);
+    await interactionResult(e.id,ambiguous?'needs_review':'failed','',err instanceof GrowthError?err.message:'Obuna jarayoni bajarilmadi.');
+    await interactionResult(p.source_event_id,ambiguous?'needs_review':'failed','',err instanceof GrowthError?err.message:'Obuna jarayoni bajarilmadi.');
+  }
+  return true;
+}
+async function executeInteraction(e:any,rule:ReplyRule){
   try{
     const a=await account(e.account_id);
     if(!withinWindow(e.kind,e.occurred_at))throw new GrowthError('Javob berish muddati tugagan.');
     if(e.kind==='message'&&rule.action!=='reply')throw new GrowthError('Direct uchun bu amal mumkin emas.');
+    if(rule.require_follow){
+      if(e.kind==='comment'){await beginFollowRequest(a,e,rule);return;}
+      const check=await readInstagramFollow(a,e.sender_id);
+      if(check.state!=='following'){await beginFollowRequest(a,e,rule,check);return;}
+    }
     if(e.kind==='message')await instagramRequest(a,`${a.external_id}/messages`,'POST',{recipient:{id:e.sender_id},message:{text:rule.response}});
     else if(rule.action==='private_reply')await instagramRequest(a,`${a.external_id}/messages`,'POST',{recipient:{comment_id:e.external_id},message:{text:rule.response}});
     else if(rule.action==='reply')await instagramRequest(a,`${external.parse(e.external_id)}/replies`,'POST',{message:rule.response});
@@ -213,16 +308,23 @@ async function executeInteraction(e:any,rule:{action:string;response:string}){
 }
 let busy=false;
 export async function processInteractions(){
-  if(busy)return;busy=true;
+  if(busy)return;busy=true;let currentEvent:any;
   try{
     await pool.query("UPDATE media_interactions SET status='needs_review',error='Jarayon uzilgan. Instagramdagi natijani tekshiring.' WHERE status='processing' AND claimed_at<now()-interval '10 minutes'");
+    await pool.query("UPDATE media_follow_requests SET status='needs_review' WHERE status IN ('sending_prompt','checking') AND claimed_at<now()-interval '10 minutes'");
+    await pool.query("UPDATE media_follow_requests SET status='expired' WHERE status='awaiting_follow' AND expires_at<=now()");
     const e=(await pool.query("UPDATE media_interactions SET status='processing',claimed_at=now() WHERE id=(SELECT id FROM media_interactions WHERE status='received' ORDER BY created_at FOR UPDATE SKIP LOCKED LIMIT 1) RETURNING *")).rows[0];
     if(!e)return;
-    const rules=(await pool.query('SELECT * FROM media_automations WHERE account_id=$1 AND trigger=$2 AND enabled ORDER BY created_at',[e.account_id,e.kind])).rows;
+    currentEvent=e;
+    if(await continueFollowRequest(e))return;
+    const rules=(await pool.query("SELECT * FROM media_automations WHERE account_id=$1 AND trigger=$2 AND enabled ORDER BY (media_id<>'') DESC,created_at",[e.account_id,e.kind])).rows;
     const rule=rules.find(r=>(!r.media_id||r.media_id===e.media_id)&&keywordMatch(e.text,r.keywords));
     if(!rule){await pool.query("UPDATE media_interactions SET status='manual' WHERE id=$1",[e.id]);return;}
     await executeInteraction(e,rule);
-  }catch{console.error('Instagram interaction processing failed.');}finally{busy=false;}
+  }catch(err){
+    if(currentEvent)await pool.query("UPDATE media_interactions SET status=$2,error=$3 WHERE id=$1 AND status='processing'",[currentEvent.id,err instanceof GrowthError&&err.ambiguous?'needs_review':'failed',err instanceof GrowthError?err.message:'Amal bajarilmadi.']);
+    console.error('Instagram interaction processing failed.');
+  }finally{busy=false;}
 }
 
 let insightsBusy=false;

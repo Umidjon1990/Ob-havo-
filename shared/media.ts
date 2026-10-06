@@ -63,6 +63,7 @@ export type MediaDelivery = {
   scheduled_at: string;
   error: string | null;
   external_url: string | null;
+  external_id?: string | null;
   attempts: number;
   published_at: string | null;
 };

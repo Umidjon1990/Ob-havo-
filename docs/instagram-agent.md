@@ -5,7 +5,9 @@ The private admin has an Instagram agent section. Weather and weekly-test routes
 ## Available
 
 - Approved keyword responses for comments and inbound Direct messages. Unknown questions stay in the inbox for manual response. No invented prices or course details.
-- Comment private replies, public replies, manual hiding and deletion; keyword hiding rules. Rules start disabled unless explicitly enabled when saved. The oldest matching enabled rule wins.
+- Comment private replies, public replies, manual hiding and deletion; keyword hiding rules. Rules start disabled unless explicitly enabled when saved. Post-scoped matching rules take precedence over account-wide rules; the oldest match within that scope wins.
+- Per-post keyword/material configuration, published Instagram post selection and editing. The same keyword can map to different lessons on different posts. Direct-only rules have no post context and should use a distinct keyword for each lesson.
+- Optional strict follow requirement for material DMs. New form entries suggest this requirement; existing rules remain unchanged until edited. No material is released unless Meta returns boolean `is_user_follow_business: true` for the inbound messaging sender.
 - Signed Instagram webhook ingestion, account matching, echo filtering and durable event deduplication. Actions are claimed before sending. An interrupted or ambiguous write needs review and is not automatically retried.
 - Private replies expire after seven days; message replies after 24 hours from that inbound event. One handled event cannot send a second answer.
 - Background media insight collection for the last 30 Instagram deliveries published by this system. Each metric is independent; missing values are not shown as zero. Latest saved-count ranking and hook text appear in the panel.
@@ -31,6 +33,16 @@ The private panel shows the last signature-verified receipt time and matched/par
 
 The optional comment/permission check reads the token's permission list and up to ten comments on each of the five most recent account posts. It distinguishes owner comments where Meta returns author identifiers. Unsupported or failed permission introspection remains unknown, not denied. A bounded author-field fallback applies only to Graph error 100. These fetched comments remain an explicit read-only diagnostic: they do not populate the webhook inbox, enqueue jobs, send responses or enable rules.
 
+## Per-post material and follow requirement
+
+In Instagram agent, choose **Izoh**, the published post under **Qaysi post uchun?**, the comma-separated keywords, **Directga material yuborish**, and the final reply containing that lesson's URL. Enable **Obuna shart** and **Saqlangach avtomatik ishlasin**, then save. Use **Tahrirlash** to change the URL or keywords later. Full edits cancel outstanding requests for the previous rule version; disabling also cancels them. They cannot unlock a different lesson.
+
+A gated comment first receives one private reply without the lesson URL, asking the recipient to follow the profile and answer `OBUNA CODE` in Direct. The returned Meta `recipient_id` binds that durable request to the actual messaging recipient; the comment author ID is never assumed to be their messaging ID. Missing recipient identity or an ambiguous write requires review and does not retry automatically.
+
+The recipient's fresh Direct reply initiates `GET /{sender_id}?fields=is_user_follow_business` on the configured Instagram Login API. Boolean true releases the saved response once, false asks them to follow and retry, and missing fields, unexpected values or API errors hold the URL and show a follow-check error in the panel. A typed “OBUNA” is a request to check, never evidence of following. Standalone `OBUNA` works when exactly one active material request exists for that account and recipient; with multiple requests the supplied code identifies the lesson. Requests expire after seven days, and continuations still require the inbound 24-hour message window. Another account, sender, expired request or disabled/deleted rule cannot release the saved material.
+
+An already-following sender matching a gated Direct-only rule can receive the material immediately after the explicit check. Follow status is not polled in the background. Production availability of the profile field and messaging consent must be verified with a real inbound Direct from the same test recipient; passing mocked tests alone does not establish token eligibility.
+
 ## Public information URLs
 
 The server serves `/privacy` and `/data-deletion` as public UTF-8 HTML before API authentication and the SPA fallback. They require no login, JavaScript or database query. Both have Uzbek and English text and use the operator contact shown in the Meta app: `umidjonabdurayimov04@gmail.com`.
@@ -45,4 +57,4 @@ npm run check
 node --import tsx script/build.ts
 MEDIA_TEST_PGLITE_PATH=/absolute/path/to/@electric-sql/pglite/dist/index.js npm run test:media
 
-API mocks verify signed callbacks, duplicate delivery, approved answers and partial insight failures. These tests do not prove that a production Meta token has the required permissions. AI text review is advisory; pixel-level crop, Arabic glyph appearance, voice identity and narration/music intelligibility still need visual or listening review.
+API mocks verify signed callbacks, duplicate delivery, approved answers, partial insight failures, post-scoped precedence and follow-gated delivery. Follow tests cover false/missing/non-boolean/error results, Meta recipient binding, wrong sender/account, duplicate continuation, expiry, rule edits/disabling/deletion and ambiguous sends. These tests do not prove that a production Meta token has the required permissions. AI text review is advisory; pixel-level crop, Arabic glyph appearance, voice identity and narration/music intelligibility still need visual or listening review.

@@ -1,6 +1,7 @@
 import { useEffect,useState } from 'react';
 import { mediaApi,type MediaData,tashkentDate } from './api';
-const initial={title:'',trigger:'comment',keywords:'LUG‘AT',action:'private_reply',response:'',media_id:'',enabled:false};
+const initial={title:'',trigger:'comment',keywords:'LUG‘AT',action:'private_reply',response:'',media_id:'',enabled:false,require_follow:true};
+const eventStatus:Record<string,string>={received:'Navbatda',processing:'Bajarilmoqda',manual:'Ko‘rib chiqish kerak',handled:'Yuborildi',failed:'Xatolik',needs_review:'Natijani tekshirish kerak',awaiting_follow:'Obuna va Direct javobi kutilmoqda',follow_check_failed:'Obuna tasdiqlanmadi — havola berilmadi'};
 export default function GrowthStudio({data,onSaved}:{data:MediaData;onSaved:()=>Promise<void>}){
   const [state,setState]=useState<any>(null),[error,setError]=useState(''),[notice,setNotice]=useState(''),[busy,setBusy]=useState(false);
   const [account,setAccount]=useState(data.accounts.find(a=>a.platform==='instagram')?.id||'');
@@ -8,6 +9,8 @@ export default function GrowthStudio({data,onSaved}:{data:MediaData;onSaved:()=>
   const [postId,setPostId]=useState(data.posts[0]?.id||''),[platform,setPlatform]=useState('instagram'),[quality,setQuality]=useState<any>(null),[review,setReview]=useState('');
   const [selectedEvent,setSelectedEvent]=useState(''),[reply,setReply]=useState('');
   const [connection,setConnection]=useState<any>(null);
+  const [editing,setEditing]=useState('');
+  const publishedPosts=data.posts.flatMap(p=>p.deliveries.filter(d=>d.account_id===account&&d.platform==='instagram'&&d.status==='published'&&d.external_id).map(d=>({id:d.external_id!,title:p.title,url:d.external_url})));
   async function reload(){setState(await mediaApi('/growth'));}
   useEffect(()=>{void reload().catch(e=>setError(e.message));},[]);
   async function perform(fn:()=>Promise<any>,message:string){setBusy(true);setError('');setNotice('');try{await fn();await reload();setNotice(message);}catch(e){setError(e instanceof Error?e.message:'Amal bajarilmadi.');}finally{setBusy(false);}}
@@ -16,7 +19,7 @@ export default function GrowthStudio({data,onSaved}:{data:MediaData;onSaved:()=>
   return <div className="growth-studio">
     {error&&<div role="alert" className="media-alert">{error}</div>}{notice&&<div role="status" className="media-alert media-success">{notice}</div>}
     <section className="media-panel"><h2>Instagram agent</h2><p>Izohlar, Direct, statistika va sifat nazorati. Javob qoidalarini istalgan payt o‘chirishingiz mumkin.</p>
-      <label className="media-field"><span>Instagram hisob</span><select className={input} value={account} onChange={e=>{setAccount(e.target.value);setConnection(null);}}>{data.accounts.filter(a=>a.platform==='instagram').map(a=><option key={a.id} value={a.id}>{a.name}</option>)}</select></label>
+      <label className="media-field"><span>Instagram hisob</span><select className={input} disabled={!!editing} value={account} onChange={e=>{setAccount(e.target.value);setForm(initial);setConnection(null);}}>{data.accounts.filter(a=>a.platform==='instagram').map(a=><option key={a.id} value={a.id}>{a.name}</option>)}</select></label>
       <div className="media-actions">{button('Ulanishni tekshirish',()=>void perform(async()=>setConnection(await mediaApi('/growth/connection-check','POST',{account_id:account})),'Hisob ID va Meta obunasi tekshirildi.'),busy||!account)}
         {button('Izohlar va ruxsatlarni tekshirish',()=>void perform(async()=>setConnection(await mediaApi('/growth/connection-check','POST',{account_id:account,inspect:true})),'Meta diagnostikasi yakunlandi.'),busy||!account)}</div>
       {connection&&<div className="growth-check"><strong>{connection.identity.username} · Hisob tasdiqlandi</strong><p>Webhook uchun professional hisob ID: {connection.identity.user_id}</p>
@@ -48,25 +51,35 @@ export default function GrowthStudio({data,onSaved}:{data:MediaData;onSaved:()=>
         <p>Meta ilovasining asosiy sozlamalari uchun: <a href="/privacy" target="_blank" rel="noopener noreferrer">Maxfiylik siyosati</a> · <a href="/data-deletion" target="_blank" rel="noopener noreferrer">Ma’lumotlarni o‘chirish yo‘riqnomasi</a>.</p>
       </details>
     </section>
-    <section className="media-panel"><h2>Kalit so‘z va Direct javoblari</h2><p>“LUG‘AT”, “KITOB”, “KURS” uchun havola yoki aniq javob yozing. Direct savollariga tasdiqlangan matnlar bilan javob beriladi; noma’lum savollar kiruvchi xabarlarda qoladi.</p>
-      <form onSubmit={e=>{e.preventDefault();void perform(async()=>{await mediaApi('/growth/rules','POST',{...form,account_id:account,keywords:form.keywords.split(',').map(k=>k.trim()).filter(Boolean)});setForm(initial);},'Javob qoidasi qo‘shildi.');}}>
+    <section className="media-panel" id="instagram-rules"><h2>Kalit so‘z va Direct javoblari</h2><p>Har postni o‘z kalit so‘zi va material havolasiga bog‘lang. Turli postlarda bir xil “LUG‘AT” so‘zidan foydalanishingiz mumkin.</p>
+      {editing&&<h3>Qoidani tahrirlash</h3>}
+      <form onSubmit={e=>{e.preventDefault();void perform(async()=>{await mediaApi(editing?`/growth/rules/${editing}`:'/growth/rules',editing?'PUT':'POST',{...form,account_id:account,keywords:form.keywords.split(',').map(k=>k.trim()).filter(Boolean)});setForm(initial);setEditing('');},editing?'Qoida saqlandi. Eski obuna so‘rovlari bekor qilindi.':'Javob qoidasi qo‘shildi.');}}>
         <div className="media-form-grid">
           <label className="media-field"><span>Qoida nomi</span><input className={input} required maxLength={100} value={form.title} onChange={e=>setForm({...form,title:e.target.value})}/></label>
-          <label className="media-field"><span>Qayerdan keladi?</span><select className={input} value={form.trigger} onChange={e=>setForm({...form,trigger:e.target.value,action:e.target.value==='message'?'reply':'private_reply'})}><option value="comment">Izoh</option><option value="message">Direct</option></select></label>
+          <label className="media-field"><span>Qayerdan keladi?</span><select className={input} value={form.trigger} onChange={e=>setForm({...form,trigger:e.target.value,action:e.target.value==='message'?'reply':'private_reply',media_id:''})}><option value="comment">Izoh</option><option value="message">Direct</option></select></label>
           <label className="media-field"><span>Kalit so‘zlar (vergul bilan)</span><input className={input} required value={form.keywords} onChange={e=>setForm({...form,keywords:e.target.value})}/></label>
-          <label className="media-field"><span>Amal</span><select className={input} value={form.action} onChange={e=>setForm({...form,action:e.target.value})}><option value="reply">Javob berish</option>{form.trigger==='comment'&&<><option value="private_reply">Directga material yuborish</option><option value="hide">Izohni yashirish</option></>}</select></label>
+          <label className="media-field"><span>Amal</span><select className={input} value={form.action} onChange={e=>setForm({...form,action:e.target.value,require_follow:form.trigger==='message'||e.target.value==='private_reply'?form.require_follow:false})}><option value="reply">Javob berish</option>{form.trigger==='comment'&&<><option value="private_reply">Directga material yuborish</option><option value="hide">Izohni yashirish</option></>}</select></label>
         </div>
-        {form.trigger==='comment'&&<label className="media-field"><span>Faqat bitta post uchun Media ID (ixtiyoriy)</span><input className={input} pattern="[0-9]*" value={form.media_id} onChange={e=>setForm({...form,media_id:e.target.value})}/><small>Bo‘sh qolsa, hisobdagi yangi izohlarga qo‘llanadi.</small></label>}
+        {form.trigger==='comment'&&<>
+          <label className="media-field" htmlFor="growth-post"><span>Qaysi post uchun?</span><select id="growth-post" className={input} value={publishedPosts.some(p=>p.id===form.media_id)?form.media_id:form.media_id?'custom':''} onChange={e=>setForm({...form,media_id:e.target.value==='custom'?'0':e.target.value})}>
+            <option value="">Barcha postlar — umumiy javob</option>{publishedPosts.map(p=><option key={p.id} value={p.id}>{p.title}</option>)}<option value="custom">Boshqa post — ID kiritish</option>
+          </select><small>Bitta dars havolasi uchun aynan o‘sha postni tanlang.</small></label>
+          {form.media_id&&!publishedPosts.some(p=>p.id===form.media_id)&&<label className="media-field" htmlFor="growth-media-id"><span>Instagram post ID</span><input id="growth-media-id" className={input} required pattern="[0-9]+" value={form.media_id==='0'?'':form.media_id} onChange={e=>setForm({...form,media_id:e.target.value||'0'})}/></label>}
+        </>}
         {form.action!=='hide'&&<label className="media-field"><span>Tayyor javob yoki material havolasi</span><textarea className={input} rows={4} required maxLength={1000} value={form.response} onChange={e=>setForm({...form,response:e.target.value})}/></label>}
+        {(form.trigger==='message'||form.action==='private_reply')&&<div className="growth-check"><label htmlFor="growth-follow"><input id="growth-follow" type="checkbox" checked={form.require_follow} onChange={e=>setForm({...form,require_follow:e.target.checked})}/> <strong>Obuna shart — tasdiqlanmaguncha havola berilmasin</strong></label>
+          <p>Izoh yozgan o‘quvchiga avval havolasiz Direct yuboriladi. U obuna bo‘lib, OBUNA deb javob yozgach tekshiriladi. Meta holatni tasdiqlay olmasa, material yuborilmaydi.</p>
+        </div>}
+        {form.trigger==='message'&&<p>Directda post aniqlanmaydi. Har bir dars uchun boshqa kalit so‘z ishlating yoki izohdan boshlangan obuna so‘roviga javobni kuting.</p>}
         <label><input type="checkbox" checked={form.enabled} onChange={e=>setForm({...form,enabled:e.target.checked})}/> Saqlangach avtomatik ishlasin</label>
-        <div className="media-actions"><button className="media-btn" disabled={busy||!account}>Qoida qo‘shish</button></div>
+        <div className="media-actions"><button className="media-btn" disabled={busy||!account||form.media_id==='0'}>{editing?'O‘zgarishlarni saqlash':'Qoida qo‘shish'}</button>{editing&&button('Tahrirlashni bekor qilish',()=>{setEditing('');setForm(initial);})}</div>
       </form>
-      <p>Izohdan bir marta shaxsiy javob: 7 kun ichida. Direct avtomatik javobi: o‘quvchining xabaridan keyin 24 soat ichida. Bir nechta qoida mos kelsa, eng avval yaratilgani ishlaydi.</p>
-      {state?.rules.map((r:any)=><div className="growth-row" key={r.id}><div><strong>{r.title}</strong><p>{r.trigger==='message'?'Direct':'Izoh'} · {r.keywords.join(', ')} · {r.response||'Yashirish'}</p></div><div className="media-actions">{button(r.enabled?'O‘chirish':'Yoqish',()=>void perform(()=>mediaApi(`/growth/rules/${r.id}`,'PATCH',{enabled:!r.enabled}),'Qoida yangilandi.'))}{button('Olib tashlash',()=>void perform(()=>mediaApi(`/growth/rules/${r.id}`,'DELETE'),'Qoida olib tashlandi.'))}</div></div>)}
+      <p>Avval aynan postga bog‘langan qoida tanlanadi. Bir xil post va kalit so‘zga bir nechta qoida yaratsangiz, eng avval yaratilgani ishlaydi. Obuna so‘rovi 7 kun amal qiladi; javob faqat o‘quvchining yangi Directidan keyin yuboriladi.</p>
+      {state?.rules.filter((r:any)=>r.account_id===account).map((r:any)=><div className="growth-row" key={r.id}><div><strong>{r.title}</strong><p>{r.trigger==='message'?'Direct':'Izoh'} · {r.keywords.join(', ')} · {r.require_follow?'🔒 Obuna shart':'Obuna shartisiz'}</p><p>{r.media_id?`Post: ${publishedPosts.find(p=>p.id===r.media_id)?.title||r.media_id}`:r.trigger==='comment'?'Barcha postlar':'Direct kalit so‘zi'}</p><p style={{whiteSpace:'pre-wrap'}}>{r.response||'Yashirish'}</p></div><div className="media-actions">{button('Tahrirlash',()=>{setEditing(r.id);setForm({title:r.title,trigger:r.trigger,keywords:r.keywords.join(', '),action:r.action,response:r.response,media_id:r.media_id,enabled:r.enabled,require_follow:!!r.require_follow});document.getElementById('instagram-rules')?.scrollIntoView({behavior:'smooth',block:'start'});})}{button(r.enabled?'O‘chirish':'Yoqish',()=>void perform(()=>mediaApi(`/growth/rules/${r.id}`,'PATCH',{enabled:!r.enabled}),'Qoida yangilandi.'))}{button('Olib tashlash',()=>void perform(()=>mediaApi(`/growth/rules/${r.id}`,'DELETE'),'Qoida olib tashlandi.'))}</div></div>)}
     </section>
     <section className="media-panel"><div className="media-actions"><h2>Kiruvchi izohlar va Direct</h2>{button('Yangilash',()=>void perform(async()=>{},'Yangilandi.'))}</div>
       {!state?.events.length&&<p>Hali xabar yo‘q. Webhookni ulab, boshqa hisobdan izoh yoki Direct yuborib sinang.</p>}
-      {state?.events.map((e:any)=><div className="growth-row" key={e.id}><div><strong>{e.kind==='comment'?'Izoh':'Direct'} · {e.account_name}</strong><p dir="auto">{e.text}</p><small>{tashkentDate(e.occurred_at)} · {e.status}{e.error&&` · ${e.error}`}</small>{e.response&&<p>Javob: {e.response}</p>}</div>{!['handled','processing','needs_review'].includes(e.status)&&button('Boshqarish',()=>{setSelectedEvent(e.id);setReply('');})}
+      {state?.events.map((e:any)=><div className="growth-row" key={e.id}><div><strong>{e.kind==='comment'?'Izoh':'Direct'} · {e.account_name}</strong><p dir="auto">{e.text}</p><small>{tashkentDate(e.occurred_at)} · {eventStatus[e.status]||e.status}{e.error&&` · ${e.error}`}</small>{e.response&&<p>Javob: {e.response}</p>}</div>{!['handled','processing','needs_review','awaiting_follow','follow_check_failed'].includes(e.status)&&button('Boshqarish',()=>{setSelectedEvent(e.id);setReply('');})}
         {selectedEvent===e.id&&<div style={{width:'100%'}}><textarea className={input} maxLength={1000} rows={3} value={reply} onChange={v=>setReply(v.target.value)} placeholder="Javob matni"/><div className="media-actions">{button('Javob yuborish',()=>void perform(()=>mediaApi(`/growth/events/${e.id}/action`,'POST',{action:'reply',response:reply}),'Javob yuborildi.'),busy||!reply.trim())}{e.kind==='comment'&&<>{button('Yashirish',()=>void perform(()=>mediaApi(`/growth/events/${e.id}/action`,'POST',{action:'hide'}),'Izoh yashirildi.'))}{button('Izohni o‘chirish',()=>{if(window.confirm('Instagramdagi izohni o‘chirasizmi?'))void perform(()=>mediaApi(`/growth/events/${e.id}/action`,'POST',{action:'delete'}),'Izoh o‘chirildi.');})}</>}</div></div>}
       </div>)}
     </section>
