@@ -65,7 +65,7 @@ test("monthly suggestions span valid dates in Tashkent time and exclude past dat
   assert.equal(
     campaignSchema.safeParse({
       topic: "Arab tili",
-      count: 12,
+      count: 32,
       month: "2028-02",
       format: "video",
     }).success,

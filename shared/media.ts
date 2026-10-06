@@ -21,6 +21,9 @@ export const postSchema = z.object({
       explainer_video_id: z.string().uuid().optional(),
       telegram: z.string().max(15000).optional(),
       instagram: z.string().max(2200).optional(),
+      telegram_asset_ids: z.array(z.string().uuid()).min(1).max(10).optional(),
+      instagram_asset_ids: z.array(z.string().uuid()).min(1).max(10).optional(),
+      youtube_asset_ids: z.array(z.string().uuid()).min(1).max(1).optional(),
       instagram_cover_id: z.string().uuid().optional(),
       youtube: z.string().max(5000).optional(),
       suggested_at: z.string().datetime({ offset: true }).optional(),
@@ -39,7 +42,7 @@ export const ruleSchema = z.object({
 });
 export const campaignSchema = z.object({
   topic: z.string().trim().min(3).max(3000),
-  count: z.union([z.literal(10), z.literal(15), z.literal(20)]),
+  count: z.number().int().min(1).max(31),
   month: z.string().regex(/^\d{4}-(0[1-9]|1[0-2])$/),
   format: formatSchema,
   reference_ids: z.array(z.string().uuid()).max(10).default([]),
@@ -172,4 +175,8 @@ export function suggestedDates(month: string, count: number, now = new Date()) {
       Date.UTC(year, m - 1, 1 + Math.floor((i * days) / count), 13, 0),
     ).toISOString(),
   ).filter((d) => new Date(d) > now);
+}
+
+export function platformPost<T extends {asset_ids: string[]; variants: Record<string, any>}>(post:T, platform:string):T {
+  return {...post,asset_ids:post.variants[`${platform}_asset_ids`] ?? post.asset_ids};
 }

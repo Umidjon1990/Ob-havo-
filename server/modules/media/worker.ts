@@ -1,9 +1,12 @@
+import { automaticQuality } from "./quality";
+import { processInteractions, processInsights } from "./growth";
 import { processExplainer } from "./explainer";
 import { randomUUID } from "node:crypto";
 import { z } from "zod";
 import { pool } from "../../db";
 import { openai } from "../../lib/openai";
 import {
+  platformPost,
   campaignSchema,
   postSchema,
   suggestedDates,
@@ -27,7 +30,7 @@ export async function processDelivery() {
     const d = q.rows[0];
     if (!d) return;
     try {
-      const p = (
+      let p = (
         await pool.query("SELECT * FROM media_posts WHERE id=$1", [d.post_id])
       ).rows[0];
       const a = (
@@ -39,6 +42,7 @@ export async function processDelivery() {
         throw new PublishError(
           "Post yoki hisob tayyor emas. Ulanishni tekshiring.",
         );
+      p = platformPost(p, a.platform);
       const found = (
         await pool.query(
           "SELECT id,mime_type,size,data FROM media_assets WHERE id=ANY($1::uuid[])",
@@ -56,6 +60,12 @@ export async function processDelivery() {
         assets.map((a: any) => a.mime_type),
       );
       if (error) throw new PublishError(error);
+      if (assets.length && !d.provider_state.quality_checked_at) {
+        const checks = await automaticQuality(assets, a.platform);
+        if (checks.some(c => c.level === "error")) throw new PublishError("Media texnik tekshiruvdan o‘tmadi. Sifat nazorati bo‘limida tekshiring.");
+        d.provider_state = {...d.provider_state, quality_checked_at: new Date().toISOString(), quality_checks: checks};
+        await pool.query("UPDATE media_deliveries SET provider_state=$2 WHERE id=$1 AND claim_id=$3",[d.id,d.provider_state,claim]);
+      }
       const result = await publish(
         p,
         a,
@@ -224,6 +234,8 @@ export async function processGeneration() {
 export function startMediaWorker() {
   if (process.env.DISABLE_SCHEDULERS === "true") return;
   const timer = setInterval(() => {
+    void processInteractions();
+    void processInsights();
     void processDelivery();
     void processGeneration();
     void processExplainer();

@@ -849,3 +849,5 @@
     max-height: 88vh;
   }
 }
+
+.growth-studio {display:grid;gap:20px}.growth-row{display:flex;flex-wrap:wrap;justify-content:space-between;gap:12px;border-top:1px solid #dce4ef;padding:16px 0}.growth-row p{white-space:pre-wrap;overflow-wrap:anywhere}.growth-table{width:100%;border-collapse:collapse}.growth-table th,.growth-table td{padding:12px;text-align:left;border-bottom:1px solid #e1e8f0}.growth-check{padding:12px;border-radius:12px;background:#f2f6fb;margin-top:10px}.growth-studio details{margin:14px 0}.growth-studio summary{cursor:pointer;font-weight:600}.growth-studio select[multiple]{min-height:130px}.growth-studio h2{font-size:20px;font-weight:700;margin-bottom:10px}.growth-studio p{margin:8px 0}

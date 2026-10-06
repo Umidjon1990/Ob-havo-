@@ -63,7 +63,9 @@ import {
 } from "@shared/media";
 import "./media.css";
 import ExplainerStudio from "./explainer-studio";
+import GrowthStudio from "./growth-studio";
 type Section =
+  | "growth"
   | "overview"
   | "posts"
   | "calendar"
@@ -77,6 +79,7 @@ type Section =
   | "learning"
   | "news";
 const nav = [
+  ["growth", "Instagram agent", MessageSquare],
   ["overview", "Umumiy ko‘rinish", LayoutDashboard],
   ["posts", "Kontentlar", Files],
   ["calendar", "Nashr taqvimi", CalendarDays],
@@ -399,6 +402,7 @@ export default function MediaAdmin() {
     );
   const title = nav.find((n) => n[0] === section)?.[1] || "";
   const descriptions: Record<Section, string> = {
+    growth: "Auditoriya bilan muloqot, natijalar va sifat nazorati.",
     overview: "Barcha ishlaringiz bir joyda. Navbatdagi kontentdan boshlaymiz.",
     posts: "G‘oyadan tayyor postgacha. Har bir platformaga mos matn va media.",
     calendar: "Nashrlar sanasi va har bir kanaldagi natija. Toshkent vaqti.",
@@ -839,6 +843,7 @@ export default function MediaAdmin() {
                 busy={busy}
               />
             )}
+            {section === "growth" && <GrowthStudio data={data} onSaved={refresh} />}
             {section === "audio" && <AudioStudio onSaved={refresh} />}
             {section === "explainer" && <ExplainerStudio data={data} onSaved={refresh} />}
             {section === "assets" && (
@@ -1788,7 +1793,7 @@ function CampaignModal({
               value={count}
               onChange={(e) => setCount(Number(e.target.value))}
             >
-              {[10, 15, 20].map((n) => (
+              {[8, 10, 12, 15, 20, 30].map((n) => (
                 <option key={n} value={n}>
                   {n} ta post
                 </option>

@@ -26,6 +26,8 @@ import { appBaseUrl, verifyAccount } from "./providers";
 import { schedulePublications, ScheduleError } from "./scheduling";
 import { registerExplainerRoutes } from "./explainer";
 import { audioInput, audioCatalog, generateAudio, AudioError } from "./audio";
+import { registerGrowthRoutes } from "./growth";
+import { registerQualityRoutes } from "./quality";
 const uuid = z.string().uuid();
 let generatingAudio = false;
 const route =
@@ -88,7 +90,9 @@ export function registerMediaRoutes(app: Express) {
       await serveAsset(req, res, id);
     }),
   );
+  registerGrowthRoutes(app);
   app.use("/api/media", requireAdmin);
+  registerQualityRoutes(app, route);
   registerExplainerRoutes(app, route);
   app.get("/api/media/audio/catalog", route(async (_req, res) => res.json(await audioCatalog())));
   app.post("/api/media/audio/generate", route(async (req, res) => {
@@ -253,6 +257,10 @@ export function registerMediaRoutes(app: Express) {
     route(async (req, res) => {
       const p = postSchema.parse(req.body);
       await checkAssets(p.asset_ids);
+      for (const platform of ["telegram", "instagram", "youtube"] as const) {
+        const ids = p.variants[`${platform}_asset_ids`];
+        if (ids) await checkAssets(ids);
+      }
       await checkInstagramCover(p);
       const r = await pool.query(
         "INSERT INTO media_posts(title,caption,format,asset_ids,variants,production_notes) VALUES($1,$2,$3,$4,$5,$6) RETURNING *",
@@ -274,6 +282,10 @@ export function registerMediaRoutes(app: Express) {
       const id = uuid.parse(req.params.id),
         p = postSchema.parse(req.body);
       await checkAssets(p.asset_ids);
+      for (const platform of ["telegram", "instagram", "youtube"] as const) {
+        const ids = p.variants[`${platform}_asset_ids`];
+        if (ids) await checkAssets(ids);
+      }
       await checkInstagramCover(p);
       const client = await pool.connect();
       try {
@@ -328,7 +340,7 @@ export function registerMediaRoutes(app: Express) {
     route(async (req, res) => {
       const id = uuid.parse(req.params.id);
       const r = await pool.query(
-        "DELETE FROM media_posts WHERE id=$1 AND NOT EXISTS(SELECT 1 FROM media_deliveries WHERE post_id=$1 AND status<>'cancelled') AND NOT EXISTS(SELECT 1 FROM media_jobs WHERE kind='explainer' AND status IN ('queued','running') AND payload->>'post_id'=$1) RETURNING id",
+        "DELETE FROM media_posts WHERE id=$1 AND NOT EXISTS(SELECT 1 FROM media_deliveries WHERE post_id=$1 AND status<>'cancelled') AND NOT EXISTS(SELECT 1 FROM media_jobs WHERE kind='explainer' AND status IN ('queued','running') AND payload->>'post_id'=$1::text) RETURNING id",
         [id],
       );
       if (!r.rowCount) {
@@ -374,7 +386,7 @@ export function registerMediaRoutes(app: Express) {
               }),
             )
             .min(1)
-            .max(20),
+            .max(31),
         })
         .parse(req.body);
       await schedulePublications(body.items, body.account_ids);

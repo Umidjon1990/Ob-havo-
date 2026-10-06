@@ -51,11 +51,36 @@ export async function ensureMediaTables(sql: Pool | Client) {
       status TEXT NOT NULL DEFAULT 'queued', result JSONB, error TEXT,
       created_at TIMESTAMPTZ NOT NULL DEFAULT now(), started_at TIMESTAMPTZ, completed_at TIMESTAMPTZ
     );
+    CREATE TABLE IF NOT EXISTS media_automation_config (
+      id INTEGER PRIMARY KEY CHECK(id=1), secrets TEXT NOT NULL,
+      updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
+    );
+    CREATE TABLE IF NOT EXISTS media_automations (
+      id UUID PRIMARY KEY DEFAULT gen_random_uuid(), account_id UUID NOT NULL REFERENCES media_accounts(id),
+      title TEXT NOT NULL, trigger TEXT NOT NULL, keywords JSONB NOT NULL, action TEXT NOT NULL,
+      response TEXT NOT NULL DEFAULT '', media_id TEXT NOT NULL DEFAULT '', enabled BOOLEAN NOT NULL DEFAULT false,
+      created_at TIMESTAMPTZ NOT NULL DEFAULT now()
+    );
+    CREATE TABLE IF NOT EXISTS media_interactions (
+      id UUID PRIMARY KEY DEFAULT gen_random_uuid(), account_id UUID NOT NULL REFERENCES media_accounts(id),
+      event_key TEXT NOT NULL, kind TEXT NOT NULL, external_id TEXT NOT NULL, sender_id TEXT NOT NULL,
+      media_id TEXT NOT NULL DEFAULT '', text TEXT NOT NULL DEFAULT '', occurred_at TIMESTAMPTZ NOT NULL,
+      status TEXT NOT NULL DEFAULT 'received', response TEXT, error TEXT,
+      created_at TIMESTAMPTZ NOT NULL DEFAULT now(), UNIQUE(account_id,event_key)
+    );
+    ALTER TABLE media_interactions ADD COLUMN IF NOT EXISTS claimed_at TIMESTAMPTZ;
+    CREATE TABLE IF NOT EXISTS media_insights (
+      delivery_id UUID PRIMARY KEY REFERENCES media_deliveries(id) ON DELETE CASCADE,
+      metrics JSONB NOT NULL DEFAULT '{}', errors JSONB NOT NULL DEFAULT '{}', collected_at TIMESTAMPTZ NOT NULL DEFAULT now()
+    );
     CREATE TABLE IF NOT EXISTS media_oauth_states (
       state_hash TEXT PRIMARY KEY, session_hash TEXT NOT NULL, expires_at TIMESTAMPTZ NOT NULL
     );
   `);
   const defaults = [
+    ["vocabulary-layout-v2", "brand", "So‘z boyligi post tartibi", "Kuchli hook → bugungi iboralar → rasmli karusel → video → audio va chiroyli dizaynda doim ko‘rinadigan misollar → test → Zamonaviy ta’lim. Tuzuvchi: U. Abdurayimov. Ixcham matn. Talaffuz mashqi va kichik vazifa qo‘shilmasin. Tarjimadan tashqari ma’no va kichik farqlar tushuntirilsin."],
+    ["visual-cartoon-v2", "brand", "Rangli 3D dizayn", "Yorqin professional animatsion 3D cartoon, izchil erkak yoki o‘g‘il bola qahramonlar, neytral vaziyatlar, diniy misollarsiz. Sodda yoki bo‘sh maket bo‘lmasin. Coverda kuchli hook va yirik yozuv markazda; yuqori-pastki kesim va profil ko‘rinishi tekshirilsin, pastda ortiqcha bo‘sh joy bo‘lmasin."],
+    ["voice-portable-v2", "brand", "Klon ovoz va platformalar", "Arabcha va o‘zbekcha matn foydalanuvchining tanlangan klon ovozida o‘qilsin. Voice ID taxmin qilinmasin. Ovoz skriptida karuselni o‘tkazing, Telegram kanalidagi kabi platformaga xos iboralar bo‘lmasin. Telegramga mos yengil video, Instagram/YouTubega yuqori sifatli nusxa. Har safar avval kuchli ishlab chiqarish prompti yozilsin."],
     [
       "audience",
       "brand",

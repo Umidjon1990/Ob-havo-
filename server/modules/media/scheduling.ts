@@ -1,5 +1,5 @@
 import { pool } from "../../db";
-import { validatePublication } from "../../../shared/media";
+import { validatePublication, platformPost } from "../../../shared/media";
 export class ScheduleError extends Error {
   constructor(
     message: string,
@@ -45,20 +45,13 @@ export async function schedulePublications(
       throw new ScheduleError("Post topilmadi.", 404);
     for (const post of posts) {
       if ((await client.query("SELECT 1 FROM media_jobs WHERE kind='explainer' AND status IN ('queued','running') AND payload->>'post_id'=$1",[post.id])).rowCount) throw new ScheduleError(`${post.title}: video tayyorlanishini kuting.`,409);
-      const assets = (
-        await client.query(
-          "SELECT id,mime_type FROM media_assets WHERE id=ANY($1::uuid[])",
-          [post.asset_ids],
-        )
-      ).rows;
-      if (assets.length !== post.asset_ids.length)
-        throw new ScheduleError(`${post.title}: media fayl topilmadi.`);
-      const mimes = post.asset_ids.map(
-        (id: string) => assets.find((a) => a.id === id).mime_type,
-      );
       for (const a of accounts) {
-        const error = validatePublication(post, a.platform, mimes);
-        if (error) throw new ScheduleError(`${post.title}: ${error}`);
+        const selected = platformPost(post, a.platform);
+        const assets = (await client.query("SELECT id,mime_type FROM media_assets WHERE id=ANY($1::uuid[])",[selected.asset_ids])).rows;
+        if (assets.length !== selected.asset_ids.length) throw new ScheduleError(`${post.title}: media fayl topilmadi.`);
+        const mimes = selected.asset_ids.map((id:string)=>assets.find(v=>v.id===id).mime_type);
+        const error = validatePublication(selected,a.platform,mimes);
+        if(error) throw new ScheduleError(`${post.title}: ${error}`);
       }
       const existing = await client.query(
         "SELECT 1 FROM media_deliveries WHERE post_id=$1 AND account_id=ANY($2::uuid[]) AND status<>'cancelled'",
