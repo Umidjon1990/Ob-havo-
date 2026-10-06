@@ -18,6 +18,7 @@ import {
   requireAdmin,
   isAuthenticated,
   validAssetSignature,
+  assetSignature,
   hashToken,
   requestToken,
   seal,
@@ -191,6 +192,17 @@ export function registerMediaRoutes(app: Express) {
         ).rows,
       ),
     ),
+  );
+  app.post(
+    "/api/media/assets/:id/download-link",
+    route(async (req, res) => {
+      const id = uuid.parse(req.params.id);
+      const found = await pool.query("SELECT id FROM media_assets WHERE id=$1", [id]);
+      if (!found.rows.length) { res.status(404).json({ error: "Fayl topilmadi." }); return; }
+      const expires = String(Date.now() + 15 * 60 * 1000);
+      res.setHeader("Cache-Control", "no-store");
+      res.json({ url: `${appBaseUrl()}/api/media/assets/${id}/public?expires=${expires}&sig=${assetSignature(id, expires)}`, expires_at: Number(expires) });
+    }),
   );
   app.get(
     "/api/media/assets/:id",
