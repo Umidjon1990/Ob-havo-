@@ -898,7 +898,7 @@ export default function MediaAdmin() {
                 </div>
                 <div className="grid gap-3 sm:grid-cols-2">
                   {data.assets.map((a) => (
-                    <div className="media-file" key={a.id}>
+                    <div className="media-file" key={a.id} style={{ flexWrap: "wrap" }}>
                       {a.mime_type.startsWith("image/") ? (
                         <img src={`/api/media/assets/${a.id}`} alt="" />
                       ) : a.mime_type.startsWith("video/") ? (
@@ -906,7 +906,7 @@ export default function MediaAdmin() {
                       ) : (
                         <MessageSquare size={25} />
                       )}
-                      <div>
+                      <div style={{ flex: 1, minWidth: 0 }}>
                         <strong>{a.name}</strong>
                         <small>
                           {sizeLabel(a.size)} · {tashkentDate(a.created_at)}
@@ -2306,7 +2306,7 @@ function AssetDownload({ asset }: { asset: MediaAsset }) {
     } catch (e) { setError((e as Error).message); }
     finally { setDownloading(false); }
   }
-  return <span><Button secondary small disabled={downloading} onClick={() => void prepare()}><Download size={14} />{downloading ? "Tayyorlanmoqda…" : "Yuklab olish havolasi"}</Button>{url && <a className="media-btn secondary" href={url} download={asset.name}>Faylni yuklab olish</a>}{error && <span role="alert" className="media-alert">{error}</span>}</span>;
+  return <span style={{ flexBasis: "100%", order: 1, display: "flex", flexWrap: "wrap", gap: 8, justifyContent: "flex-end" }}><Button secondary small disabled={downloading} onClick={() => void prepare()}><Download size={14} />{downloading ? "Tayyorlanmoqda…" : "Yuklab olish havolasi"}</Button>{url && <a className="media-btn secondary" href={url} download={asset.name}>Faylni yuklab olish</a>}{error && <span role="alert" className="media-alert">{error}</span>}</span>;
 }
 
 function AudioStudio({ onSaved }: { onSaved: () => Promise<unknown> }) {
