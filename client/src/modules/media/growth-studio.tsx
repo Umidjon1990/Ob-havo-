@@ -7,6 +7,7 @@ export default function GrowthStudio({data,onSaved}:{data:MediaData;onSaved:()=>
   const [form,setForm]=useState(initial),[appSecret,setAppSecret]=useState(''),[verifyToken,setVerifyToken]=useState('');
   const [postId,setPostId]=useState(data.posts[0]?.id||''),[platform,setPlatform]=useState('instagram'),[quality,setQuality]=useState<any>(null),[review,setReview]=useState('');
   const [selectedEvent,setSelectedEvent]=useState(''),[reply,setReply]=useState('');
+  const [connection,setConnection]=useState<any>(null);
   async function reload(){setState(await mediaApi('/growth'));}
   useEffect(()=>{void reload().catch(e=>setError(e.message));},[]);
   async function perform(fn:()=>Promise<any>,message:string){setBusy(true);setError('');setNotice('');try{await fn();await reload();setNotice(message);}catch(e){setError(e instanceof Error?e.message:'Amal bajarilmadi.');}finally{setBusy(false);}}
@@ -15,7 +16,17 @@ export default function GrowthStudio({data,onSaved}:{data:MediaData;onSaved:()=>
   return <div className="growth-studio">
     {error&&<div role="alert" className="media-alert">{error}</div>}{notice&&<div role="status" className="media-alert media-success">{notice}</div>}
     <section className="media-panel"><h2>Instagram agent</h2><p>Izohlar, Direct, statistika va sifat nazorati. Javob qoidalarini istalgan payt o‘chirishingiz mumkin.</p>
-      <label className="media-field"><span>Instagram hisob</span><select className={input} value={account} onChange={e=>setAccount(e.target.value)}>{data.accounts.filter(a=>a.platform==='instagram').map(a=><option key={a.id} value={a.id}>{a.name}</option>)}</select></label>
+      <label className="media-field"><span>Instagram hisob</span><select className={input} value={account} onChange={e=>{setAccount(e.target.value);setConnection(null);}}>{data.accounts.filter(a=>a.platform==='instagram').map(a=><option key={a.id} value={a.id}>{a.name}</option>)}</select></label>
+      <div className="media-actions">{button('Ulanishni tekshirish',()=>void perform(async()=>setConnection(await mediaApi('/growth/connection-check','POST',{account_id:account})),'Hisob ID va Meta obunasi tekshirildi.'),busy||!account)}</div>
+      {connection&&<div className="growth-check"><strong>{connection.identity.username} · Hisob tasdiqlandi</strong><p>Webhook uchun professional hisob ID: {connection.identity.user_id}</p>
+        {connection.apps.length?connection.apps.map((a:any)=><p key={a.id}>Meta ilova: {a.name||a.id} · Obunalar: {a.fields.length?a.fields.join(', '):'Maydonlar Meta javobida ko‘rsatilmagan'}</p>):<p>Meta’da hisob obunasi topilmadi. “Hisobni webhookga ulash” tugmasini bosing.</p>}
+      </div>}
+      {state?.webhook.last_receipt&&<div className="growth-check"><strong>Oxirgi webhook: {tashkentDate(state.webhook.last_receipt.received_at)}</strong>
+        <p>Hisobga mos: {state.webhook.last_receipt.matched} · Yangi xabar: {state.webhook.last_receipt.stored} · Takror: {state.webhook.last_receipt.duplicates}</p>
+        {state.webhook.last_receipt.unmatched>0&&<p>Hisobga mos kelmagan hodisa bor. “Ulanishni tekshirish” orqali professional hisob ID sini moslang. Meta sinov hodisasi (ID 0) kiruvchi xabarlarga qo‘shilmaydi.</p>}
+        {state.webhook.last_receipt.matched>0&&state.webhook.last_receipt.parsed===0&&<p>So‘rov keldi, ammo o‘qiladigan izoh yoki matnli Direct yo‘q. Reaksiya va boshqa texnik hodisalar kiruvchi xabar sifatida ko‘rsatilmaydi.</p>}
+        <details><summary>Hodisa tafsilotlari</summary><p>Hisob ID: {state.webhook.last_receipt.entry_ids.join(', ')} · Maydonlar: {state.webhook.last_receipt.fields.join(', ')||'messaging'}</p></details>
+      </div>}
       <details><summary>Webhook ulanishini sozlash · {state?.webhook.configured?'Sirlar saqlangan':'Sozlanmagan'}</summary>
         <p>Meta ilovasining Webhooks bo‘limida shu callback manzilni kiriting:</p><code style={{overflowWrap:'anywhere'}}>{state?.webhook.url}</code>
         <p>Verify token: o‘zingiz belgilagan kamida 24 belgili tasodifiy qiymat. App Secret: aynan Instagramni ulagan Meta ilovangizdagi sir. Sirlar saqlangach qayta ko‘rsatilmaydi.</p>

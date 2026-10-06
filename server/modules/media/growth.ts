@@ -40,15 +40,35 @@ async function account(accountId:string){
   const r=await pool.query("SELECT * FROM media_accounts WHERE id=$1 AND platform='instagram'",[id.parse(accountId)]);
   if(!r.rows[0])throw new GrowthError('Instagram hisob topilmadi.',404);return r.rows[0];
 }
+// Instagram Login can return an app-scoped id and a separate professional user_id.
+// Only Meta's authenticated profile response may establish that alias; never trust
+// an unknown webhook id or assign it to the only account in the database.
+export async function refreshInstagramIdentity(a:any){
+  const r=await instagramRequest(a,'me?fields=id,user_id,username');
+  const profile=Array.isArray(r.data)?r.data[0]:r;
+  const profileId=external.parse(profile?.id),userId=external.parse(profile?.user_id);
+  if(![profileId,userId].includes(a.external_id))throw new GrowthError('Kalit boshqa Instagram hisobiga tegishli. Hisob sozlamalarini tekshiring.',409);
+  const saved=await pool.query('UPDATE media_accounts SET instagram_user_id=$2 WHERE id=$1 AND credentials=$3 AND external_id=$4 AND enabled AND verified_at IS NOT NULL RETURNING id',
+    [a.id,userId,a.credentials,a.external_id]);
+  if(!saved.rowCount)throw new GrowthError('Hisob sozlamalari o‘zgardi. Tekshiruvni yangilang.',409);
+  return {profile_id:profileId,user_id:userId,username:typeof profile.username==='string'?profile.username:a.name};
+}
+function webhookSummary(body:any){
+  const entries=Array.isArray(body?.entry)?body.entry.slice(0,100):[];
+  return {received_at:new Date().toISOString(),entry_ids:entries.map((e:any)=>String(e?.id||'')).filter((v:string)=>/^\d{1,40}$/.test(v)),
+    fields:Array.from(new Set(entries.flatMap((e:any)=>(Array.isArray(e?.changes)?e.changes:[]).map((c:any)=>String(c?.field||'').slice(0,60))))),
+    entries:entries.length,matched:0,unmatched:0,parsed:0,stored:0,duplicates:0,self:0};
+}
 export type Incoming={key:string;kind:'comment'|'message';external_id:string;sender_id:string;media_id:string;text:string;occurred_at:Date};
+const commentTime=(value:unknown)=>{const n=Number(value);return new Date(n>=1e12?n:n*1000);};
 export function parseInstagramEvents(entry:any):Incoming[]{
   const out:Incoming[]=[];
-  for(const c of entry.changes||[]){const v=c.value;
-    if(c.field!=='comments'||!v?.id||!v.from?.id||typeof v.text!=='string')continue;
-    out.push({key:`comment:${v.id}`,kind:'comment',external_id:String(v.id),sender_id:String(v.from.id),media_id:String(v.media?.id||''),text:v.text.slice(0,5000),occurred_at:new Date(Number(entry.time)*1000)});
+  for(const c of Array.isArray(entry.changes)?entry.changes:[]){const v=c?.value;
+    if(c?.field!=='comments'||!v?.id||!v.from?.id||typeof v.text!=='string')continue;
+    out.push({key:`comment:${v.id}`,kind:'comment',external_id:String(v.id),sender_id:String(v.from.id),media_id:String(v.media?.id||''),text:v.text.slice(0,5000),occurred_at:commentTime(entry.time)});
   }
-  for(const m of entry.messaging||[]){
-    if(m.message?.is_echo||m.message?.is_deleted||!m.message?.mid||!m.sender?.id||!m.message?.text)continue;
+  for(const m of Array.isArray(entry.messaging)?entry.messaging:[]){
+    if(m?.message?.is_echo||m?.message?.is_deleted||!m?.message?.mid||!m?.sender?.id||!m?.message?.text)continue;
     out.push({key:`message:${m.message.mid}`,kind:'message',external_id:String(m.message.mid),sender_id:String(m.sender.id),media_id:'',text:String(m.message.text).slice(0,5000),occurred_at:new Date(Number(m.timestamp))});
   }return out.filter(e=>Number.isFinite(e.occurred_at.getTime()));
 }
@@ -62,30 +82,39 @@ export function registerGrowthRoutes(app:Express){
   app.post('/api/instagram/webhook',wrap(async(req,res)=>{
     const c=await config();
     if(!c||!Buffer.isBuffer(req.rawBody)||!validWebhook(req.rawBody,String(req.headers['x-hub-signature-256']||''),c.app_secret)){res.status(403).end();return;}
-    if(req.body.object!=='instagram'){res.status(400).end();return;}
+    if(req.body?.object!=='instagram'||!Array.isArray(req.body.entry)){res.status(400).end();return;}
+    const receipt=webhookSummary(req.body);
     const client=await pool.connect();
     try{await client.query('BEGIN');
-      for(const entry of (req.body.entry||[]).slice(0,100)){
-        const a=(await client.query("SELECT id,external_id FROM media_accounts WHERE platform='instagram' AND external_id=$1 AND enabled",[String(entry.id)])).rows[0];
-        if(!a)continue;
+      for(const entry of req.body.entry.slice(0,100)){
+        const matches=await client.query("SELECT id,external_id,instagram_user_id FROM media_accounts WHERE platform='instagram' AND (external_id=$1 OR instagram_user_id=$1) AND enabled",[String(entry?.id||'')]);
+        if(matches.rows.length!==1){receipt.unmatched++;continue;}
+        const a=matches.rows[0];receipt.matched++;
         for(const event of parseInstagramEvents(entry).slice(0,100)){
-          if(event.sender_id===a.external_id)continue;
-          await client.query(`INSERT INTO media_interactions(account_id,event_key,kind,external_id,sender_id,media_id,text,occurred_at)
+          receipt.parsed++;
+          if([a.external_id,a.instagram_user_id].includes(event.sender_id)){receipt.self++;continue;}
+          const inserted=await client.query(`INSERT INTO media_interactions(account_id,event_key,kind,external_id,sender_id,media_id,text,occurred_at)
             VALUES($1,$2,$3,$4,$5,$6,$7,$8) ON CONFLICT(account_id,event_key) DO NOTHING`,
             [a.id,event.key,event.kind,event.external_id,event.sender_id,event.media_id,event.text,event.occurred_at]);
+          if(inserted.rowCount)receipt.stored++;else receipt.duplicates++;
         }
-      }await client.query('COMMIT');res.sendStatus(200);
+      }
+      await client.query('UPDATE media_automation_config SET last_receipt=$1 WHERE id=1',[JSON.stringify(receipt)]);
+      await client.query('COMMIT');
+      console.info(`[instagram-webhook] entries=${receipt.entries} matched=${receipt.matched} unmatched=${receipt.unmatched} parsed=${receipt.parsed} stored=${receipt.stored} duplicates=${receipt.duplicates} self=${receipt.self}`);
+      res.sendStatus(200);
     }catch(e){await client.query('ROLLBACK');throw e;}finally{client.release();}
   }));
   app.use('/api/media/growth',requireAdmin);
   app.get('/api/media/growth',wrap(async(_req,res)=>{
-    const [rules,events,insights,c]=await Promise.all([
+    const [rules,events,insights,c,receipt]=await Promise.all([
       pool.query('SELECT * FROM media_automations ORDER BY created_at DESC'),
       pool.query('SELECT i.*,a.name AS account_name FROM media_interactions i JOIN media_accounts a ON a.id=i.account_id ORDER BY i.created_at DESC LIMIT 100'),
       pool.query(`SELECT d.id,d.external_url,p.title,p.format,p.caption,i.metrics,i.errors,i.collected_at FROM media_deliveries d
         JOIN media_posts p ON p.id=d.post_id JOIN media_accounts a ON a.id=d.account_id LEFT JOIN media_insights i ON i.delivery_id=d.id
-        WHERE d.status='published' AND a.platform='instagram' ORDER BY d.published_at DESC LIMIT 100`),config()]);
-    res.json({rules:rules.rows,events:events.rows,insights:insights.rows,webhook:{configured:!!c,url:`${appBaseUrl()}/api/instagram/webhook`}});
+        WHERE d.status='published' AND a.platform='instagram' ORDER BY d.published_at DESC LIMIT 100`),config(),
+      pool.query('SELECT last_receipt FROM media_automation_config WHERE id=1')]);
+    res.json({rules:rules.rows,events:events.rows,insights:insights.rows,webhook:{configured:!!c,url:`${appBaseUrl()}/api/instagram/webhook`,last_receipt:receipt.rows[0]?.last_receipt||null}});
   }));
   app.put('/api/media/growth/webhook',wrap(async(req,res)=>{
     const input=z.object({app_secret:z.string().min(16).max(300),verify_token:z.string().min(24).max(200)}).parse(req.body);
@@ -94,8 +123,17 @@ export function registerGrowthRoutes(app:Express){
   }));
   app.post('/api/media/growth/subscribe',wrap(async(req,res)=>{
     const a=await account(req.body.account_id);if(!await config())throw new GrowthError('Avval webhook sirlarini saqlang.');
-    const result=await instagramRequest(a,`${a.external_id}/subscribed_apps`,'POST',{subscribed_fields:'comments,messages'});
-    res.json({success:result.success===true});
+    const identity=await refreshInstagramIdentity(a);
+    const result=await instagramRequest(a,`${identity.user_id}/subscribed_apps`,'POST',{subscribed_fields:'comments,messages'});
+    if(result.success!==true)throw new GrowthError('Meta hisob obunasini tasdiqlamadi.',502);
+    res.json({success:true});
+  }));
+  app.post('/api/media/growth/connection-check',wrap(async(req,res)=>{
+    const a=await account(req.body.account_id),identity=await refreshInstagramIdentity(a);
+    const r=await instagramRequest(a,`${identity.user_id}/subscribed_apps`);
+    const apps=(Array.isArray(r.data)?r.data:[]).map((v:any)=>({id:String(v.id||v.application?.id||''),name:String(v.name||v.application?.name||''),
+      fields:Array.isArray(v.subscribed_fields)?v.subscribed_fields.filter((f:any)=>typeof f==='string'):[]}));
+    res.json({identity,apps,checked_at:new Date().toISOString()});
   }));
   app.post('/api/media/growth/rules',wrap(async(req,res)=>{
     const v=automationSchema.parse(req.body);await account(v.account_id);

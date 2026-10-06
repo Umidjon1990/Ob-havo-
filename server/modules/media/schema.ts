@@ -9,6 +9,7 @@ export async function ensureMediaTables(sql: Pool | Client) {
       created_at TIMESTAMPTZ NOT NULL DEFAULT now()
     );
     CREATE UNIQUE INDEX IF NOT EXISTS media_accounts_identity ON media_accounts(platform,external_id);
+    ALTER TABLE media_accounts ADD COLUMN IF NOT EXISTS instagram_user_id TEXT;
     CREATE TABLE IF NOT EXISTS media_assets (
       id UUID PRIMARY KEY DEFAULT gen_random_uuid(), name TEXT NOT NULL,
       mime_type TEXT NOT NULL, size INTEGER NOT NULL, data BYTEA NOT NULL,
@@ -55,6 +56,7 @@ export async function ensureMediaTables(sql: Pool | Client) {
       id INTEGER PRIMARY KEY CHECK(id=1), secrets TEXT NOT NULL,
       updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
     );
+    ALTER TABLE media_automation_config ADD COLUMN IF NOT EXISTS last_receipt JSONB;
     CREATE TABLE IF NOT EXISTS media_automations (
       id UUID PRIMARY KEY DEFAULT gen_random_uuid(), account_id UUID NOT NULL REFERENCES media_accounts(id),
       title TEXT NOT NULL, trigger TEXT NOT NULL, keywords JSONB NOT NULL, action TEXT NOT NULL,

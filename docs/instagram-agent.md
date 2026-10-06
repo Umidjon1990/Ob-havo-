@@ -25,6 +25,10 @@ In the private Instagram agent panel save the Meta App Secret and a random verif
 
 Do not paste secrets into repository files, logs or chat. Never use a production database for tests.
 
+The connection check reads `me?fields=id,user_id,username` and account-level `subscribed_apps`. It caches the professional `user_id` only when the authenticated Meta response also matches the existing account ID. Publishing IDs and credentials are preserved. Incoming callbacks match either verified ID, and never fall back to the only configured account. The subscription action uses the professional ID and only reports success when Meta returns `success: true`.
+
+The private panel shows the last signature-verified receipt time and matched/parsed/inserted/duplicate counts. The receipt retains only account IDs, field names and counters, without raw payloads, sender IDs or message text. Runtime logs contain counters only. A callback HTTP 200 means receipt processing completed; it does not mean an inbox message was inserted. Synthetic Meta events with ID 0 stay out of the inbox.
+
 ## Public information URLs
 
 The server serves `/privacy` and `/data-deletion` as public UTF-8 HTML before API authentication and the SPA fallback. They require no login, JavaScript or database query. Both have Uzbek and English text and use the operator contact shown in the Meta app: `umidjonabdurayimov04@gmail.com`.

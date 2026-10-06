@@ -34,6 +34,8 @@ test('webhook validates raw bytes and rejects modified, unsigned or wrong-secret
 test('events ignore echoes, dedupe by stable provider id and preserve comment media',()=>{
   const entry={time:1791264000,changes:[{field:'comments',value:{id:'123',text:'LUGAT',from:{id:'456'},media:{id:'789'}}}],messaging:[{timestamp:1791264000000,sender:{id:'456'},message:{mid:'a',text:'Salom'}},{timestamp:1791264000000,sender:{id:'456'},message:{mid:'b',text:'Echo',is_echo:true}}]};
   const events=parseInstagramEvents(entry);assert.equal(events.length,2);assert.equal(events[0].media_id,'789');assert.equal(events[0].key,'comment:123');
+  assert.equal(events[0].occurred_at.getTime(),1791264000000);
+  assert.equal(parseInstagramEvents({...entry,time:1791264000000})[0].occurred_at.getTime(),1791264000000);
   assert.deepEqual(parseInstagramEvents(entry).map(e=>e.key),events.map(e=>e.key));
   assert.equal(parseInstagramEvents({messaging:[{sender:{id:'1'},message:{mid:'z',text:'x'}}]}).length,0);
 });
@@ -64,7 +66,7 @@ test('admin growth endpoints reject unauthenticated writes without contacting In
 test('durable webhook deduplication, approved Direct answer and missing-metric isolation', {skip:!process.env.MEDIA_TEST_PGLITE_PATH},async()=>{
   const {PGlite}=await import(process.env.MEDIA_TEST_PGLITE_PATH!);const db=new PGlite();
   const {pool}=await import('../../db');const {ensureMediaTables}=await import('./schema');
-  const {seal}=await import('./security');const {processInteractions,processInsights}=await import('./growth');
+  const {seal,hashToken}=await import('./security');const {processInteractions,processInsights}=await import('./growth');
   const query=async(text:string,values?:any[])=>{
     if(!values&&text.trim().split(';').filter(Boolean).length>1){await db.exec(text);return {rows:[],rowCount:0};}
     const r=await db.query(text,values);return {...r,rowCount:r.affectedRows||r.rows?.length||0};
@@ -80,8 +82,11 @@ test('durable webhook deduplication, approved Direct answer and missing-metric i
   const express=(await import('express')).default,app=express();app.use(express.json({verify(req,_res,b){(req as any).rawBody=b;}}));registerGrowthRoutes(app);
   const server=app.listen(0,'127.0.0.1');await new Promise<void>(r=>server.once('listening',r));
   const origin=`http://127.0.0.1:${(server.address() as any).port}`,nativeFetch=globalThis.fetch;const sent:any[]=[];
+  let profileId='111',subscriptionSuccess=true;
   globalThis.fetch=(async(url:any,init:any)=>{
     if(String(url).startsWith(origin))return nativeFetch(url,init);
+    if(String(url).includes('me?fields=id,user_id,username'))return Response.json({id:profileId,user_id:'777',username:'Test'});
+    if(String(url).includes('/777/subscribed_apps'))return Response.json(init?.method==='POST'?{success:subscriptionSuccess}:{data:[{id:'meta-app',name:'Test app',subscribed_fields:['comments','messages']}]});
     if(init?.method==='POST'){sent.push(JSON.parse(init.body));return Response.json({message_id:'sent'});}
     if(String(url).includes('metric=views'))return Response.json({error:{code:100}},{status:400});
     return Response.json({data:[{values:[{value:12}]}]});
@@ -100,6 +105,44 @@ test('durable webhook deduplication, approved Direct answer and missing-metric i
     const d=(await pool.query("INSERT INTO media_deliveries(post_id,account_id,scheduled_at,status,external_id,published_at) VALUES($1,$2,now(),'published','999',now()) RETURNING id",[p.id,a.id])).rows[0];
     await pool.query("INSERT INTO media_jobs(kind,payload) VALUES('instagram_insights',$1)",[{account_id:a.id}]);await processInsights();
     const metrics=(await pool.query('SELECT * FROM media_insights WHERE delivery_id=$1',[d.id])).rows[0];assert.equal(metrics.metrics.saved,12);assert.equal(metrics.metrics.views,undefined);assert.ok(metrics.errors.views);
+
+    // A real Meta profile can establish the professional ID without changing the
+    // publishing ID, token, or reply rules. An unrelated token cannot bind it.
+    const session='test-admin-session-for-webhook-diagnostics';
+    await pool.query("INSERT INTO media_sessions(token_hash,expires_at) VALUES($1,now()+interval '1 hour')",[hashToken(session)]);
+    const adminHeaders={'Content-Type':'application/json',Authorization:`Bearer ${session}`};
+    const checkUrl=`${origin}/api/media/growth/connection-check`;
+    assert.equal((await nativeFetch(checkUrl,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({account_id:a.id})})).status,401);
+    profileId='999';
+    assert.equal((await nativeFetch(checkUrl,{method:'POST',headers:adminHeaders,body:JSON.stringify({account_id:a.id})})).status,409);
+    assert.equal((await pool.query('SELECT instagram_user_id FROM media_accounts WHERE id=$1',[a.id])).rows[0].instagram_user_id,null);
+    profileId='111';
+    const checked=await nativeFetch(checkUrl,{method:'POST',headers:adminHeaders,body:JSON.stringify({account_id:a.id})});
+    assert.equal(checked.status,200);const connection=await checked.json();assert.equal(connection.identity.user_id,'777');assert.deepEqual(connection.apps[0].fields,['comments','messages']);
+    const bound=(await pool.query('SELECT * FROM media_accounts WHERE id=$1',[a.id])).rows[0];assert.equal(bound.external_id,'111');assert.equal(bound.instagram_user_id,'777');assert.ok(bound.credentials);
+    async function callback(entry:any){
+      const raw=JSON.stringify({object:'instagram',entry:[entry]});
+      const h={'Content-Type':'application/json','X-Hub-Signature-256':'sha256='+createHmac('sha256',secret).update(raw).digest('hex')};
+      const r=await nativeFetch(`${origin}/api/instagram/webhook`,{method:'POST',headers:h,body:raw});assert.equal(r.status,200);
+    }
+    const comment={id:'777',time:Math.floor(Date.now()/1000),changes:[{field:'comments',value:{id:'555',text:'Salom: private test text',from:{id:'222'},media:{id:'333'}}}]};
+    await callback(comment);await callback(comment);
+    assert.equal((await pool.query("SELECT 1 FROM media_interactions WHERE external_id='555'")).rowCount,1);
+    let receipt=(await pool.query('SELECT last_receipt FROM media_automation_config')).rows[0].last_receipt;
+    assert.equal(receipt.matched,1);assert.equal(receipt.stored,0);assert.equal(receipt.duplicates,1);
+    assert.equal(JSON.stringify(receipt).includes('private test text'),false);assert.equal(JSON.stringify(receipt).includes('222'),false);
+    await callback({id:'888',time:comment.time,changes:comment.changes});
+    receipt=(await pool.query('SELECT last_receipt FROM media_automation_config')).rows[0].last_receipt;assert.equal(receipt.unmatched,1);assert.equal(receipt.stored,0);
+    await callback({...comment,changes:[{field:'comments',value:{...comment.changes[0].value,id:'556',from:{id:'777'}}}]});
+    assert.equal((await pool.query("SELECT 1 FROM media_interactions WHERE external_id='556'")).rowCount,0);
+    receipt=(await pool.query('SELECT last_receipt FROM media_automation_config')).rows[0].last_receipt;assert.equal(receipt.self,1);
+    const panel=await nativeFetch(`${origin}/api/media/growth`,{headers:adminHeaders});const panelData=await panel.json();assert.equal(panel.status,200);assert.equal(panelData.webhook.last_receipt.self,1);
+    assert.equal(JSON.stringify(panelData).includes(secret),false);assert.equal(JSON.stringify(panelData).includes('test-ig-token'),false);
+    subscriptionSuccess=false;
+    assert.equal((await nativeFetch(`${origin}/api/media/growth/subscribe`,{method:'POST',headers:adminHeaders,body:JSON.stringify({account_id:a.id})})).status,502);
+    subscriptionSuccess=true;
+    assert.equal((await nativeFetch(`${origin}/api/media/growth/subscribe`,{method:'POST',headers:adminHeaders,body:JSON.stringify({account_id:a.id})})).status,200);
+    assert.equal(sent.length,2);
   }finally{globalThis.fetch=nativeFetch;await new Promise<void>(r=>server.close(()=>r()));await db.close();}
 });
 test('automatic preflight reads a real vertical MP4 and rejects corrupt media',async()=>{
