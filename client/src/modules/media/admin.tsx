@@ -1501,6 +1501,17 @@ function PostEditor({
               }
             />
           </div>
+          {variant === "instagram" && ["video", "stickman"].includes(format) && (
+            <Field label="Instagram Reels muqovasi">
+              <select className="media-input" value={variants.instagram_cover_id || ""}
+                onChange={(e) => setVariants({ ...variants, instagram_cover_id: e.target.value || undefined })}>
+                <option value="">Videodan avtomatik muqova</option>
+                {assets.filter((a) => a.mime_type === "image/jpeg" && a.size <= 8 * 1024 * 1024).map((a) => (
+                  <option key={a.id} value={a.id}>{a.name}</option>
+                ))}
+              </select>
+            </Field>
+          )}
           {variant === "youtube" && (
             <>
               <Field label="YouTube ko‘rinishi">

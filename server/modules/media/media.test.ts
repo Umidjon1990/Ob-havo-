@@ -392,7 +392,7 @@ test("Instagram resumes the saved container and YouTube resumes an interrupted u
     id: "post",
     format: "video",
     asset_ids: ["asset"],
-    variants: {},
+    variants: { instagram_cover_id: "cover" },
     deliveries: [],
   };
   const assets = [
@@ -417,6 +417,9 @@ test("Instagram resumes the saved container and YouTube resumes an interrupted u
     globalThis.fetch = (async (url: any, init: any) => {
       const s = String(url);
       if (s.endsWith("/123/media")) {
+        assert.equal(init.body.get("media_type"), "REELS");
+        assert.match(init.body.get("cover_url"), /^https:\/\/media\.test\/api\/media\/assets\/cover\/public\?/);
+        assert.equal(init.body.get("children"), null);
         creates++;
         return Response.json({ id: "container" });
       }

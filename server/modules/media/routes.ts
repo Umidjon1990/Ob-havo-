@@ -253,6 +253,7 @@ export function registerMediaRoutes(app: Express) {
     route(async (req, res) => {
       const p = postSchema.parse(req.body);
       await checkAssets(p.asset_ids);
+      await checkInstagramCover(p);
       const r = await pool.query(
         "INSERT INTO media_posts(title,caption,format,asset_ids,variants,production_notes) VALUES($1,$2,$3,$4,$5,$6) RETURNING *",
         [
@@ -273,6 +274,7 @@ export function registerMediaRoutes(app: Express) {
       const id = uuid.parse(req.params.id),
         p = postSchema.parse(req.body);
       await checkAssets(p.asset_ids);
+      await checkInstagramCover(p);
       const client = await pool.connect();
       try {
         await client.query("BEGIN");
@@ -830,6 +832,12 @@ export async function checkAssets(ids: string[]) {
       },
     ]);
   return ids.map((id) => rows.find((r) => r.id === id));
+}
+async function checkInstagramCover(p: z.infer<typeof postSchema>) {
+  if (!p.variants.instagram_cover_id) return;
+  const [cover] = await checkAssets([p.variants.instagram_cover_id]);
+  if (!["video", "stickman"].includes(p.format) || cover.mime_type !== "image/jpeg" || cover.size > 8 * 1024 * 1024)
+    throw new z.ZodError([{ code: "custom", path: ["variants", "instagram_cover_id"], message: "Reels muqovasi uchun 8 MB gacha JPG va video formati kerak." }]);
 }
 async function serveAsset(req: Request, res: Response, id: string) {
   const a = (

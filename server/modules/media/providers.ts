@@ -258,6 +258,10 @@ export async function publish(
           ...payload,
           media_type: "REELS",
           video_url: publicAsset(assets[0].id),
+          share_to_feed: "true",
+          ...(post.variants.instagram_cover_id
+            ? { cover_url: publicAsset(post.variants.instagram_cover_id) }
+            : {}),
         };
       else payload = { ...payload, image_url: publicAsset(assets[0].id) };
       state.container_id = (
