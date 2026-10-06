@@ -25,6 +25,14 @@ In the private Instagram agent panel save the Meta App Secret and a random verif
 
 Do not paste secrets into repository files, logs or chat. Never use a production database for tests.
 
+## Public information URLs
+
+The server serves `/privacy` and `/data-deletion` as public UTF-8 HTML before API authentication and the SPA fallback. They require no login, JavaScript or database query. Both have Uzbek and English text and use the operator contact shown in the Meta app: `umidjonabdurayimov04@gmail.com`.
+
+In Meta App Settings → Basic, set the Privacy Policy URL to `https://web-production-d1f0.up.railway.app/privacy`. Select **Data deletion instructions URL** (not callback) and enter `https://web-production-d1f0.up.railway.app/data-deletion`. These are information pages, not automated deletion endpoints. Saving them does not prove the app is published or that all permissions are approved; inspect Meta's remaining requirements.
+
+The operator must monitor the contact mailbox and handle deletion requests manually: confirm ownership, identify the affected account and sender IDs, remove that user's matching `media_interactions` records and any explicitly requested user-owned media from active storage, and report the outcome. For an account-owner disconnection request, also revoke platform access and remove stored connection credentials through a scoped administrative process. Do not bulk-delete unrelated users' records or shared content. App revocation alone does not erase local data. Any provider-log or backup limitation should be explained to the requester. Update these pages when processing practices or the contact change.
+
 ## Verification
 
 npm run check

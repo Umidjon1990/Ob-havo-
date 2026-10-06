@@ -24,6 +24,7 @@ export default function GrowthStudio({data,onSaved}:{data:MediaData;onSaved:()=>
         <div className="media-actions">{button('Sirlarni saqlash',()=>void perform(async()=>{await mediaApi('/growth/webhook','PUT',{app_secret:appSecret,verify_token:verifyToken});setAppSecret('');setVerifyToken('');},'Webhook sirlarini saqladim.'),busy||appSecret.length<16||verifyToken.length<24)}
         {button('Hisobni webhookga ulash',()=>void perform(()=>mediaApi('/growth/subscribe','POST',{account_id:account}),'Hisob obunasi sozlandi.'),busy||!account||!state?.webhook.configured)}</div>
         <p>Meta’da comments va messages maydonlarini yoqing. Manage comments/messages ruxsatlari kerak. Sirlar saqlanishi webhook Meta’da tasdiqlanganini anglatmaydi; haqiqiy izoh va Direct bilan tekshiring.</p>
+        <p>Meta ilovasining asosiy sozlamalari uchun: <a href="/privacy" target="_blank" rel="noopener noreferrer">Maxfiylik siyosati</a> · <a href="/data-deletion" target="_blank" rel="noopener noreferrer">Ma’lumotlarni o‘chirish yo‘riqnomasi</a>.</p>
       </details>
     </section>
     <section className="media-panel"><h2>Kalit so‘z va Direct javoblari</h2><p>“LUG‘AT”, “KITOB”, “KURS” uchun havola yoki aniq javob yozing. Direct savollariga tasdiqlangan matnlar bilan javob beriladi; noma’lum savollar kiruvchi xabarlarda qoladi.</p>

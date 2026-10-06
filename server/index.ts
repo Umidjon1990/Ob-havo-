@@ -2,10 +2,12 @@ import express, { type Request, Response, NextFunction } from "express";
 import { registerRoutes } from "./routes";
 import { serveStatic } from "./static";
 import { createServer } from "http";
+import { registerMediaPublicPages } from "./lib/media-public-pages";
 
 const app = express();
 const httpServer = createServer(app);
 app.set("trust proxy", 1);
+registerMediaPublicPages(app);
 
 declare module "http" {
   interface IncomingMessage {
