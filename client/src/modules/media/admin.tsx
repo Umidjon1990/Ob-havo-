@@ -2295,22 +2295,18 @@ function Calendar({
 type AudioCatalog = { models: { id: string; name: string }[]; voices: { id: string; name: string; category: string; labels: Record<string, string> }[] };
 function AssetDownload({ asset }: { asset: MediaAsset }) {
   const [downloading, setDownloading] = useState(false);
+  const [url, setUrl] = useState("");
   const [error, setError] = useState("");
-  async function download() {
+  async function prepare() {
     if (downloading) return;
-    setDownloading(true); setError("");
+    setDownloading(true); setError(""); setUrl("");
     try {
-      const response = await fetch(`/api/media/assets/${asset.id}`, { credentials: "same-origin" });
-      if (!response.ok) throw new Error("Faylni yuklab bo‘lmadi. Hisobga qayta kirib ko‘ring.");
-      const url = URL.createObjectURL(await response.blob());
-      const link = document.createElement("a");
-      link.href = url; link.download = asset.name;
-      document.body.appendChild(link); link.click(); link.remove();
-      window.setTimeout(() => URL.revokeObjectURL(url), 60000);
+      const result = await mediaApi<{ url: string }>(`/assets/${asset.id}/download-link`, "POST");
+      setUrl(result.url);
     } catch (e) { setError((e as Error).message); }
     finally { setDownloading(false); }
   }
-  return <span><Button secondary small disabled={downloading} onClick={() => void download()}><Download size={14} />{downloading ? "Yuklanmoqda…" : "Faylni yuklab olish"}</Button>{error && <span role="alert" className="media-alert">{error}</span>}</span>;
+  return <span><Button secondary small disabled={downloading} onClick={() => void prepare()}><Download size={14} />{downloading ? "Tayyorlanmoqda…" : "Yuklab olish havolasi"}</Button>{url && <a className="media-btn secondary" href={url} download={asset.name}>Faylni yuklab olish</a>}{error && <span role="alert" className="media-alert">{error}</span>}</span>;
 }
 
 function AudioStudio({ onSaved }: { onSaved: () => Promise<unknown> }) {
