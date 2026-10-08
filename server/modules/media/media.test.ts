@@ -342,6 +342,14 @@ test(
       });
       assert.equal(assetResponse.status, 206);
       assert.equal((await assetResponse.arrayBuffer()).byteLength, 3);
+      const downloadResponse = await fetch(origin + `/api/media/assets/${a.id}/download`, {
+        headers: { Cookie: cookie },
+      });
+      assert.equal(downloadResponse.status, 200);
+      assert.match(downloadResponse.headers.get("content-disposition") || "", /attachment; filename="test.jpg"/);
+      assert.deepEqual(Buffer.from(await downloadResponse.arrayBuffer()), jpg);
+      const anonymousDownload = await fetch(origin + `/api/media/assets/${a.id}/download`);
+      assert.equal(anonymousDownload.status, 401);
       const attached = (
         await request("/api/media/posts", "POST", {
           ...base,

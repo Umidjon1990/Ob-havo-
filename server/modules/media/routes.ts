@@ -205,6 +205,10 @@ export function registerMediaRoutes(app: Express) {
     }),
   );
   app.get(
+    "/api/media/assets/:id/download",
+    route(async (req, res) => serveAsset(req, res, uuid.parse(req.params.id), true)),
+  );
+  app.get(
     "/api/media/assets/:id",
     route(async (req, res) => serveAsset(req, res, uuid.parse(req.params.id))),
   );
@@ -917,7 +921,7 @@ async function checkYouTubeCover(p: z.infer<typeof postSchema>) {
   if (!["video", "stickman"].includes(p.format) || !["image/jpeg", "image/png"].includes(cover.mime_type) || cover.size > 50 * 1024 * 1024)
     throw new z.ZodError([{ code: "custom", path: ["variants", "youtube_cover_id"], message: "YouTube muqovasi uchun 50 MB gacha JPG yoki PNG va video formati kerak." }]);
 }
-async function serveAsset(req: Request, res: Response, id: string) {
+async function serveAsset(req: Request, res: Response, id: string, download = false) {
   const a = (
     await pool.query(
       "SELECT name,mime_type,size,data FROM media_assets WHERE id=$1",
@@ -928,6 +932,7 @@ async function serveAsset(req: Request, res: Response, id: string) {
     res.status(404).end();
     return;
   }
+  if (download) res.attachment(a.name);
   res.setHeader("Content-Type", a.mime_type);
   res.setHeader("X-Content-Type-Options", "nosniff");
   res.setHeader("Cache-Control", "private, no-store");

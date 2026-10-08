@@ -2317,7 +2317,7 @@ function AssetDownload({ asset }: { asset: MediaAsset }) {
     } catch (e) { setError((e as Error).message); }
     finally { setDownloading(false); }
   }
-  return <span style={{ flexBasis: "100%", order: 1, display: "flex", flexWrap: "wrap", gap: 8, justifyContent: "flex-end" }}><Button secondary small disabled={downloading} onClick={() => void prepare()}><Download size={14} />{downloading ? "Tayyorlanmoqda…" : "Yuklab olish havolasi"}</Button>{url && <a className="media-btn secondary" href={url} download={asset.name}>Faylni yuklab olish</a>}{error && <span role="alert" className="media-alert">{error}</span>}</span>;
+  return <span style={{ flexBasis: "100%", order: 1, display: "flex", flexWrap: "wrap", gap: 8, justifyContent: "flex-end" }}><a className="media-btn secondary" href={`/api/media/assets/${asset.id}/download`} download={asset.name}><Download size={14} />Yuklab olish</a><Button secondary small disabled={downloading} onClick={() => void prepare()}><Download size={14} />{downloading ? "Tayyorlanmoqda…" : "Yuklab olish havolasi"}</Button>{url && <a className="media-btn secondary" href={url} download={asset.name}>Faylni yuklab olish</a>}{error && <span role="alert" className="media-alert">{error}</span>}</span>;
 }
 
 function AudioStudio({ onSaved }: { onSaved: () => Promise<unknown> }) {
