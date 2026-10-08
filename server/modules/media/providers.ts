@@ -120,6 +120,9 @@ async function ig(
   );
 }
 export async function youtubeToken(account: Account) {
+  const expectedChannelId = process.env.YOUTUBE_CHANNEL_ID?.trim();
+  if (expectedChannelId && account.external_id !== expectedChannelId)
+    throw new PublishError("Bu YouTube kanali asosiy kanal emas. Umidjon Abdurayimov kanalini Google orqali ulang.");
   if (
     !account.credentials ||
     !process.env.GOOGLE_CLIENT_ID ||
