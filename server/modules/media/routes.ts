@@ -543,8 +543,8 @@ export function registerMediaRoutes(app: Express) {
       try {
         const result = await verifyAccount(a);
         await pool.query(
-          "UPDATE media_accounts SET verified_at=now(),external_id=$2 WHERE id=$1",
-          [a.id, result.external_id],
+          "UPDATE media_accounts SET verified_at=now(),external_id=$2,name=CASE WHEN platform='youtube' THEN $3 ELSE name END WHERE id=$1",
+          [a.id, result.external_id, result.name],
         );
         res.json({ ok: true, name: result.name });
       } catch (e) {
@@ -852,13 +852,18 @@ export function registerMediaRoutes(app: Express) {
         upstreamReason = undefined;
         const channel = d.items[0];
         await pool.query(
-          "INSERT INTO media_accounts(platform,name,external_id,credentials,verified_at) VALUES('youtube',$1,$2,$3,now()) ON CONFLICT(platform,external_id) DO UPDATE SET credentials=EXCLUDED.credentials,verified_at=now(),enabled=true",
+          "INSERT INTO media_accounts(platform,name,external_id,credentials,verified_at) VALUES('youtube',$1,$2,$3,now()) ON CONFLICT(platform,external_id) DO UPDATE SET name=EXCLUDED.name,credentials=EXCLUDED.credentials,verified_at=now(),enabled=true",
           [
             channel.snippet.title,
             channel.id,
             seal({ refresh_token: c.refresh_token }),
           ],
         );
+        console.info("[youtube-oauth] channel saved", {
+          channelId: channel.id,
+          channelTitle: channel.snippet.title,
+          returnedChannelCount: d.items.length,
+        });
         res.redirect("/admin?section=accounts&oauth=ok");
       } catch {
         // Log only bounded machine-readable diagnostics, never OAuth codes or tokens.
