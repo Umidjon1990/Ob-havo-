@@ -847,10 +847,17 @@ export function registerMediaRoutes(app: Express) {
           upstreamReason ||= "channel_not_found";
           throw new Error("Channel");
         }
+        const expectedChannelId = process.env.YOUTUBE_CHANNEL_ID?.trim();
+        const channel = expectedChannelId
+          ? d.items.find((item: { id: string }) => item.id === expectedChannelId)
+          : d.items[0];
+        if (!channel) {
+          upstreamReason = "channel_mismatch";
+          throw new Error("Channel mismatch");
+        }
         oauthStage = "save";
         upstreamStatus = undefined;
         upstreamReason = undefined;
-        const channel = d.items[0];
         await pool.query(
           "INSERT INTO media_accounts(platform,name,external_id,credentials,verified_at) VALUES('youtube',$1,$2,$3,now()) ON CONFLICT(platform,external_id) DO UPDATE SET name=EXCLUDED.name,credentials=EXCLUDED.credentials,verified_at=now(),enabled=true",
           [
