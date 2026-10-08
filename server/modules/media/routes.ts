@@ -800,9 +800,16 @@ export function registerMediaRoutes(app: Express) {
         [hashToken(state), hashToken(requestToken(req)!)],
       );
       if (!consumed.rowCount || !code) {
+        console.error("[youtube-oauth] callback rejected", {
+          stage: !consumed.rowCount ? "state" : "consent",
+          reason: !consumed.rowCount ? "state_expired_or_session_mismatch" : "authorization_code_missing",
+        });
         res.redirect("/admin?section=accounts&oauth=failed");
         return;
       }
+      let oauthStage = "token";
+      let upstreamStatus: number | undefined;
+      let upstreamReason: string | undefined;
       try {
         const r = await fetch("https://oauth2.googleapis.com/token", {
           method: "POST",
@@ -817,7 +824,15 @@ export function registerMediaRoutes(app: Express) {
           signal: AbortSignal.timeout(30000),
         });
         const c = await r.json();
-        if (!r.ok || !c.refresh_token) throw new Error("OAuth");
+        upstreamStatus = r.status;
+        upstreamReason = typeof c.error === "string" ? c.error : undefined;
+        if (!r.ok || !c.refresh_token) {
+          upstreamReason ||= "refresh_token_missing";
+          throw new Error("OAuth");
+        }
+        oauthStage = "channel";
+        upstreamStatus = undefined;
+        upstreamReason = undefined;
         const channels = await fetch(
           "https://www.googleapis.com/youtube/v3/channels?part=snippet&mine=true",
           {
@@ -826,7 +841,15 @@ export function registerMediaRoutes(app: Express) {
           },
         );
         const d = await channels.json();
-        if (!channels.ok || !d.items?.[0]) throw new Error("Channel");
+        upstreamStatus = channels.status;
+        upstreamReason = d.error?.errors?.[0]?.reason;
+        if (!channels.ok || !d.items?.[0]) {
+          upstreamReason ||= "channel_not_found";
+          throw new Error("Channel");
+        }
+        oauthStage = "save";
+        upstreamStatus = undefined;
+        upstreamReason = undefined;
         const channel = d.items[0];
         await pool.query(
           "INSERT INTO media_accounts(platform,name,external_id,credentials,verified_at) VALUES('youtube',$1,$2,$3,now()) ON CONFLICT(platform,external_id) DO UPDATE SET credentials=EXCLUDED.credentials,verified_at=now(),enabled=true",
@@ -838,6 +861,13 @@ export function registerMediaRoutes(app: Express) {
         );
         res.redirect("/admin?section=accounts&oauth=ok");
       } catch {
+        // Log only bounded machine-readable diagnostics, never OAuth codes or tokens.
+        console.error("[youtube-oauth] callback failed", {
+          stage: oauthStage,
+          status: upstreamStatus,
+          reason: typeof upstreamReason === "string" && /^[a-zA-Z0-9_.-]{1,80}$/.test(upstreamReason)
+            ? upstreamReason : "request_or_storage_failed",
+        });
         res.redirect("/admin?section=accounts&oauth=failed");
       }
     }),
