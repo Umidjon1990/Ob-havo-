@@ -1,7 +1,7 @@
 import { useEffect,useState } from 'react';
 import { mediaApi,type MediaData,tashkentDate } from './api';
 const initial={title:'',trigger:'comment',keywords:'LUG‘AT',action:'private_reply',response:'',media_id:'',enabled:false,require_follow:true};
-const eventStatus:Record<string,string>={received:'Navbatda',processing:'Bajarilmoqda',manual:'Ko‘rib chiqish kerak',handled:'Yuborildi',failed:'Xatolik',needs_review:'Natijani tekshirish kerak',awaiting_follow:'Obuna va Direct javobi kutilmoqda',follow_check_failed:'Obuna tasdiqlanmadi — havola berilmadi'};
+const eventStatus:Record<string,string>={received:'Navbatda',processing:'Bajarilmoqda',manual:'Ko‘rib chiqish kerak',handled:'Yuborildi',failed:'Xatolik',needs_review:'Natijani tekshirish kerak',awaiting_follow:'Obuna va tugma bosilishi kutilmoqda',follow_check_failed:'Obuna tasdiqlanmadi — havola berilmadi'};
 export default function GrowthStudio({data,onSaved}:{data:MediaData;onSaved:()=>Promise<void>}){
   const [state,setState]=useState<any>(null),[error,setError]=useState(''),[notice,setNotice]=useState(''),[busy,setBusy]=useState(false);
   const [account,setAccount]=useState(data.accounts.find(a=>a.platform==='instagram')?.id||'');

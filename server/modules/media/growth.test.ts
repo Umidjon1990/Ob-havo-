@@ -13,6 +13,7 @@ test('keyword matching handles Uzbek apostrophes and whole words without inciden
   assert.equal(keywordMatch('kurslar',['kurs']),false);
   assert.equal(keywordMatch('kitob narxi?',['kitob narxi']),true);
   assert.equal(keywordMatch('salom',['']),false);
+  for(const text of ['Qomus','QOMUS','qomus','QoMuS!'])assert.equal(keywordMatch(text,['QOMUS']),true);
 });
 test('automation refuses empty answers and invalid message actions',()=>{
   const v={account_id:'11111111-1111-4111-8111-111111111111',title:'Lugat',trigger:'message',keywords:['lugat'],action:'reply',response:'Material: https://example.org'};
@@ -42,6 +43,13 @@ test('events ignore echoes, dedupe by stable provider id and preserve comment me
   assert.equal(parseInstagramEvents({...entry,time:1791264000000})[0].occurred_at.getTime(),1791264000000);
   assert.deepEqual(parseInstagramEvents(entry).map(e=>e.key),events.map(e=>e.key));
   assert.equal(parseInstagramEvents({messaging:[{sender:{id:'1'},message:{mid:'z',text:'x'}}]}).length,0);
+});
+test('follow button payload selects the request independently of visible title',()=>{
+  const message={mid:'tap-1',text:'✅ Obuna bo‘ldim',quick_reply:{payload:'FOLLOW_CHECK:ABCDEF1234'}};
+  const entry={messaging:[{timestamp:Date.now(),sender:{id:'900'},message}]};
+  const tap=parseInstagramEvents(entry)[0];
+  assert.equal(tap.text,'OBUNA ABCDEF1234');assert.equal(tap.sender_id,'900');assert.equal(tap.key,'message:tap-1');
+  assert.equal(parseInstagramEvents({messaging:[{...entry.messaging[0],message:{...message,quick_reply:{payload:'FOLLOW_CHECK:broken'}}}]})[0].text,'INVALID_FOLLOW_CHECK');
 });
 test('reply windows reject expired and future events at exact boundaries',()=>{
   const now=1791264000000;
@@ -226,22 +234,29 @@ test('post-scoped rules and strict follow gate bind Meta recipient, never releas
     assert.equal((await call(`/rules/${rule.id}`,'PUT',{...ruleInput,account_id:b.id})).status,404);
     const source=await event('comment','LUG‘AT','222');assert.equal(source.status,'awaiting_follow');assert.equal(sent.length,1);assert.equal(reads.length,0);
     assert.ok(!sent[0].message.text.includes('https:'));assert.deepEqual(sent[0].recipient,{comment_id:source.external_id});
-    const p=await pending(source.id);assert.equal(p.recipient_id,'900');assert.notEqual(p.recipient_id,source.sender_id);
+    const p=await pending(source.id);assert.equal(p.recipient_id,'900');assert.equal(sent[0].message.quick_replies[0].payload,`FOLLOW_CHECK:${p.code}`);assert.equal(sent[0].message.text.includes(p.code),false);assert.notEqual(p.recipient_id,source.sender_id);
     // A stolen code or even the original comment-author ID cannot unlock a DM.
     await event('message',`OBUNA ${p.code}`,'222');await event('message',`OBUNA ${p.code}`,'901');await event('message',`OBUNA ${p.code}`,'900','',b.id);
     assert.equal(sent.length,1);assert.equal(reads.length,0);
-    let e=await event('message',`OBUNA ${p.code}`);assert.equal(e.status,'awaiting_follow');assert.equal(sent.at(-1).message.text.includes(response),false);
+    const tapText=(code:string)=>parseInstagramEvents({messaging:[{timestamp:Date.now(),sender:{id:'900'},message:{mid:'tap',text:'✅ Obuna bo‘ldim',quick_reply:{payload:`FOLLOW_CHECK:${code}`}}}]})[0].text;
+    let e=await event('message',tapText(p.code));assert.equal(e.status,'awaiting_follow');assert.equal(sent.at(-1).message.text.includes(response),false);
     for(const value of [undefined,'true',1]){
       follow=value;e=await event('message',`OBUNA ${p.code}`);assert.equal(e.status,'follow_check_failed');assert.equal(sent.at(-1).message.text.includes('https:'),false);
     }
     apiError=true;e=await event('message','OBUNA');assert.equal(e.status,'follow_check_failed');assert.ok(e.error.includes('230'));assert.equal(sent.at(-1).message.text.includes('https:'),false);apiError=false;
-    follow=true;e=await event('message','OBUNA');assert.equal(e.status,'handled');assert.equal(sent.at(-1).message.text,response);assert.deepEqual(sent.at(-1).recipient,{id:'900'});
+    follow=true;e=await event('message',tapText(p.code));assert.equal(e.status,'handled');assert.equal(sent.at(-1).message.text,response);assert.equal(sent.at(-1).message.quick_replies,undefined);assert.deepEqual(sent.at(-1).recipient,{id:'900'});
     assert.ok(reads.every(url=>url.includes('/900?fields=')));assert.equal((await pending(source.id)).status,'delivered');
-    const count=sent.length;await event('message',`OBUNA ${p.code}`);await processInteractions();assert.equal(sent.length,count);
+    const count=sent.length;await event('message',tapText(p.code));await processInteractions();assert.equal(sent.length,count);
     const wrongPost=await event('comment','LUGAT','222','444');assert.equal(wrongPost.response,'General response');
     const scope=(await call(`/rules/${rule.id}`,'PATCH',{enabled:false}));assert.equal(scope.status,200);
     let saved=(await pool.query('SELECT * FROM media_automations WHERE id=$1',[rule.id])).rows[0];assert.equal(saved.require_follow,true);assert.equal(saved.media_id,'333');
     await call(`/rules/${rule.id}`,'PATCH',{enabled:true});
+    const multi1=await event('comment','LUGAT','222'),multi2=await event('comment','LUGAT','222');
+    const request1=await pending(multi1.id),request2=await pending(multi2.id);
+    await event('message','OBUNA');assert.equal(sent.at(-1).message.quick_replies.length,2);
+    assert.deepEqual(new Set(sent.at(-1).message.quick_replies.map((v:any)=>v.payload)),new Set([`FOLLOW_CHECK:${request1.code}`,`FOLLOW_CHECK:${request2.code}`]));
+    await event('message',tapText(request1.code));assert.equal((await pending(multi1.id)).status,'delivered');assert.equal((await pending(multi2.id)).status,'awaiting_follow');
+    await event('message',tapText(request2.code));
     const oldSource=await event('comment','LUGAT','222'),old=await pending(oldSource.id);
     assert.equal((await call(`/rules/${rule.id}`,'PUT',{...ruleInput,title:'Edited lesson',response:'https://example.org/new-lesson'})).status,200);
     assert.equal((await pending(oldSource.id)).status,'cancelled');const before=sent.length;await event('message',`OBUNA ${old.code}`);assert.equal(sent.length,before);

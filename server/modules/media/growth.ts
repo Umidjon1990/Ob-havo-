@@ -94,6 +94,16 @@ function webhookSummary(body:any){
 }
 export type Incoming={key:string;kind:'comment'|'message';external_id:string;sender_id:string;media_id:string;text:string;occurred_at:Date};
 const commentTime=(value:unknown)=>{const n=Number(value);return new Date(n>=1e12?n:n*1000);};
+// Store a button's hidden request code in the existing durable message inbox.
+// The code is still scoped to the webhook account and actual messaging sender.
+function followReplyText(message:any):string{
+  const payload=message.quick_reply?.payload;
+  if(typeof payload==='string'&&payload.startsWith('FOLLOW_CHECK:')){
+    const match=/^FOLLOW_CHECK:([A-F0-9]{10})$/.exec(payload);
+    return match?`OBUNA ${match[1]}`:'INVALID_FOLLOW_CHECK';
+  }
+  return String(message.text).slice(0,5000);
+}
 export function parseInstagramEvents(entry:any):Incoming[]{
   const out:Incoming[]=[];
   for(const c of Array.isArray(entry.changes)?entry.changes:[]){const v=c?.value;
@@ -102,7 +112,7 @@ export function parseInstagramEvents(entry:any):Incoming[]{
   }
   for(const m of Array.isArray(entry.messaging)?entry.messaging:[]){
     if(m?.message?.is_echo||m?.message?.is_deleted||!m?.message?.mid||!m?.sender?.id||!m?.message?.text)continue;
-    out.push({key:`message:${m.message.mid}`,kind:'message',external_id:String(m.message.mid),sender_id:String(m.sender.id),media_id:'',text:String(m.message.text).slice(0,5000),occurred_at:new Date(Number(m.timestamp))});
+    out.push({key:`message:${m.message.mid}`,kind:'message',external_id:String(m.message.mid),sender_id:String(m.sender.id),media_id:'',text:followReplyText(m.message),occurred_at:new Date(Number(m.timestamp))});
   }return out.filter(e=>Number.isFinite(e.occurred_at.getTime()));
 }
 export function registerGrowthRoutes(app:Express){
@@ -223,7 +233,9 @@ export async function readInstagramFollow(a:any,senderId:string):Promise<FollowR
     return {state:'unknown',error:'Meta obuna holatini tasdiqlamadi.'};
   }catch(e){return {state:'unknown',error:e instanceof GrowthError?e.message:'Obuna holati tekshirilmadi.'};}
 }
-const followPrompt=(code:string)=>`📚 Materialni olish uchun Instagram profilimizga obuna bo‘ling.\n\nSo‘ng shu Directga OBUNA ${code} deb javob yozing. Obunangiz tasdiqlangach, havola yuboriladi.`;
+const followPrompt=()=>`📚 Materialni olish uchun Instagram profilimizga obuna bo‘ling.\n\nSo‘ng pastdagi “✅ Obuna bo‘ldim” tugmasini bosing. Obunangiz tasdiqlangach, havola yuboriladi.\n\nTugma ko‘rinmasa, shu Directga OBUNA deb yozing.`;
+const followButton=(code:string,title='✅ Obuna bo‘ldim')=>({content_type:'text',title:Array.from(title).slice(0,20).join(''),payload:`FOLLOW_CHECK:${code}`});
+const followMessage=(text:string,code:string)=>({text,quick_replies:[followButton(code)]});
 async function interactionResult(eventId:string,status:string,response:string,error:string|null=null){
   await pool.query('UPDATE media_interactions SET status=$2,response=$3,error=$4 WHERE id=$1',[eventId,status,response,error]);
 }
@@ -235,8 +247,8 @@ async function beginFollowRequest(a:any,e:any,rule:ReplyRule,check?:FollowResult
   if(!p)throw new GrowthError('Bu material so‘rovi avval bajarilgan. Natijani tekshiring.',409,true);
   let sent=false;
   try{
-    const text=followPrompt(p.code);
-    const result=await instagramRequest(a,`${a.external_id}/messages`,'POST',{recipient:e.kind==='comment'?{comment_id:external.parse(e.external_id)}:{id:e.sender_id},message:{text}});sent=true;
+    const text=followPrompt();
+    const result=await instagramRequest(a,`${a.external_id}/messages`,'POST',{recipient:e.kind==='comment'?{comment_id:external.parse(e.external_id)}:{id:e.sender_id},message:followMessage(text,p.code)});sent=true;
     // A comment author ID need not be their messaging ID. Bind continuation
     // only to the recipient Meta returned for the accepted private reply.
     const recipient=e.kind==='message'?e.sender_id:result.recipient_id;
@@ -253,16 +265,17 @@ async function beginFollowRequest(a:any,e:any,rule:ReplyRule,check?:FollowResult
 }
 async function continueFollowRequest(e:any):Promise<boolean>{
   if(e.kind!=='message')return false;
-  const match=/^OBUNA(?:\s+([A-F0-9]{10}))?[.!]?$/i.exec(e.text.trim());if(!match)return false;
-  const candidates=(await pool.query(`SELECT p.* FROM media_follow_requests p JOIN media_automations r ON r.id=p.rule_id
+  const match=/^OBUNA(?:\s+([A-F0-9]{10}))?[.!]?$/i.exec(e.text.trim())
+    ||/^(?:✅\s*)?OBUNA BO[‘’'ʼ`]?LDIM[.!]?$/i.exec(e.text.trim());if(!match)return false;
+  const candidates=(await pool.query(`SELECT p.*,r.title AS rule_title FROM media_follow_requests p JOIN media_automations r ON r.id=p.rule_id
     WHERE p.account_id=$1 AND p.recipient_id=$2 AND p.status='awaiting_follow' AND p.expires_at>now()
-      AND r.enabled AND r.require_follow AND ($3::text IS NULL OR p.code=$3) ORDER BY p.created_at DESC LIMIT 2`,[e.account_id,e.sender_id,match[1]?.toUpperCase()||null])).rows;
+      AND r.enabled AND r.require_follow AND ($3::text IS NULL OR p.code=$3) ORDER BY p.created_at DESC LIMIT 13`,[e.account_id,e.sender_id,match[1]?.toUpperCase()||null])).rows;
   if(!candidates.length){await interactionResult(e.id,'manual','','Faol material so‘rovi topilmadi. Postga kalit so‘zni qayta yozing.');return true;}
   const a=await account(e.account_id);
   if(!withinWindow('message',e.occurred_at)){await interactionResult(e.id,'failed','','Javob berish muddati tugagan.');return true;}
   if(candidates.length>1){
-    const text='Bir nechta material so‘rovingiz bor. Kerakli xabardagi OBUNA so‘zini kodi bilan birga yuboring.';
-    await instagramRequest(a,`${a.external_id}/messages`,'POST',{recipient:{id:e.sender_id},message:{text}});
+    const text='Bir nechta material so‘rovingiz bor. Kerakli material tugmasini bosing yoki uning oldingi xabaridagi “✅ Obuna bo‘ldim” tugmasidan foydalaning.';
+    await instagramRequest(a,`${a.external_id}/messages`,'POST',{recipient:{id:e.sender_id},message:{text,quick_replies:candidates.map((p:any)=>followButton(p.code,p.rule_title))}});
     await interactionResult(e.id,'awaiting_follow',text);return true;
   }
   const p=(await pool.query("UPDATE media_follow_requests SET status='checking',claimed_at=now() WHERE id=$1 AND status='awaiting_follow' AND expires_at>now() RETURNING *",[candidates[0].id])).rows[0];
@@ -274,9 +287,9 @@ async function continueFollowRequest(e:any):Promise<boolean>{
       WHERE p.id=$1 AND p.status='checking' AND p.expires_at>now() AND r.enabled AND r.require_follow`,[p.id])).rowCount;
     if(!active){await interactionResult(e.id,'manual','','Qoida o‘zgardi yoki so‘rov muddati tugadi. Postga kalit so‘zni qayta yozing.');return true;}
     const text=check.state==='following'?p.response:check.state==='not_following'
-      ?`Obunangiz hali tasdiqlanmadi. Instagram profilimizga obuna bo‘lib, OBUNA ${p.code} deb yana yozing.`
-      :`Obunangizni hozir tekshira olmadik. Havola yuborilmadi. Birozdan keyin OBUNA ${p.code} deb qayta yozing.`;
-    await instagramRequest(a,`${a.external_id}/messages`,'POST',{recipient:{id:e.sender_id},message:{text}});sent=true;
+      ?'Obunangiz hali tasdiqlanmadi. Instagram profilimizga obuna bo‘lib, pastdagi tugmani yana bosing. Tugma ko‘rinmasa, OBUNA deb yozing.'
+      :'Obunangizni hozir tekshira olmadik. Birozdan keyin pastdagi tugmani yana bosing. Tugma ko‘rinmasa, OBUNA deb yozing.';
+    await instagramRequest(a,`${a.external_id}/messages`,'POST',{recipient:{id:e.sender_id},message:check.state==='following'?{text}:followMessage(text,p.code)});sent=true;
     const status=check.state==='following'?'handled':check.state==='unknown'?'follow_check_failed':'awaiting_follow';
     await pool.query("UPDATE media_follow_requests SET status=$2 WHERE id=$1 AND status='checking'",[p.id,check.state==='following'?'delivered':'awaiting_follow']);
     await interactionResult(p.source_event_id,status,text,check.error||null);
