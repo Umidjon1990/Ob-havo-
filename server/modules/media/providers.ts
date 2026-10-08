@@ -304,6 +304,37 @@ export async function publish(
   }
   const token = await youtubeToken(account),
     asset = assets[0];
+  const cover: Asset | undefined = post.variants.youtube_cover_id
+    ? (await pool.query("SELECT id,mime_type,size,data FROM media_assets WHERE id=$1", [post.variants.youtube_cover_id])).rows[0]
+    : undefined;
+  if (post.variants.youtube_cover_id && (!cover || !["image/jpeg", "image/png"].includes(cover.mime_type) || cover.size > 50 * 1024 * 1024))
+    throw new PublishError("YouTube muqovasi topilmadi yoki JPG/PNG formati noto‘g‘ri.");
+  async function finishYouTubeUpload(r: any) {
+    // Keep the video identity before setting its thumbnail. A thumbnail failure
+    // must never cause the already uploaded video to be submitted again.
+    state.youtube_video_id = r.id;
+    state.youtube_privacy = r.status?.privacyStatus || state.youtube_privacy;
+    await save(state);
+    const notes: string[] = [];
+    if (state.youtube_privacy === "private")
+      notes.push("YouTube yuklandi, lekin private. Ilova auditi va video holatini tekshiring.");
+    if (cover && state.youtube_thumbnail_asset_id !== cover.id) {
+      try {
+        const thumbnail = await api(
+          `https://www.googleapis.com/upload/youtube/v3/thumbnails/set?videoId=${encodeURIComponent(r.id)}&uploadType=media`,
+          { method: "POST", headers: { Authorization: `Bearer ${token}`, "Content-Type": cover.mime_type }, body: new Uint8Array(cover.data) },
+        );
+        if (!thumbnail.items?.length) throw new PublishError("YouTube muqova javobini tekshiring.");
+        state.youtube_thumbnail_asset_id = cover.id;
+        await save(state);
+      } catch (e) {
+        notes.push(`Video yuklandi, lekin muqova tasdiqlanmadi. ${e instanceof PublishError ? e.message : "Muqova holatini YouTube Studio’da tekshiring."}`);
+      }
+    }
+    return { external_id: r.id, external_url: `https://youtu.be/${r.id}`, note: notes.length ? notes.join(" ") : undefined };
+  }
+  if (state.youtube_video_id)
+    return finishYouTubeUpload({ id: state.youtube_video_id });
   if (!state.upload_url) {
     let r: globalThis.Response;
     try {
@@ -364,14 +395,8 @@ export async function publish(
     }
     if (probe.ok) {
       const r = await probe.json();
-      return {
-        external_id: r.id,
-        external_url: `https://youtu.be/${r.id}`,
-        note:
-          r.status?.privacyStatus === "private"
-            ? "YouTube yuklandi, lekin private. Ilova auditi va video holatini tekshiring."
-            : undefined,
-      };
+      if (!r.id) throw new PublishError("YouTube javobini tekshiring.", false, true);
+      return finishYouTubeUpload(r);
     }
     if (probe.status !== 308)
       throw new PublishError(
@@ -400,13 +425,6 @@ export async function publish(
   );
   if (!r.id)
     throw new PublishError("YouTube javobini tekshiring.", false, true);
-  return {
-    external_id: r.id,
-    external_url: `https://youtu.be/${r.id}`,
-    note:
-      r.status?.privacyStatus === "private"
-        ? "YouTube yuklandi, lekin private. Ilova auditi va video holatini tekshiring."
-        : undefined,
-  };
+  return finishYouTubeUpload(r);
 }
 export { seal };

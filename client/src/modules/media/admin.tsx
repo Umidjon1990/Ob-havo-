@@ -1525,6 +1525,17 @@ function PostEditor({
           )}
           {variant === "youtube" && (
             <>
+              {["video", "stickman"].includes(format) && (
+                <Field label="YouTube muqovasi">
+                  <select className="media-input" value={variants.youtube_cover_id || ""}
+                    onChange={(e) => setVariants({ ...variants, youtube_cover_id: e.target.value || undefined })}>
+                    <option value="">Videodan avtomatik muqova</option>
+                    {assets.filter((a) => ["image/jpeg", "image/png"].includes(a.mime_type) && a.size <= 50 * 1024 * 1024).map((a) => (
+                      <option key={a.id} value={a.id}>{a.name}</option>
+                    ))}
+                  </select>
+                </Field>
+              )}
               <Field label="YouTube ko‘rinishi">
                 <select
                   className="media-input"

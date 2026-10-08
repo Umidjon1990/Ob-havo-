@@ -276,6 +276,7 @@ export function registerMediaRoutes(app: Express) {
         if (ids) await checkAssets(ids);
       }
       await checkInstagramCover(p);
+      await checkYouTubeCover(p);
       if(p.variants.reels) await checkReelAssets(p.variants.reels,p.variants.instagram_cover_id);
       const r = await pool.query(
         "INSERT INTO media_posts(title,caption,format,asset_ids,variants,production_notes) VALUES($1,$2,$3,$4,$5,$6) RETURNING *",
@@ -302,6 +303,7 @@ export function registerMediaRoutes(app: Express) {
         if (ids) await checkAssets(ids);
       }
       await checkInstagramCover(p);
+      await checkYouTubeCover(p);
       if(p.variants.reels) await checkReelAssets(p.variants.reels,p.variants.instagram_cover_id);
       const client = await pool.connect();
       try {
@@ -908,6 +910,12 @@ async function checkInstagramCover(p: z.infer<typeof postSchema>) {
   const [cover] = await checkAssets([p.variants.instagram_cover_id]);
   if (!["video", "stickman"].includes(p.format) || cover.mime_type !== "image/jpeg" || cover.size > 8 * 1024 * 1024)
     throw new z.ZodError([{ code: "custom", path: ["variants", "instagram_cover_id"], message: "Reels muqovasi uchun 8 MB gacha JPG va video formati kerak." }]);
+}
+async function checkYouTubeCover(p: z.infer<typeof postSchema>) {
+  if (!p.variants.youtube_cover_id) return;
+  const [cover] = await checkAssets([p.variants.youtube_cover_id]);
+  if (!["video", "stickman"].includes(p.format) || !["image/jpeg", "image/png"].includes(cover.mime_type) || cover.size > 50 * 1024 * 1024)
+    throw new z.ZodError([{ code: "custom", path: ["variants", "youtube_cover_id"], message: "YouTube muqovasi uchun 50 MB gacha JPG yoki PNG va video formati kerak." }]);
 }
 async function serveAsset(req: Request, res: Response, id: string) {
   const a = (

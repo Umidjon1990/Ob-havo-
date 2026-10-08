@@ -27,6 +27,7 @@ export const postSchema = z.object({
       instagram_asset_ids: z.array(z.string().uuid()).min(1).max(10).optional(),
       youtube_asset_ids: z.array(z.string().uuid()).min(1).max(1).optional(),
       instagram_cover_id: z.string().uuid().optional(),
+      youtube_cover_id: z.string().uuid().optional(),
       youtube: z.string().max(5000).optional(),
       suggested_at: z.string().datetime({ offset: true }).optional(),
       youtube_privacy: z.enum(["public", "unlisted", "private"]).optional(),
