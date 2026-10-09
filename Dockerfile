@@ -30,6 +30,7 @@ COPY --from=build /app/server/assets ./server/assets
 COPY --from=build /app/docs/examples/msc-october-2026.json ./docs/examples/msc-october-2026.json
 COPY --from=build /app/docs/examples/msc-october-2026-publication.json ./docs/examples/msc-october-2026-publication.json
 COPY --from=build /app/docs/examples/msc-october-2026-command.json ./docs/examples/msc-october-2026-command.json
+COPY --from=build /app/docs/examples/msc-preview-export-command.json ./docs/examples/msc-preview-export-command.json
 
 EXPOSE 5000
 
