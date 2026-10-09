@@ -84,6 +84,7 @@ const nav = [
   ["reels", "Reels studiyasi", Video],
   ["growth", "Instagram agent", MessageSquare],
   ["overview", "Umumiy ko‘rinish", LayoutDashboard],
+  ["learning", "Haftalik testlar", BookOpen],
   ["posts", "Kontentlar", Files],
   ["calendar", "Nashr taqvimi", CalendarDays],
   ["assets", "Media kutubxonasi", FolderOpen],
@@ -93,7 +94,6 @@ const nav = [
   ["rules", "Agent xotirasi", Brain],
   ["references", "Namunalar", Sparkles],
   ["weather", "Ob-havo", CloudSun],
-  ["learning", "Haftalik testlar", BookOpen],
   ["news", "Arabcha yangiliklar", Newspaper],
 ] as const;
 const formats: Record<string, string> = {

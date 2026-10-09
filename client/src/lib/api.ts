@@ -607,12 +607,14 @@ export async function adminLogin(username: string, password: string): Promise<{ 
   }
 }
 
-export async function verifyAdminToken(token: string): Promise<boolean> {
+export async function verifyAdminToken(token?: string): Promise<boolean> {
   try {
     const response = await fetch('/api/admin/verify', {
       method: 'POST',
-      headers: { 'Authorization': `Bearer ${token}` },
+      headers: token ? { 'Authorization': `Bearer ${token}` } : {},
+      credentials: 'same-origin',
     });
+    if (!response.ok) return false;
     const data = await response.json();
     return data.valid === true;
   } catch (error) {
@@ -620,11 +622,12 @@ export async function verifyAdminToken(token: string): Promise<boolean> {
   }
 }
 
-export async function adminLogout(token: string): Promise<void> {
+export async function adminLogout(token?: string): Promise<void> {
   try {
     await fetch('/api/admin/logout', {
       method: 'POST',
-      headers: { 'Authorization': `Bearer ${token}` },
+      headers: token ? { 'Authorization': `Bearer ${token}` } : {},
+      credentials: 'same-origin',
     });
   } catch (error) {}
 }

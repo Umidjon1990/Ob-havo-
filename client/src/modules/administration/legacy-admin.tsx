@@ -188,18 +188,19 @@ export default function LegacyAdmin({
     null,
   );
 
-  // Check auth on load
+  // Verify the shared HttpOnly session even when no legacy bearer is stored.
   useEffect(() => {
+    let active = true;
     const token = localStorage.getItem("admin_token");
-    if (token) {
-      verifyAdminToken(token).then((valid) => {
-        setIsAuthenticated(valid);
-        setAuthLoading(false);
-        if (valid) loadInitialData();
-      });
-    } else {
+    verifyAdminToken(token || undefined).then((valid) => {
+      if (!active) return;
+      setIsAuthenticated(valid);
       setAuthLoading(false);
-    }
+      if (valid) loadInitialData();
+    });
+    return () => {
+      active = false;
+    };
   }, []);
 
   const loadInitialData = () => {
@@ -601,7 +602,7 @@ export default function LegacyAdmin({
 
   const handleLogout = async () => {
     const token = localStorage.getItem("admin_token");
-    if (token) await adminLogout(token);
+    await adminLogout(token || undefined);
     localStorage.removeItem("admin_token");
     setIsAuthenticated(false);
     toast({ title: "Chiqildi" });
