@@ -1,0 +1,8 @@
+{
+  "command_id": "MSC-N007-V02-AUDIO-REPAIR-20261009-V1",
+  "operation": "repair_n007_v02_audio_and_export",
+  "approved": true,
+  "authorized_at": "2026-10-09",
+  "source": "User requested sample 7 v02 with the approved visual standard, reusing good audio and correcting missing explanations",
+  "plans_sha256": "8d76f90c8c77acfa88b3227f54aa1e311e7c16e54724bcc5db2091ad71f34edb"
+}

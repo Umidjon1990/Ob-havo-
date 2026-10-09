@@ -31,6 +31,8 @@ COPY --from=build /app/docs/examples/msc-october-2026.json ./docs/examples/msc-o
 COPY --from=build /app/docs/examples/msc-october-2026-publication.json ./docs/examples/msc-october-2026-publication.json
 COPY --from=build /app/docs/examples/msc-october-2026-command.json ./docs/examples/msc-october-2026-command.json
 COPY --from=build /app/docs/examples/msc-preview-export-command.json ./docs/examples/msc-preview-export-command.json
+COPY --from=build /app/docs/examples/msc-preview-audio-command.json ./docs/examples/msc-preview-audio-command.json
+COPY --from=build /app/docs/examples/msc-n007-v02.json ./docs/examples/msc-n007-v02.json
 
 EXPOSE 5000
 
