@@ -1,3 +1,4 @@
+import { mediaLibraryLimit } from "./storage-quota";
 import { readFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import { z } from 'zod';
@@ -44,7 +45,7 @@ export async function startMscPackage(client:any, items:Awaited<ReturnType<typeo
   // Reserve a full video plus both scene and mixed audio before a paid batch.
   const reserve=needed.reduce((n,i)=>n+50*1024*1024+Math.ceil(i.plan.scenes.reduce((s,c)=>s+c.narration.length,0)/7)*32000+i.cover.length,0);
   const used=Number((await client.query('SELECT COALESCE(SUM(size),0) AS used FROM media_assets')).rows[0].used);
-  if(used+reserve>1024*1024*1024)throw new AudioError(413,'Paket uchun kutubxonada yetarli joy yo‘q. Audio navbatga qo‘yilmadi.');
+  if(used+reserve>mediaLibraryLimit())throw new AudioError(413,'Paket uchun kutubxonada yetarli joy yo‘q. Audio navbatga qo‘yilmadi.');
   const results=[];
   for(let order=0;order<items.length;order++) {
     const item=items[order];

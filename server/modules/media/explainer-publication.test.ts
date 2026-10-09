@@ -70,3 +70,23 @@ test('automatic scheduling waits for real videos, rejects the other Telegram cha
   job.status='running';await processMscPublication();assert.equal(job.status,'completed');assert.equal(deliveries.length,18);
  }finally{pool.connect=originalConnect;pool.query=originalQuery;globalThis.fetch=originalFetch;for(const [key,value] of Object.entries(savedEnv)){if(value===undefined)delete process.env[key];else process.env[key]=value;}}
 });
+
+test('only the known no-charge quota preflight receipt can be replayed after capacity is fixed',async()=>{
+ const items=await loadMscPackage();let prepareCalls=0,queued=0;
+ const receipt:any={id:'receipt',status:'failed',error:'Ovoz so‘rovi natijasi noma’lum.'};
+ const posts=items.map((i,n)=>({id:`done-${n}`,variants:{explainer:i.plan,explainer_video_id:`video-${n}`}}));
+ const c={async query(sql:string):Promise<any>{
+  if(sql.startsWith('SELECT id,status,error'))return {rows:[receipt]};
+  if(sql.startsWith('SELECT * FROM media_posts'))return {rows:posts};
+  if(sql.startsWith('SELECT * FROM media_jobs'))return {rows:[]};
+  if(sql.includes('SUM(size)'))return {rows:[{used:0}]};
+  if(sql.startsWith('UPDATE media_jobs'))return {rows:[]};
+  return {rows:[]};
+ }};
+ const command=commandSchema.parse({command_id:'MSC-OCTOBER-2026-PREPARE-SCHEDULE-V1',operation:'prepare_and_schedule',approved:true,authorized_at:'2026-10-09',source:'User explicitly requested preparation and Telegram/YouTube scheduling through server code'});
+ const prepare=async()=>{prepareCalls++;return {items,voice:'same-clone'};};
+ const queue=async()=>{queued++;};const publish=async()=> 'publication';
+ assert.deepEqual(await executeMscCommand(c,command,prepare,queue,publish),{duplicate:true});assert.equal(prepareCalls,0);
+ receipt.error='Paket uchun kutubxonada yetarli joy yo‘q. Audio navbatga qo‘yilmadi.';
+ assert.deepEqual(await executeMscCommand(c,command,prepare,queue,publish),{duplicate:false,count:9});assert.equal(prepareCalls,1);assert.equal(queued,0);
+});

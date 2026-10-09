@@ -26,7 +26,7 @@ export async function mediaApi<T>(
 }
 export type Overview = {
   counts: Record<string, number>;
-  storage: { bytes: string; files: number };
+  storage: { bytes: string; files: number; limit_bytes?:number };
   capabilities: { openai: boolean; telegram: boolean; youtube_oauth: boolean };
   timezone: string;
 };

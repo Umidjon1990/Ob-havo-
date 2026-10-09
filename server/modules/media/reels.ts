@@ -1,3 +1,4 @@
+import { mediaLibraryLimit } from "./storage-quota";
 import type { Express } from "express";
 import { createHash } from "node:crypto";
 import { z } from "zod";
@@ -9,7 +10,7 @@ import { generateAudio, AudioError } from "./audio";
 import { renderReel, probeReel } from "./reels-render";
 import { syncReelAutomations } from "./reel-automations";
 const uuid = z.string().uuid();
-const quota = 1024 * 1024 * 1024;
+const quota = mediaLibraryLimit();
 export const audioFingerprint = (script: string, voice: string) => createHash("sha256").update(JSON.stringify([script,voice,"eleven_v4","uz"])).digest("hex");
 
 async function saveAsset(client:any, name:string, mime:string, data:Buffer) {

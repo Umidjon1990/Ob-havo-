@@ -1,3 +1,4 @@
+import { mediaLibraryLimit } from "./storage-quota";
 import { readFile, mkdtemp, writeFile, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { execFile } from "node:child_process";
@@ -142,7 +143,7 @@ export async function processExplainer() {
     pulse.unref();
     const plan=explainerPlanSchema.parse(job.payload.plan);
     const usedBefore=Number((await pool.query("SELECT COALESCE(SUM(size),0) AS used FROM media_assets")).rows[0].used);
-    if(usedBefore>1024*1024*1024-100*1024*1024)throw new AudioError(413,"Video va sahna ovozlari uchun kamida 100 MB bo‘sh joy kerak. Audio yaratilmadi.");
+    if(usedBefore>mediaLibraryLimit()-100*1024*1024)throw new AudioError(413,"Video va sahna ovozlari uchun kamida 100 MB bo‘sh joy kerak. Audio yaratilmadi.");
     const ids=Array.from(new Set(plan.scenes.flatMap(s=>s.image_id?[s.image_id]:[])));
     const assets=(await pool.query("SELECT id,mime_type,data FROM media_assets WHERE id=ANY($1::uuid[])",[ids])).rows;
     if(ids.some(id=>!assets.some(a=>a.id===id))) throw new AudioError(422,"Video rasmi o‘chirilgan yoki topilmadi.");
@@ -159,7 +160,7 @@ export async function processExplainer() {
       try {
         await c.query("BEGIN");await c.query("SELECT pg_advisory_xact_lock(761281)");
         const used=Number((await c.query("SELECT COALESCE(SUM(size),0) AS used FROM media_assets")).rows[0].used);
-        if(used+audio.length>1024*1024*1024)throw new AudioError(413,"Ovoz yaratildi, ammo kutubxona to‘ldi. ElevenLabs tarixini tekshiring.");
+        if(used+audio.length>mediaLibraryLimit())throw new AudioError(413,"Ovoz yaratildi, ammo kutubxona to‘ldi. ElevenLabs tarixini tekshiring.");
         const a=(await c.query("INSERT INTO media_assets(name,mime_type,size,data) VALUES($1,'audio/mpeg',$2,$3) RETURNING id",[`${plan.title} — ${index+1}-sahna`,audio.length,audio])).rows[0];
         checkpoint.push({scene:index,audio_id:a.id});
         await c.query("UPDATE media_jobs SET result=$2,started_at=now() WHERE id=$1",[job.id,JSON.stringify({audio_scenes:checkpoint,pending_scene:null})]);
@@ -172,7 +173,7 @@ export async function processExplainer() {
       const p=(await client.query("SELECT variants FROM media_posts WHERE id=$1 FOR UPDATE",[job.payload.post_id])).rows[0];
       if(!p) throw new AudioError(404,"Video loyihasi o‘chirilgan.");
       const used=Number((await client.query("SELECT COALESCE(SUM(size),0) AS used FROM media_assets")).rows[0].used);
-      if(used+result.video.length+result.audio.length>1024*1024*1024) throw new AudioError(413,"Kutubxona to‘ldi. Audio ElevenLabs tarixida mavjud.");
+      if(used+result.video.length+result.audio.length>mediaLibraryLimit()) throw new AudioError(413,"Kutubxona to‘ldi. Audio ElevenLabs tarixida mavjud.");
       const video=(await client.query("INSERT INTO media_assets(name,mime_type,size,data) VALUES($1,'video/mp4',$2,$3) RETURNING id",[plan.title+".mp4",result.video.length,result.video])).rows[0];
       const audio=(await client.query("INSERT INTO media_assets(name,mime_type,size,data) VALUES($1,'audio/mpeg',$2,$3) RETURNING id",[plan.title+" — video ovozi.mp3",result.audio.length,result.audio])).rows[0];
       const variants={...p.variants,explainer:plan,explainer_audio_id:audio.id,explainer_video_id:video.id};

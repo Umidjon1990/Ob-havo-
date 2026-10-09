@@ -1,3 +1,4 @@
+import { mediaLibraryLimit } from "./storage-quota";
 import express, {
   type Express,
   type Request,
@@ -108,7 +109,7 @@ export function registerMediaRoutes(app: Express) {
     generatingAudio = true;
     try {
       const quota = await pool.query("SELECT COALESCE(SUM(size),0) AS used FROM media_assets");
-      if (Number(quota.rows[0].used) > 1024 * 1024 * 1024 - 50 * 1024 * 1024)
+      if (Number(quota.rows[0].used) > mediaLibraryLimit() - 50 * 1024 * 1024)
         throw new AudioError(413, "Audio uchun kutubxonada kamida 50 MB bo‘sh joy kerak.");
       const audio = await generateAudio(input);
       const client = await pool.connect();
@@ -116,7 +117,7 @@ export function registerMediaRoutes(app: Express) {
         await client.query("BEGIN");
         await client.query("SELECT pg_advisory_xact_lock(761281)");
         const used = await client.query("SELECT COALESCE(SUM(size),0) AS used FROM media_assets");
-        if (Number(used.rows[0].used) + audio.length > 1024 * 1024 * 1024)
+        if (Number(used.rows[0].used) + audio.length > mediaLibraryLimit())
           throw new AudioError(413, "Audio yaratildi, ammo kutubxonaga sig‘madi. ElevenLabs tarixidan yuklab oling.");
         const r = await client.query(`INSERT INTO media_assets(name,mime_type,size,data) VALUES($1,'audio/mpeg',$2,$3) RETURNING ${meta}`, [input.name.replace(/\.mp3$/i, "") + ".mp3", audio.length, audio]);
         await client.query("COMMIT");
@@ -161,13 +162,13 @@ export function registerMediaRoutes(app: Express) {
         const quota = await client.query(
           "SELECT COALESCE(SUM(size),0) AS used FROM media_assets",
         );
-        if (Number(quota.rows[0].used) + req.body.length > 1024 * 1024 * 1024) {
+        if (Number(quota.rows[0].used) + req.body.length > mediaLibraryLimit()) {
           await client.query("ROLLBACK");
           res
             .status(413)
             .json({
               error:
-                "Media kutubxonasi 1 GB limitga yetdi. Ishlatilmagan fayllarni o‘chiring.",
+                "Media kutubxonasi limitga yetdi. Ishlatilmagan fayllarni o‘chiring.",
             });
           return;
         }
@@ -249,7 +250,7 @@ export function registerMediaRoutes(app: Express) {
       ]);
       res.json({
         counts: Object.fromEntries(counts.rows.map((r) => [r.status, r.count])),
-        storage: storage.rows[0],
+        storage: {...storage.rows[0],limit_bytes:mediaLibraryLimit()},
         capabilities: {
           openai: !!(
             process.env.OPENAI_API_KEY ||

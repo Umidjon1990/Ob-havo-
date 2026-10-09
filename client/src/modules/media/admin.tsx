@@ -865,7 +865,7 @@ export default function MediaAdmin() {
                   </h2>
                   <p className="media-subtle">
                     JPG, PNG, MP4 va MP3 · Har bir fayl 50 MB gacha ·{" "}
-                    {sizeLabel(Number(data.overview.storage.bytes))} / 1 GB
+                    {sizeLabel(Number(data.overview.storage.bytes))} / {sizeLabel(data.overview.storage.limit_bytes||1024**3)}
                   </p>
                   <input
                     aria-label="Media fayl yuklash"
