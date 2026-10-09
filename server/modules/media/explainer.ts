@@ -170,6 +170,8 @@ export async function processExplainer() {
     const client=await pool.connect();
     try {
       await client.query("BEGIN");await client.query("SELECT pg_advisory_xact_lock(761281)");
+      const active=(await client.query("SELECT status FROM media_jobs WHERE id=$1 FOR UPDATE",[job.id])).rows[0];
+      if(active?.status!=="running")throw new Error("Job cancelled before final asset persistence");
       const p=(await client.query("SELECT variants FROM media_posts WHERE id=$1 FOR UPDATE",[job.payload.post_id])).rows[0];
       if(!p) throw new AudioError(404,"Video loyihasi o‘chirilgan.");
       const used=Number((await client.query("SELECT COALESCE(SUM(size),0) AS used FROM media_assets")).rows[0].used);
@@ -183,7 +185,7 @@ export async function processExplainer() {
       if(plan.profile==="msc")console.info("MSC lesson completed:",plan.lesson_code,"duration:",result.duration.toFixed(1),"seconds");
     } catch(e) {await client.query("ROLLBACK");throw e;} finally {client.release();}
   } catch(e) {
-    if(job) await pool.query("UPDATE media_jobs SET status='failed',error=$2,completed_at=now() WHERE id=$1",[job.id,e instanceof AudioError?e.message:e instanceof Error&&/Scene|Audio duration|Video duration|Video exceeds/.test(e.message)?e.message:"Video tayyorlanmadi. ElevenLabs’da qisman audio yaratilgan bo‘lishi mumkin; tarixni tekshiring. Avtomatik qayta urinish yo‘q."]);
+    if(job) await pool.query("UPDATE media_jobs SET status='failed',error=$2,completed_at=now() WHERE id=$1 AND status='running'",[job.id,e instanceof AudioError?e.message:e instanceof Error&&/Scene|Audio duration|Video duration|Video exceeds/.test(e.message)?e.message:"Video tayyorlanmadi. ElevenLabs’da qisman audio yaratilgan bo‘lishi mumkin; tarixni tekshiring. Avtomatik qayta urinish yo‘q."]);
     console.error("Explainer worker:",e instanceof Error?e.name:"Unknown");
   } finally {if(pulse)clearInterval(pulse);if(leased&&lease)await lease.query("SELECT pg_advisory_unlock(761282)").catch(()=>{});lease?.release();rendering=false;}
 }

@@ -76,7 +76,7 @@ app.use((req, res, next) => {
 
   await registerRoutes(httpServer, app);
   const { startMediaWorker } = await import("./modules/media/worker");
-  startMediaWorker();
+  await startMediaWorker();
 
   app.use((err: any, _req: Request, res: Response, _next: NextFunction) => {
     const status = err.status || err.statusCode || 500;

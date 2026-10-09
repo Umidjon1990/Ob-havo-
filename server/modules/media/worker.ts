@@ -2,6 +2,7 @@ import { automaticQuality } from "./quality";
 import { processInteractions, processInsights } from "./growth";
 import { processExplainer } from "./explainer";
 import { processMscCommand } from "./explainer-command";
+import { processMscPreviewExport } from "./msc-preview-export";
 import { processMscPublication } from "./explainer-publication";
 import { processReelJobs } from "./reels";
 import { randomUUID } from "node:crypto";
@@ -234,8 +235,10 @@ export async function processGeneration() {
     generationBusy = false;
   }
 }
-export function startMediaWorker() {
+export async function startMediaWorker() {
   if (process.env.DISABLE_SCHEDULERS === "true") return;
+  // Apply the owner's scoped MSC cancellation/export before any old job resumes.
+  await processMscPreviewExport();
   void processMscCommand().catch(()=>console.info("MSC command could not connect to database."));
   const timer = setInterval(() => {
     void processInteractions();

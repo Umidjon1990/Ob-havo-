@@ -1,0 +1,7 @@
+{
+  "command_id": "MSC-N007-V02-EXPORT-AND-STOP-OLD-20261009-V1",
+  "operation": "export_saved_audio_and_cancel_old_msc_package",
+  "approved": true,
+  "authorized_at": "2026-10-09",
+  "source": "User stopped unapproved October MSC generation and requested sample 7 v02 preview using existing good audio"
+}
