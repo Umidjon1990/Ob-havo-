@@ -48,6 +48,8 @@ export async function schedulePublications(
       if(post.variants.reels) await checkReelAssets(post.variants.reels,post.variants.instagram_cover_id);
       if ((await client.query("SELECT 1 FROM media_jobs WHERE kind IN ('explainer','reels_audio','reels_render') AND status IN ('queued','running') AND payload->>'post_id'=$1",[post.id])).rowCount) throw new ScheduleError(`${post.title}: video tayyorlanishini kuting.`,409);
       for (const a of accounts) {
+        if (a.platform === "youtube" && post.variants.youtube_playlist && post.variants.youtube_playlist.account_id !== a.id)
+          throw new ScheduleError(`${post.title}: playlist va YouTube hisobi mos emas.`);
         const selected = platformPost(post, a.platform);
         const assets = (await client.query("SELECT id,mime_type FROM media_assets WHERE id=ANY($1::uuid[])",[selected.asset_ids])).rows;
         if (assets.length !== selected.asset_ids.length) throw new ScheduleError(`${post.title}: media fayl topilmadi.`);

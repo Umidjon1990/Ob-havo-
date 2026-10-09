@@ -1,15 +1,9 @@
 import { pool } from "../../db";
 import { assetSignature, seal, unseal } from "./security";
 import type { MediaPost } from "../../../shared/media";
-export class PublishError extends Error {
-  constructor(
-    message: string,
-    public retryable = false,
-    public ambiguous = false,
-  ) {
-    super(message);
-  }
-}
+import { PublishError } from "./publish-error";
+import { attachYouTubePlaylist, ownedYouTubePlaylist, playlistWriteGranted } from "./youtube-playlists";
+export { PublishError } from "./publish-error";
 type Account = {
   id: string;
   platform: string;
@@ -119,7 +113,7 @@ async function ig(
     unsafe,
   );
 }
-export async function youtubeToken(account: Account) {
+export async function youtubeAccess(account: Account) {
   const expectedChannelId = process.env.YOUTUBE_CHANNEL_ID?.trim();
   if (expectedChannelId && account.external_id !== expectedChannelId)
     throw new PublishError("Bu YouTube kanali asosiy kanal emas. Umidjon Abdurayimov kanalini Google orqali ulang.");
@@ -129,7 +123,7 @@ export async function youtubeToken(account: Account) {
     !process.env.GOOGLE_CLIENT_SECRET
   )
     throw new PublishError("YouTube OAuth sozlamalari kerak.");
-  const c = unseal<{ refresh_token: string }>(account.credentials);
+  const c = unseal<{ refresh_token: string; scope?: string }>(account.credentials);
   const r = await api("https://oauth2.googleapis.com/token", {
     method: "POST",
     headers: { "Content-Type": "application/x-www-form-urlencoded" },
@@ -140,7 +134,11 @@ export async function youtubeToken(account: Account) {
       grant_type: "refresh_token",
     }),
   });
-  return r.access_token as string;
+  if (!r.access_token) throw new PublishError("YouTube kirish ruxsatini yangilang.");
+  return { token: r.access_token as string, playlist_write: playlistWriteGranted(r.scope ?? c.scope) };
+}
+export async function youtubeToken(account: Account) {
+  return (await youtubeAccess(account)).token;
 }
 export async function verifyAccount(account: Account) {
   if (account.platform === "telegram") {
@@ -302,8 +300,16 @@ export async function publish(
     }
     return { external_id: r.id, external_url: url };
   }
-  const token = await youtubeToken(account),
+  const access = await youtubeAccess(account), token = access.token,
     asset = assets[0];
+  const playlist = post.variants.youtube_playlist;
+  if (playlist) {
+    if (playlist.account_id !== account.id)
+      throw new PublishError("Tanlangan playlist boshqa YouTube hisobiga tegishli.");
+    if (access.playlist_write === false)
+      throw new PublishError("Playlist boshqaruvi uchun Platformalar bo‘limida YouTube’ni Google orqali qayta ulang va playlist ruxsatini bering.");
+    await ownedYouTubePlaylist(token, playlist.playlist_id, account.external_id);
+  }
   const cover: Asset | undefined = post.variants.youtube_cover_id
     ? (await pool.query("SELECT id,mime_type,size,data FROM media_assets WHERE id=$1", [post.variants.youtube_cover_id])).rows[0]
     : undefined;
@@ -329,6 +335,15 @@ export async function publish(
         await save(state);
       } catch (e) {
         notes.push(`Video yuklandi, lekin muqova tasdiqlanmadi. ${e instanceof PublishError ? e.message : "Muqova holatini YouTube Studio’da tekshiring."}`);
+      }
+    }
+    if (playlist) {
+      try {
+        await attachYouTubePlaylist(token, playlist, account.external_id, r.id, state, save);
+      } catch (e) {
+        if (e instanceof PublishError)
+          throw new PublishError(`Video yuklandi: https://youtu.be/${r.id}. Playlist: ${e.message}`, e.retryable, e.ambiguous);
+        throw e;
       }
     }
     return { external_id: r.id, external_url: `https://youtu.be/${r.id}`, note: notes.length ? notes.join(" ") : undefined };

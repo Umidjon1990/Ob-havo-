@@ -28,6 +28,13 @@ export const postSchema = z.object({
       youtube_asset_ids: z.array(z.string().uuid()).min(1).max(1).optional(),
       instagram_cover_id: z.string().uuid().optional(),
       youtube_cover_id: z.string().uuid().optional(),
+      youtube_playlist: z.object({
+        account_id: z.string().uuid(),
+        playlist_id: z.string().regex(/^[A-Za-z0-9_-]{10,150}$/),
+        title: z.string().max(150).optional(),
+        // The panel uses one-based positions; YouTube uses zero-based positions.
+        position: z.number().int().min(1).max(10000).optional(),
+      }).optional(),
       youtube: z.string().max(5000).optional(),
       suggested_at: z.string().datetime({ offset: true }).optional(),
       youtube_privacy: z.enum(["public", "unlisted", "private"]).optional(),
@@ -78,6 +85,25 @@ export type MediaAccount = {
   enabled: boolean;
   verified_at: string | null;
   has_credentials: boolean;
+};
+export type YouTubePlaylist = {
+  id: string;
+  title: string;
+  description: string;
+  privacy: "public" | "unlisted" | "private";
+  item_count: number;
+  url: string;
+};
+export type YouTubePlaylistItem = {
+  id: string;
+  video_id: string;
+  title: string;
+  position: number;
+  url: string;
+};
+export type YouTubePlaylistCatalog = {
+  playlists: YouTubePlaylist[];
+  can_manage: boolean | null;
 };
 export type MediaAsset = {
   id: string;

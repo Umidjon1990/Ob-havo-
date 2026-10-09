@@ -65,6 +65,7 @@ import "./media.css";
 import ExplainerStudio from "./explainer-studio";
 import GrowthStudio from "./growth-studio";
 import ReelsStudio from "./reels-studio";
+import YouTubePlaylists, { YouTubePlaylistFields } from "./youtube-playlists";
 type Section =
   | "reels"
   | "growth"
@@ -75,6 +76,7 @@ type Section =
   | "audio"
   | "assets"
   | "accounts"
+  | "playlists"
   | "rules"
   | "references"
   | "weather"
@@ -91,6 +93,7 @@ const nav = [
   ["audio", "Audio yaratish", Mic],
   ["explainer", "Explainer video", Video],
   ["accounts", "Platformalar", Link2],
+  ["playlists", "YouTube playlistlar", Youtube],
   ["rules", "Agent xotirasi", Brain],
   ["references", "Namunalar", Sparkles],
   ["weather", "Ob-havo", CloudSun],
@@ -414,6 +417,7 @@ export default function MediaAdmin() {
     audio: "ElevenLabs v4 · O‘zbekcha va arabcha · Shaxsiy va boshqa ovozlar.",
     assets: "Yaratilgan rasm, video va audiolaringiz uchun doimiy saqlash.",
     accounts: "Instagram, Telegram va YouTube ulanishlarini boshqaring.",
+    playlists: "YouTube playlist yarating, videolarni tanlang va tartibini boshqaring.",
     rules: "Keyingi topshiriqlarda qayta aytishingiz shart bo‘lmagan talablar.",
     references: "Yoqqan Reels va postlardan olingan usullarni saqlang.",
     weather: "Ob-havo boti, kanallar va mavjud yuborish sozlamalari.",
@@ -849,6 +853,7 @@ export default function MediaAdmin() {
             )}
             {section === "growth" && <GrowthStudio data={data} onSaved={refresh} />}
             {section === "reels" && <ReelsStudio data={data} onSaved={refresh} />}
+            {section === "playlists" && <YouTubePlaylists accounts={data.accounts} />}
             {section === "audio" && <AudioStudio onSaved={refresh} />}
             {section === "explainer" && <ExplainerStudio data={data} onSaved={refresh} />}
             {section === "assets" && (
@@ -1065,6 +1070,7 @@ export default function MediaAdmin() {
                                 Google tekshiruvidan o‘tmagan API loyihasi
                                 videoni private holatda cheklashi mumkin.
                               </p>
+                              <p className="media-subtle mt-3">Playlist yaratish va tartiblash uchun Google orqali ulashda playlist boshqaruviga ham ruxsat bering. Avval ulangan hisobni qayta ulash kerak bo‘lishi mumkin.</p>
                             </>
                           ) : (
                             <Button secondary onClick={() => setAccount(true)}>
@@ -1204,6 +1210,7 @@ export default function MediaAdmin() {
         <PostEditor
           post={editPost}
           assets={data.assets}
+          accounts={data.accounts}
           busy={busy}
           onClose={() => setEditPost(undefined)}
           onSave={async (body) => {
@@ -1391,12 +1398,14 @@ function FormShell({
 function PostEditor({
   post,
   assets,
+  accounts,
   onClose,
   onSave,
   onDelete,
 }: {
   post: MediaPost | null;
   assets: MediaAsset[];
+  accounts: MediaAccount[];
   busy: boolean;
   onClose: () => void;
   onSave: (body: unknown) => Promise<unknown>;
@@ -1464,7 +1473,10 @@ function PostEditor({
             <select
               className="media-input"
               value={format}
-              onChange={(e) => setFormat(e.target.value as typeof format)}
+              onChange={(e) => {
+                setFormat(e.target.value as typeof format);
+                if (!["video", "stickman"].includes(e.target.value)) setVariants({ ...variants, youtube_playlist: undefined });
+              }}
             >
               {Object.entries(formats).map(([v, l]) => (
                 <option key={v} value={v}>
@@ -1525,6 +1537,8 @@ function PostEditor({
           )}
           {variant === "youtube" && (
             <>
+              {["video", "stickman"].includes(format) && <YouTubePlaylistFields accounts={accounts} value={variants.youtube_playlist} disabled={locked}
+                onChange={youtube_playlist => setVariants({ ...variants, youtube_playlist })} />}
               {["video", "stickman"].includes(format) && (
                 <Field label="YouTube muqovasi">
                   <select className="media-input" value={variants.youtube_cover_id || ""}
@@ -1727,6 +1741,11 @@ function ScheduleModal({
             </div>
           )}
         </div>
+        {selected.some(id => accounts.some(a => a.id === id && a.platform === "youtube")) && posts.some(p => p.variants.youtube_playlist) && (
+          <div className="media-panel mb-4"><h3>YouTube playlist rejasi</h3>
+            {posts.filter(p => p.variants.youtube_playlist).map(p => <p className="media-subtle" key={p.id}>{p.title} → {p.variants.youtube_playlist!.title || p.variants.youtube_playlist!.playlist_id} · {p.variants.youtube_playlist!.position ? `${p.variants.youtube_playlist!.position}-o‘rin` : "oxiriga"}</p>)}
+          </div>
+        )}
         {posts.length === 1 ? (
           <Field
             label="Nashr sanasi va vaqti"

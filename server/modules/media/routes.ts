@@ -23,7 +23,8 @@ import {
   requestToken,
   seal,
 } from "./security";
-import { appBaseUrl, verifyAccount } from "./providers";
+import { appBaseUrl, verifyAccount, PublishError } from "./providers";
+import { registerYouTubePlaylistRoutes } from "./youtube-playlist-routes";
 import { schedulePublications, ScheduleError } from "./scheduling";
 import { registerExplainerRoutes } from "./explainer";
 import { audioInput, audioCatalog, generateAudio, AudioError } from "./audio";
@@ -40,6 +41,8 @@ const route =
     } catch (e) {
       if (e instanceof ScheduleError || e instanceof AudioError) {
         res.status(e.status).json({ error: e.message });
+      } else if (e instanceof PublishError) {
+        res.status(e.ambiguous ? 409 : e.retryable ? 503 : 400).json({ error: e.message });
       } else if (e instanceof z.ZodError) {
         res
           .status(400)
@@ -94,6 +97,7 @@ export function registerMediaRoutes(app: Express) {
   );
   registerGrowthRoutes(app);
   app.use("/api/media", requireAdmin);
+  registerYouTubePlaylistRoutes(app, route);
   registerQualityRoutes(app, route);
   registerExplainerRoutes(app, route);
   registerReelRoutes(app, route);
@@ -281,6 +285,7 @@ export function registerMediaRoutes(app: Express) {
       }
       await checkInstagramCover(p);
       await checkYouTubeCover(p);
+      await checkYouTubePlaylistAccount(p);
       if(p.variants.reels) await checkReelAssets(p.variants.reels,p.variants.instagram_cover_id);
       const r = await pool.query(
         "INSERT INTO media_posts(title,caption,format,asset_ids,variants,production_notes) VALUES($1,$2,$3,$4,$5,$6) RETURNING *",
@@ -308,6 +313,7 @@ export function registerMediaRoutes(app: Express) {
       }
       await checkInstagramCover(p);
       await checkYouTubeCover(p);
+      await checkYouTubePlaylistAccount(p);
       if(p.variants.reels) await checkReelAssets(p.variants.reels,p.variants.instagram_cover_id);
       const client = await pool.connect();
       try {
@@ -788,7 +794,7 @@ export function registerMediaRoutes(app: Express) {
         redirect_uri: `${appBaseUrl()}/api/media/oauth/youtube/callback`,
         response_type: "code",
         scope:
-          "https://www.googleapis.com/auth/youtube.upload https://www.googleapis.com/auth/youtube.readonly",
+          "https://www.googleapis.com/auth/youtube.upload https://www.googleapis.com/auth/youtube.readonly https://www.googleapis.com/auth/youtube.force-ssl",
         access_type: "offline",
         prompt: "consent",
         state,
@@ -869,7 +875,7 @@ export function registerMediaRoutes(app: Express) {
           [
             channel.snippet.title,
             channel.id,
-            seal({ refresh_token: c.refresh_token }),
+            seal({ refresh_token: c.refresh_token, scope: c.scope }),
           ],
         );
         console.info("[youtube-oauth] channel saved", {
@@ -914,6 +920,13 @@ async function checkInstagramCover(p: z.infer<typeof postSchema>) {
   const [cover] = await checkAssets([p.variants.instagram_cover_id]);
   if (!["video", "stickman"].includes(p.format) || cover.mime_type !== "image/jpeg" || cover.size > 8 * 1024 * 1024)
     throw new z.ZodError([{ code: "custom", path: ["variants", "instagram_cover_id"], message: "Reels muqovasi uchun 8 MB gacha JPG va video formati kerak." }]);
+}
+async function checkYouTubePlaylistAccount(p: z.infer<typeof postSchema>) {
+  const binding = p.variants.youtube_playlist;
+  if (!binding) return;
+  const account = (await pool.query("SELECT platform FROM media_accounts WHERE id=$1", [binding.account_id])).rows[0];
+  if (!account || account.platform !== "youtube" || !["video", "stickman"].includes(p.format))
+    throw new z.ZodError([{ code: "custom", path: ["variants", "youtube_playlist"], message: "Playlist uchun YouTube hisobi va video formati kerak." }]);
 }
 async function checkYouTubeCover(p: z.infer<typeof postSchema>) {
   if (!p.variants.youtube_cover_id) return;
