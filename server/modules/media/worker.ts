@@ -1,6 +1,8 @@
 import { automaticQuality } from "./quality";
 import { processInteractions, processInsights } from "./growth";
 import { processExplainer } from "./explainer";
+import { processMscCommand } from "./explainer-command";
+import { processMscPublication } from "./explainer-publication";
 import { processReelJobs } from "./reels";
 import { randomUUID } from "node:crypto";
 import { z } from "zod";
@@ -234,17 +236,20 @@ export async function processGeneration() {
 }
 export function startMediaWorker() {
   if (process.env.DISABLE_SCHEDULERS === "true") return;
+  void processMscCommand().catch(()=>console.info("MSC command could not connect to database."));
   const timer = setInterval(() => {
     void processInteractions();
     void processInsights();
     void processDelivery();
     void processGeneration();
     void processExplainer();
+    void processMscPublication();
     void processReelJobs();
   }, 15000);
   timer.unref();
   void processDelivery();
   void processGeneration();
   void processExplainer();
+    void processMscPublication();
   void processReelJobs();
 }

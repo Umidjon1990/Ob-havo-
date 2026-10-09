@@ -1,4 +1,7 @@
-import { readFile } from "node:fs/promises";
+import { readFile, mkdtemp, writeFile, rm } from "node:fs/promises";
+import { tmpdir } from "node:os";
+import { execFile } from "node:child_process";
+import { promisify } from "node:util";
 import { join } from "node:path";
 import type { PoolClient } from "pg";
 import type { Express } from "express";
@@ -8,9 +11,39 @@ import { openai } from "../../lib/openai";
 import { explainerPlanSchema, EXPLAINER_RULES, MSC_RULES } from "../../../shared/explainer";
 import { generateAudio, audioCatalog, AudioError } from "./audio";
 import { renderExplainer } from "./explainer-render";
+import { loadMscPackage, chooseMscVoice, startMscPackage, checkpointCanResume } from "./explainer-package";
+import { queueMscPublication } from "./explainer-publication";
 const uuid=z.string().uuid();
 let rendering=false;
 export function registerExplainerRoutes(app:Express, route:any) {
+  app.get("/api/media/explainer/packages/msc-october-2026/download",route(async(_req:any,res:any)=>{
+    const items=await loadMscPackage();
+    const posts=(await pool.query("SELECT id,variants FROM media_posts WHERE variants->'explainer'->>'lesson_code'=ANY($1::text[])",[items.map(i=>i.plan.lesson_code)])).rows;
+    if(posts.length!==9||new Set(posts.map(p=>p.variants.explainer.lesson_code)).size!==9||posts.some(p=>!p.variants.explainer_video_id))throw new AudioError(409,"ZIP uchun barcha 9 ta yakuniy video tayyor bo‘lishi kerak.");
+    const dir=await mkdtemp(join(tmpdir(),"msc-package-"));
+    try {
+      for(const p of posts){
+        const code=p.variants.explainer.lesson_code;
+        const video=(await pool.query("SELECT data FROM media_assets WHERE id=$1 AND mime_type='video/mp4'",[p.variants.explainer_video_id])).rows[0];
+        if(!video)throw new AudioError(409,"Yakuniy video topilmadi. ZIP yaratilmadi.");
+        await writeFile(join(dir,code+'.mp4'),video.data);
+        await writeFile(join(dir,code+'.json'),JSON.stringify(p.variants,null,2));
+      }
+      await promisify(execFile)("zip",["-q","-0","MSC_Oktabr_9_dars.zip",...posts.flatMap(p=>[p.variants.explainer.lesson_code+'.mp4',p.variants.explainer.lesson_code+'.json'])],{cwd:dir,timeout:120000});
+      res.download(join(dir,"MSC_Oktabr_9_dars.zip"),"MSC_Oktabr_9_dars.zip",()=>{void rm(dir,{recursive:true,force:true});});
+    }catch(e){await rm(dir,{recursive:true,force:true});throw e;}
+  }));
+
+  app.post("/api/media/explainer/packages/msc-october-2026/start",route(async(req:any,res:any)=>{
+    const b=z.object({approved:z.literal(true),publish:z.boolean().default(false),voice_id:z.string().regex(/^[a-zA-Z0-9_-]{1,100}$/).optional()}).parse(req.body);
+    const items=await loadMscPackage();
+    const {voices}=await audioCatalog();
+    const voice=chooseMscVoice(voices,b.voice_id);
+    const c=await pool.connect();
+    try {await c.query("BEGIN");const result=await startMscPackage(c,items,voice,queueExplainer);const publication_job_id=b.publish?await queueMscPublication(c,result.lessons.map(l=>l.post_id)):undefined;await c.query("COMMIT");res.status(202).json({...result,publication_job_id});}
+    catch(e){await c.query("ROLLBACK");throw e;}finally{c.release();}
+  }));
+
   app.get("/api/media/explainer/templates/msc-october-2026",route(async(_req:any,res:any)=>{
     const raw=JSON.parse(await readFile(join(process.cwd(),"docs/examples/msc-october-2026.json"),"utf8"));
     res.json(z.array(explainerPlanSchema).parse(raw));
@@ -97,7 +130,11 @@ export async function processExplainer() {
     lease=await pool.connect();
     leased=Boolean((await lease.query("SELECT pg_try_advisory_lock(761282) AS locked")).rows[0].locked);
     if(!leased)return;
-    await pool.query("UPDATE media_jobs SET status='failed',error='Video jarayoni uzildi. ElevenLabs tarixini tekshiring; avtomatik qayta yaratilmaydi.',completed_at=now() WHERE kind='explainer' AND status='running' AND started_at<now()-interval '20 minutes'");
+    const stale=(await pool.query("SELECT id,payload,result FROM media_jobs WHERE kind='explainer' AND status='running' AND started_at<now()-interval '20 minutes' FOR UPDATE")).rows;
+    for(const interrupted of stale){
+      if(checkpointCanResume(interrupted))await pool.query("UPDATE media_jobs SET status='queued',started_at=NULL,error=NULL WHERE id=$1 AND status='running'",[interrupted.id]);
+      else await pool.query("UPDATE media_jobs SET status='failed',error='Ovoz so‘rovi natijasi noma’lum. ElevenLabs tarixini tekshiring; avtomatik qayta yuborilmadi.',completed_at=now() WHERE id=$1 AND status='running'",[interrupted.id]);
+    }
     job=(await pool.query("UPDATE media_jobs SET status='running',started_at=now() WHERE id=(SELECT id FROM media_jobs WHERE kind='explainer' AND status='queued' ORDER BY created_at,COALESCE((payload->>'queue_order')::int,0),id FOR UPDATE SKIP LOCKED LIMIT 1) RETURNING *")).rows[0];
     if(!job)return;
     const beat=async()=>{const r=await pool.query("UPDATE media_jobs SET started_at=now() WHERE id=$1 AND status='running'",[job.id]);if(!r.rowCount)throw new Error("Job lease lost");};
@@ -142,6 +179,7 @@ export async function processExplainer() {
       await client.query("UPDATE media_posts SET asset_ids=$2,variants=$3,updated_at=now() WHERE id=$1",[job.payload.post_id,JSON.stringify([video.id]),JSON.stringify(variants)]);
       await client.query("UPDATE media_jobs SET status='completed',result=$2,completed_at=now() WHERE id=$1",[job.id,JSON.stringify({post_id:job.payload.post_id,video_id:video.id,audio_id:audio.id,duration:result.duration,timings:result.timings,audio_scenes:checkpoint,pending_scene:null})]);
       await client.query("COMMIT");
+      if(plan.profile==="msc")console.info("MSC lesson completed:",plan.lesson_code,"duration:",result.duration.toFixed(1),"seconds");
     } catch(e) {await client.query("ROLLBACK");throw e;} finally {client.release();}
   } catch(e) {
     if(job) await pool.query("UPDATE media_jobs SET status='failed',error=$2,completed_at=now() WHERE id=$1",[job.id,e instanceof AudioError?e.message:e instanceof Error&&/Scene|Audio duration|Video duration|Video exceeds/.test(e.message)?e.message:"Video tayyorlanmadi. ElevenLabs’da qisman audio yaratilgan bo‘lishi mumkin; tarixni tekshiring. Avtomatik qayta urinish yo‘q."]);
@@ -156,7 +194,7 @@ async function verifyVoice(plans:z.infer<typeof explainerPlanSchema>[],voiceId:s
   if(!v || !/umidjon/i.test(v.name) || !["cloned","professional"].includes(v.category))
     throw new AudioError(422,"MSC darsi uchun Umidjon klon ovozini tanlang. Boshqa ovoz avtomatik ishlatilmaydi.");
 }
-async function queueExplainer(client:any,p:any,plan:z.infer<typeof explainerPlanSchema>,voiceId:string,queueOrder=0) {
+export async function queueExplainer(client:any,p:any,plan:z.infer<typeof explainerPlanSchema>,voiceId:string,queueOrder=0) {
   if(p.variants.explainer_video_id) throw new AudioError(409,"Video allaqachon tayyor. Qayta yaratish uchun alohida nusxa kerak.");
   if((await client.query("SELECT 1 FROM media_deliveries WHERE post_id=$1 AND status<>'cancelled'",[p.id])).rowCount) throw new AudioError(409,"Nashr rejasi bor. Alohida nusxa kerak.");
   if((await client.query("SELECT 1 FROM media_jobs WHERE kind='explainer' AND payload->>'post_id'=$1",[p.id])).rowCount) throw new AudioError(409,"Loyiha avval navbatga qo‘yilgan. Dublikat xarajatni oldini olish uchun ish tarixini tekshiring; qayta yaratish alohida nusxada bajariladi.");

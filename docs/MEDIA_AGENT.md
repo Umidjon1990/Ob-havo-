@@ -110,3 +110,23 @@ A database advisory lease serializes workers across server replicas. A heartbeat
 The 1 GB library quota and 50 MB output limit are retained. A worker checks 100 MB free space before synthesis, plus transactional quota checks on each audio/final write. Jobs fail with a clear message if capacity is insufficient. Publishing and its playlist/channel scheduling remain separate operations; never claim videos scheduled merely because render jobs were queued.
 
 Verification: schema/source integrity tests for all nine 19-scene plans, reordered/missing-source rejection, escaped two-column HTML, queue order/duplicate protection, unresolved-audio resume protection, full media test suite, TypeScript and production build. A local synthetic-tone MP4 checks codec/resolution/fps/decoding without spending narration credits. Live Umidjon synthesis requires an authenticated administrator and configured provider account; it is not implied by these offline checks.
+
+
+### MSC paketini bitta buyruq bilan yaratish
+
+Explainer sahifasining yuqorisida **Barcha 9 darsni Umidjon ovozida tayyorlash** bor. Autentifikatsiyalangan `POST /api/media/explainer/packages/msc-october-2026/start` (`approved: true`, ixtiyoriy `voice_id`) manbadagi 9 ssenariy, 9 haqiqiy JPG muqova, Telegram HTML havolalari, YouTube tavsifi va Toshkent nashr takliflarini bir tranzaksiyada birlashtiradi. Bitta Umidjon cloned/professional ovozi bo‘lsa, avtomatik tanlanadi; bir nechta bo‘lsa narratorni bir marta tanlash kerak. Yangi AI matn yaratish yoki boshqa ovozga almashtirish yo‘q.
+
+Oldin import qilingan kodlar qayta ishlatiladi; tahrirlangan ssenariylar saqlanadi. Introga mavzu muqovasi biriktiriladi. Tayyor, queued/running va natijasi noma’lum ishlar takrorlanmaydi. Bitta paketga bir vaqtdagi so‘rovlar advisory lock bilan ketma-ket bajariladi. Saqlangan job `plan` va ovoz snapshotidan ishlaydi. Natijasi aniq failed ish qayta buyruqda shu ovoz bilan davom etadi; `pending_scene` mavjud bo‘lsa o‘z-o‘zidan qayta so‘rov yuborilmaydi. Kutubxonadagi 1 GB limit doirasida video va audio uchun konservativ joy tekshiruvi bor.
+
+Server qayta ishga tushgach 20 daqiqadan eski running ishlar, faqat render_version=2 va pending_scene=null bo‘lsa, saqlangan sahna audiosidan avtomatik davom ettiriladi. Noma’lum so‘rov failed holatida aniq xato bilan qoladi. Brauzerning yopilishi server navbatini to‘xtatmaydi. Jadvaldagi MP4 havolasi faqat haqiqiy yakuniy asset mavjud bo‘lganda ko‘rsatiladi. `suggested_at` haqiqiy rejalashtirilgan nashr emas; kanalga nashr yaratish alohida amal.
+
+Barcha 9 video tayyor bo‘lganda autentifikatsiyalangan GET `/api/media/explainer/packages/msc-october-2026/download` vaqtinchalik ZIP yaratadi (9 MP4 + 9 plan/nashr JSON). Tayyor bo‘lmagan yoki dublikat kodli paket 409 bilan to‘xtaydi; soxta tayyor video qo‘shilmaydi.
+
+
+### Brauzersiz bir martalik buyruq va avtomatik nashr
+
+Foydalanuvchining 2026-10-09 topshirig‘i uchun `docs/examples/msc-october-2026-command.json` egasi tasdiqlagan aniq 9 darsni tayyorlash + Telegram/YouTube rejalashtirish buyrug‘idir. Worker startupda uni bir marta bajaradi; `msc_command` receipt va 9 yaratish ishi hamda `msc_publication` ishi bitta tranzaksiyada saqlanadi. Doimiy command_id keyingi deploylarda pullik ishlarni takrorlashga yo‘l qo‘ymaydi. Brauzer token/cookie ishlatilmaydi; provayder kalitlari serverning avvalgi xavfsiz ulanishida qoladi. Xato buyruq receipt bilan qayd qilinadi, avtomatik pullik qayta urinish yo‘q; paneldagi paket tugmasi ayni mavjud ishlarni davom ettirishga xizmat qiladi.
+
+Paket start API `publish:true` bo‘lsa ham avtomatik nashr ishini yaratadi. Worker barcha 9 haqiqiy MP4 tayyor bo‘lgach `@zamonaviymedia` bot ruxsati va ayni kanalga tegishli ro‘yxatdagi hisobni, Umidjon YouTube kanalini, playlist egaligini hamda yozish scope’ini tekshiradi. Boshqa kanal ishlatilmaydi. 12,14,16,19,21,23,26,28,30-oktabr 14:00 Asia/Tashkent bo‘yicha nashrlar rejalashtiriladi. O‘tib ketgan slot hozirgi nashrga almashtirilmaydi. Xato panelda ko‘rsatiladi.
+
+Telegram uchun `variants.telegram_format=article` qo‘shildi: yakuniy video va asl HTML matndagi barcha havolalar bitta Rich Message’da yuboriladi. YouTube formati video bo‘lib qoladi; muqova, tavsif va mavjud Milliy sertifikat playlistiga yangi 9 dars ketma-ket qo‘shiladi. Har bir darsdagi ikkala nashr bitta tranzaksiyada yaratiladi; uzilishdan keyin faqat yetishmayotgan hisoblar rejalashtiriladi. Bekor qilingan yozuv avtomatik yoqilmaydi. Mavjud nashrlar qayta yuborilmaydi. Jarayon bo‘yicha command qabul qilindi degani videolar tayyor yoki nashr qilindi degani emas.

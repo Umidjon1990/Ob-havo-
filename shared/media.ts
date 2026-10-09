@@ -22,6 +22,7 @@ export const postSchema = z.object({
       explainer_audio_id: z.string().uuid().optional(),
       explainer_video_id: z.string().uuid().optional(),
       telegram: z.string().max(15000).optional(),
+      telegram_format: z.literal("article").optional(),
       instagram: z.string().max(2200).optional(),
       telegram_asset_ids: z.array(z.string().uuid()).min(1).max(10).optional(),
       instagram_asset_ids: z.array(z.string().uuid()).min(1).max(10).optional(),
@@ -212,5 +213,5 @@ export function suggestedDates(month: string, count: number, now = new Date()) {
 }
 
 export function platformPost<T extends {asset_ids: string[]; variants: Record<string, any>}>(post:T, platform:string):T {
-  return {...post,asset_ids:post.variants[`${platform}_asset_ids`] ?? post.asset_ids};
+  return {...post,...(platform==="telegram"&&post.variants.telegram_format==="article"?{format:"article"}:{}),asset_ids:post.variants[`${platform}_asset_ids`] ?? post.asset_ids};
 }
