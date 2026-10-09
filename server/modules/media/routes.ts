@@ -221,7 +221,7 @@ export function registerMediaRoutes(app: Express) {
     route(async (req, res) => {
       const id = uuid.parse(req.params.id);
       const r = await pool.query(
-        "DELETE FROM media_assets a WHERE id=$1 AND NOT EXISTS(SELECT 1 FROM media_posts p WHERE p.asset_ids ? a.id::text OR p.variants::text LIKE '%'||a.id::text||'%') RETURNING id",
+        "DELETE FROM media_assets a WHERE id=$1 AND NOT EXISTS(SELECT 1 FROM media_posts p WHERE p.asset_ids ? a.id::text OR p.variants::text LIKE '%'||a.id::text||'%') AND NOT EXISTS(SELECT 1 FROM media_jobs j WHERE j.result::text LIKE '%'||a.id::text||'%' OR j.payload::text LIKE '%'||a.id::text||'%') RETURNING id",
         [id],
       );
       if (!r.rowCount) {

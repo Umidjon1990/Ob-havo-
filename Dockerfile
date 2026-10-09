@@ -27,6 +27,7 @@ RUN pnpm install --prod --frozen-lockfile
 
 COPY --from=build /app/dist ./dist
 COPY --from=build /app/server/assets ./server/assets
+COPY --from=build /app/docs/examples/msc-october-2026.json ./docs/examples/msc-october-2026.json
 
 EXPOSE 5000
 

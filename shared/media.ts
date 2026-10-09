@@ -130,7 +130,7 @@ export type MediaJob = {
   error: string | null;
   created_at: string;
   payload?: { post_id?: string };
-  result: { post_ids?: string[]; post_id?: string; duration?: number; timings?: {start:number;duration:number;title:string}[] } | null;
+  result: { audio_scenes?: {scene:number;audio_id:string}[]; pending_scene?: number|null; post_ids?: string[]; post_id?: string; duration?: number; timings?: {start:number;duration:number;title:string}[] } | null;
 };
 export const deliveryLabels: Record<string, string> = {
   scheduled: "Rejalashtirilgan",
