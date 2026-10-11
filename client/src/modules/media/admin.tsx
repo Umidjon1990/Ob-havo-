@@ -66,7 +66,9 @@ import ExplainerStudio from "./explainer-studio";
 import GrowthStudio from "./growth-studio";
 import ReelsStudio from "./reels-studio";
 import YouTubePlaylists, { YouTubePlaylistFields } from "./youtube-playlists";
+import AIStudio from "./ai-studio";
 type Section =
+  | "studio"
   | "reels"
   | "growth"
   | "overview"
@@ -83,6 +85,7 @@ type Section =
   | "learning"
   | "news";
 const nav = [
+  ["studio", "AI Media Studio", Sparkles],
   ["reels", "Reels studiyasi", Video],
   ["growth", "Instagram agent", MessageSquare],
   ["overview", "Umumiy ko‘rinish", LayoutDashboard],
@@ -408,6 +411,7 @@ export default function MediaAdmin() {
     );
   const title = nav.find((n) => n[0] === section)?.[1] || "";
   const descriptions: Record<Section, string> = {
+    studio: "Loyiha → reference → Lucid Origin → video → ovoz → montaj.",
     reels: "Instagram reklama videolari, cover, klon ovoz va kalit so‘zli Direct.",
     growth: "Auditoriya bilan muloqot, natijalar va sifat nazorati.",
     overview: "Barcha ishlaringiz bir joyda. Navbatdagi kontentdan boshlaymiz.",
@@ -589,6 +593,7 @@ export default function MediaAdmin() {
           </div>
         ) : (
           <>
+            {section === "studio" && <AIStudio assets={data.assets} refreshMedia={refresh} />}
             {section === "overview" && (
               <>
                 <section className="media-banner">

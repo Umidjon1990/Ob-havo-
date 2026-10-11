@@ -32,6 +32,7 @@ import { audioInput, audioCatalog, generateAudio, AudioError } from "./audio";
 import { registerGrowthRoutes } from "./growth";
 import { registerQualityRoutes } from "./quality";
 import { registerReelRoutes, checkReelAssets } from "./reels";
+import { registerStudioRoutes } from "./studio";
 const uuid = z.string().uuid();
 let generatingAudio = false;
 const route =
@@ -98,6 +99,7 @@ export function registerMediaRoutes(app: Express) {
   );
   registerGrowthRoutes(app);
   app.use("/api/media", requireAdmin);
+  registerStudioRoutes(app);
   registerYouTubePlaylistRoutes(app, route);
   registerQualityRoutes(app, route);
   registerExplainerRoutes(app, route);
@@ -222,7 +224,7 @@ export function registerMediaRoutes(app: Express) {
     route(async (req, res) => {
       const id = uuid.parse(req.params.id);
       const r = await pool.query(
-        "DELETE FROM media_assets a WHERE id=$1 AND NOT EXISTS(SELECT 1 FROM media_posts p WHERE p.asset_ids ? a.id::text OR p.variants::text LIKE '%'||a.id::text||'%') AND NOT EXISTS(SELECT 1 FROM media_jobs j WHERE j.result::text LIKE '%'||a.id::text||'%' OR j.payload::text LIKE '%'||a.id::text||'%') RETURNING id",
+        "DELETE FROM media_assets a WHERE id=$1 AND NOT EXISTS(SELECT 1 FROM media_posts p WHERE p.asset_ids ? a.id::text OR p.variants::text LIKE '%'||a.id::text||'%') AND NOT EXISTS(SELECT 1 FROM media_jobs j WHERE j.result::text LIKE '%'||a.id::text||'%' OR j.payload::text LIKE '%'||a.id::text||'%') AND NOT EXISTS(SELECT 1 FROM studio_projects s WHERE s.reference_asset_ids ? a.id::text OR s.shots::text LIKE '%'||a.id::text||'%' OR s.sample_asset_id=a.id OR s.audio_asset_id=a.id OR s.music_asset_id=a.id) AND NOT EXISTS(SELECT 1 FROM studio_jobs j WHERE j.result::text LIKE '%'||a.id::text||'%' OR j.payload::text LIKE '%'||a.id::text||'%') RETURNING id",
         [id],
       );
       if (!r.rowCount) {

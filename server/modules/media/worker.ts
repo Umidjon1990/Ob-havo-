@@ -6,6 +6,7 @@ import { processMscPreviewExport } from "./msc-preview-export";
 import { processMscPreviewAudioCommand, processMscPreviewAudio } from "./msc-preview-audio";
 import { processMscPublication } from "./explainer-publication";
 import { processReelJobs } from "./reels";
+import { processStudioCommand, processStudioJobs } from "./studio";
 import { randomUUID } from "node:crypto";
 import { z } from "zod";
 import { pool } from "../../db";
@@ -238,11 +239,13 @@ export async function processGeneration() {
 }
 export async function startMediaWorker() {
   if (process.env.DISABLE_SCHEDULERS === "true") return;
+  await processStudioCommand();
   // Apply the owner's scoped MSC cancellation/export before any old job resumes.
   await processMscPreviewExport();
   await processMscPreviewAudioCommand();
   void processMscCommand().catch(()=>console.info("MSC command could not connect to database."));
   const timer = setInterval(() => {
+    void processStudioJobs();
     void processInteractions();
     void processInsights();
     void processDelivery();
@@ -253,6 +256,7 @@ export async function startMediaWorker() {
     void processReelJobs();
   }, 15000);
   timer.unref();
+  void processStudioJobs();
   void processDelivery();
   void processGeneration();
   void processExplainer();

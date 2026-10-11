@@ -1,4 +1,5 @@
 import type { Pool, Client } from "pg";
+import { ensureStudioTables } from "./studio-schema";
 export async function ensureMediaTables(sql: Pool | Client) {
   await sql.query(`
     CREATE TABLE IF NOT EXISTS media_sessions (token_hash TEXT PRIMARY KEY, expires_at TIMESTAMPTZ NOT NULL, created_at TIMESTAMPTZ NOT NULL DEFAULT now());
@@ -93,6 +94,7 @@ export async function ensureMediaTables(sql: Pool | Client) {
       state_hash TEXT PRIMARY KEY, session_hash TEXT NOT NULL, expires_at TIMESTAMPTZ NOT NULL
     );
   `);
+  await ensureStudioTables(sql);
   const defaults = [
     ["instagram-reels-studio-v1", "project", "Instagram reklama Reels qoidalari", "Reels studiyasi paketlari faqat Instagram reklamalari uchun: 40–60 soniya, 1080×1920, kuchli hook, tekshirilgan manba, asl sayt ekranlari, premium erkak 3D qahramonlar, klon ovoz va audioga mos HyperFrames/Higgsfield montaj. Avval professional ishlab chiqarish prompti yozilsin. Ushbu alohida reklamada profilga obuna va kalit so‘zli izoh CTA mumkin; ko‘p platformali lug‘at audiosi uchun platformasiz nutq talabi saqlanadi. Har paketga cover, caption, kalit so‘zlar, Direct matni, havola va obuna talabi biriktirilsin. Nashrga tayyor video bilan Reels Meta ID si olingach javob qoidasini aynan shu postga avtomatik bog‘lash. Obuna holati noaniq bo‘lsa havola berilmasin."],
     ["vocabulary-layout-v2", "brand", "So‘z boyligi post tartibi", "Kuchli hook → bugungi iboralar → rasmli karusel → video → audio va chiroyli dizaynda doim ko‘rinadigan misollar → test → Zamonaviy ta’lim. Tuzuvchi: U. Abdurayimov. Ixcham matn. Talaffuz mashqi va kichik vazifa qo‘shilmasin. Tarjimadan tashqari ma’no va kichik farqlar tushuntirilsin."],
