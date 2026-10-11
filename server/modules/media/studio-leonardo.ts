@@ -54,8 +54,21 @@ async function leonardo(path: string, body?: unknown, billable = !!body) {
     r = await fetch(`https://cloud.leonardo.ai/api/rest/${path}`, { method: body ? "POST" : "GET", headers: { Authorization: `Bearer ${key}`, Accept: "application/json", ...(body ? {"Content-Type": "application/json"} : {}) }, ...(body ? {body: JSON.stringify(body)} : {}), signal: AbortSignal.timeout(60000) });
   } catch { throw new StudioError(504, billable ? "Leonardo javobi olinmadi. Kredit sarflangan bo‘lishi mumkin; vazifani qayta yuborishdan oldin hisob tarixini tekshiring." : "Leonardo reference yuklash javobi olinmadi. Pullik generatsiya yuborilmadi.", billable); }
   if (!r.ok) {
+    // Bounded provider diagnostic; remove credentials, prompts, URLs and byte data.
+    let detail = "";
+    try {
+      const failure = await r.json() as any;
+      const message = failure?.error || failure?.message || failure?.errors?.[0]?.message;
+      if (typeof message === "string") {
+        detail = message.replaceAll(key, "[redacted]");
+        const prompt = (body as any)?.prompt || (body as any)?.parameters?.prompt;
+        if (typeof prompt === "string" && prompt) detail = detail.replaceAll(prompt, "[prompt]");
+        detail = detail.replace(/https?:\/\/\S+/g, "[url]").replace(/[A-Za-z0-9+/]{120,}={0,2}/g, "[data]").replace(/[\r\n]+/g," ").slice(0,300);
+      }
+    } catch {}
     const messages: Record<number, string> = { 401: "Leonardo API kaliti yaroqsiz.", 403: "Leonardo kaliti yoki model ruxsatini tekshiring.", 402: "Leonardo API balansini tekshiring.", 429: "Leonardo so‘rov limiti. Keyinroq tekshiring." };
-    throw new StudioError(r.status, messages[r.status] || `Leonardo so‘rovi bajarilmadi (HTTP ${r.status}).`, billable && r.status >= 500);
+    const balanceError = /(insufficient|not enough|exceed|limit).*(credit|balance)|(credit|balance).*(insufficient|not enough|exceed|limit)/i.test(detail);
+    throw new StudioError(r.status, `${balanceError ? "Leonardo API balansida kredit yetarli emas." : messages[r.status] || `Leonardo so‘rovi bajarilmadi (HTTP ${r.status}).`} Endpoint: ${path}.${detail ? ` ${detail}` : ""}`, billable && r.status >= 500);
   }
   try { return await r.json(); } catch { throw new StudioError(502, "Leonardo javobi tushunarsiz. Hisob tarixini tekshiring.", billable); }
 }

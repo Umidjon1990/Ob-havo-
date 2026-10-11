@@ -62,6 +62,11 @@ test("paid Leonardo timeout never blindly retries or exposes provider credential
   globalThis.fetch=(async()=>{calls++;throw new Error("private-test-key");}) as typeof fetch;
   try{await assert.rejects(()=>createLeonardoGeneration({}),e=>e instanceof StudioError&&e.ambiguous&&!e.message.includes("private-test-key"));assert.equal(calls,1);}finally{globalThis.fetch=original;if(key===undefined)delete process.env.LEONARDO_API_KEY;else process.env.LEONARDO_API_KEY=key;}
 });
+test("provider rejection reports its endpoint and balance cause without leaking key, prompt or URL",async()=>{
+  const nativeFetch=globalThis.fetch,key=process.env.LEONARDO_API_KEY;process.env.LEONARDO_API_KEY="private-error-test";let calls=0;
+  globalThis.fetch=(async()=>{calls++;return Response.json({error:"Insufficient API credits private-error-test private scene prompt https://private.test/?sig=secret"},{status:400});}) as typeof fetch;
+  try {await assert.rejects(()=>createLeonardoGeneration({model:"lucid-origin",parameters:{prompt:"private scene prompt"}}),e=>e instanceof StudioError&&e.status===400&&!e.ambiguous&&e.message.includes("v2/generations")&&e.message.includes("kredit yetarli emas")&&!e.message.includes("private-error-test")&&!e.message.includes("private scene prompt")&&!e.message.includes("sig=secret"));assert.equal(calls,1);}finally{globalThis.fetch=nativeFetch;if(key===undefined)delete process.env.LEONARDO_API_KEY;else process.env.LEONARDO_API_KEY=key;}
+});
 test("real FFmpeg render exports a vertical MP4, captions and a complete archive",async()=>{
   const dir=await mkdtemp(join(tmpdir(),"studio-test-")),run=promisify(execFile);
   try{
