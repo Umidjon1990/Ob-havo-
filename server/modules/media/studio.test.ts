@@ -40,6 +40,7 @@ test("Lightning uploads binary private references without API credentials and su
   const body=leonardoBody(request as any,project,images) as any;
   assert.equal(body.body.width,720);assert.equal(body.body.height,1280);assert.equal(body.body.presetStyle,"PHOTOGRAPHY");assert.equal(body.body.alchemy,true);assert.equal(body.body.enhancePrompt,false);assert.equal(body.body.public,false);
   assert.throws(()=>leonardoBody({...request,quantity:5} as any,project,images),/4 rasm/);
+  assert.throws(()=>leonardoBody(request as any,{...project,shots:[{...project.shots[0],prompt:"x".repeat(1501)}]},images),/1500/);
   let uploads=0,generations=0;
   globalThis.fetch=(async(url:any,init:any)=>{
     if(String(url).endsWith("v1/init-image"))return Response.json({uploadInitImage:{id:assetId,url:"https://references.s3.us-east-1.amazonaws.com/",fields:JSON.stringify({key:"private-reference",policy:"signed-policy"})}});
@@ -141,5 +142,9 @@ test("durable studio API and Railway bridge survive replay, preserve script lock
     assert.equal((await query("SELECT receipt FROM studio_commands WHERE command_id=$1",["invalid-inline-test"])).rows[0].receipt.ok,false);assert.equal(Number((await query("SELECT count(*) AS count FROM media_assets")).rows[0].count),beforeAssets+3);assert.equal(creates,2);
     process.env.MEDIA_STUDIO_COMMAND_JSON=JSON.stringify({command_id:"invalid-env-test",operation:"image.test",data:{...data,references:[{name:reference.name,mime_type:reference.mime_type,role:"character",data_env:"LEONARDO_API_KEY"}]}});await studio.processStudioCommand();
     assert.equal((await query("SELECT receipt FROM studio_commands WHERE command_id=$1",["invalid-env-test"])).rows[0].receipt.ok,false);assert.equal(Number((await query("SELECT count(*) AS count FROM media_assets")).rows[0].count),beforeAssets+3);delete process.env.MEDIA_STUDIO_REFERENCE_1;
+    const oneShot=(await query("SELECT * FROM studio_projects WHERE id=$1",[receipt.result.project_id])).rows[0];
+    process.env.MEDIA_STUDIO_COMMAND_JSON=JSON.stringify({command_id:"atomic-update-image-test",operation:"project.update",data:{id:oneShot.id,version:oneShot.version,project:{...studio.projectInput(oneShot),shots:oneShot.shots.map((s:any)=>({...s,prompt:"Short revised water scene."}))},image_job:{shot_id:"offer",image_model:"lightning-xl",paid_authorized:true,character_reference_asset_id:inlineJob.payload.request.character_reference_asset_id}}});await studio.processStudioCommand();await studio.processStudioCommand();
+    const atomic=(await query("SELECT receipt FROM studio_commands WHERE command_id=$1",["atomic-update-image-test"])).rows[0].receipt;assert.equal(atomic.ok,true);assert.equal(atomic.result.version,2);assert.equal(atomic.result.queued_job.status,"queued");
+    assert.equal((await query("SELECT count(*) AS count FROM studio_jobs WHERE idempotency_key=$1",["atomic-update-image-test"])).rows[0].count,1);assert.equal((await query("SELECT version FROM studio_projects WHERE id=$1",[oneShot.id])).rows[0].version,2);assert.equal(creates,2);
   }finally{globalThis.fetch=nativeFetch;pool.query=oldQuery;pool.connect=oldConnect;await new Promise<void>(resolve=>server.close(()=>resolve()));await db.close();delete process.env.MEDIA_STUDIO_COMMAND_JSON;}
 });

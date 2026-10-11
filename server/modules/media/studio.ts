@@ -274,7 +274,13 @@ async function executeStudioCommand(sql:Sql,command:z.infer<typeof studioCommand
   const d=command.data;
   switch(command.operation) {
     case "project.create": return createStudioProject(sql,d.template === "water-story" ? waterStoryTemplate() : d);
-    case "project.update": return updateStudioProject(sql,uuid.parse(d.id),{project:d.project,version:d.version,unlock_script:d.unlock_script});
+    case "project.update": {
+      const project=await updateStudioProject(sql,uuid.parse(d.id),{project:d.project,version:d.version,unlock_script:d.unlock_script});
+      if (d.image_job === undefined) return project;
+      const input=z.record(z.unknown()).parse(d.image_job);
+      const job=await queueStudioJob(sql,{...input,kind:"image",project_id:project.id,quantity:1,idempotency_key:command.command_id});
+      return {...project,queued_job:{id:job.id,kind:job.kind,status:job.status}};
+    }
     case "project.read": return d.id ? projectById(sql,uuid.parse(d.id)) : (await sql.query("SELECT * FROM studio_projects ORDER BY updated_at DESC LIMIT 50")).rows;
     case "job.queue": return queueStudioJob(sql,d);
     case "job.resume": return resumeStudioJob(sql,uuid.parse(d.id));
@@ -302,7 +308,7 @@ export async function processStudioCommand() {
     catch(e) {await c.query("ROLLBACK TO SAVEPOINT studio_command");receipt={ok:false,error:e instanceof StudioError?e.message:"Buyruq ma’lumotlarini tekshiring."};}
     await c.query("INSERT INTO studio_commands(command_id,operation,receipt) VALUES($1,$2,$3)",[command.command_id,command.operation,JSON.stringify(receipt)]);
     await c.query("COMMIT");
-    const logged=receipt.ok&&(command.operation==="project.create"||command.operation==="project.update")?{ok:true,result:{id:receipt.result.id,name:receipt.result.name,version:receipt.result.version,shot_count:receipt.result.shots.length}}:receipt.ok&&command.operation==="job.queue"?{ok:true,result:{id:receipt.result.id,project_id:receipt.result.project_id,kind:receipt.result.kind,status:receipt.result.status}}:receipt;
+    const logged=receipt.ok&&(command.operation==="project.create"||command.operation==="project.update")?{ok:true,result:{id:receipt.result.id,name:receipt.result.name,version:receipt.result.version,shot_count:receipt.result.shots.length,...(receipt.result.queued_job?{queued_job:receipt.result.queued_job}:{})}}:receipt.ok&&command.operation==="job.queue"?{ok:true,result:{id:receipt.result.id,project_id:receipt.result.project_id,kind:receipt.result.kind,status:receipt.result.status}}:receipt;
     console.info("AI_STUDIO_RECEIPT",JSON.stringify({command_id:command.command_id,operation:command.operation,...logged}));
   } catch {await c.query("ROLLBACK").catch(()=>{});console.info("AI Studio command could not connect to database.");}
   finally {c.release();}

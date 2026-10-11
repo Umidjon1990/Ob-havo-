@@ -19,7 +19,8 @@ their separate routes and tables. Studio migrations are additive and repeat safe
    Leonardo Lightning XL is also selectable. It uses the documented v1 API,
    model `b24e16ff-06e3-43eb-8d33-4416c2d75876`, Photography, Alchemy quality,
    enhancement OFF and private results. Lightning image sizes are 720×1280,
-   1280×720 or 1024×1024, with at most four outputs. References upload through
+   1280×720 or 1024×1024, with at most four outputs and a 1500-character prompt.
+   References upload through
    init-image and the returned multipart S3 form, without forwarding API headers.
    SDXL guidance uses Character 133/Mid, Content 100/Low and Style 67/High.
    Only one Character Reference is supported; a second portrait can be Content
@@ -95,6 +96,10 @@ new request its own ID; never reuse an ID for different instructions.
 
 The bridge accepts at most 120,000 UTF-8 bytes. Inline reference bytes are
 validated and remain in the private database; they never appear in receipts.
+`project.update` can optionally include `image_job` (shot_id, image_model,
+paid_authorized and guidance/seed fields). The same transaction then queues
+exactly one image with the command ID as its idempotency key. If validation
+fails, both the project update and queued work roll back together.
 Railway limits each variable to 32,768 characters. A reference can therefore
 use `data_env` instead of `data_base64`, naming only `MEDIA_STUDIO_REFERENCE_1`,
 `MEDIA_STUDIO_REFERENCE_2` or `MEDIA_STUDIO_REFERENCE_3`. Each holds bounded

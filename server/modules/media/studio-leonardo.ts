@@ -22,6 +22,7 @@ export function leonardoBody(input: Extract<StudioJobInput, {kind: "image" | "vi
   }
   if (!shot.prompt) throw new StudioError(400, "Kadr uchun rasm prompti kerak.");
   if (input.image_model === "lightning-xl") {
+    if (shot.prompt.length > 1500) throw new StudioError(400, "Lightning XL prompti 1500 belgidan oshmasin.");
     if (input.quantity > 4) throw new StudioError(400, "Lightning XL uchun bir kadrga ko‘pi bilan 4 rasm tanlang.");
     const [w, h] = { "9:16": [720, 1280], "16:9": [1280, 720], "1:1": [1024, 1024] }[project.format];
     const references = [
