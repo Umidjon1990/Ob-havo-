@@ -8,7 +8,7 @@ import { requireAdmin, assetSignature } from "./security";
 import { appBaseUrl } from "./providers";
 import { mediaLibraryLimit } from "./storage-quota";
 import { audioInput, generateAudio, AudioError } from "./audio";
-import { StudioError, leonardoBody, createLeonardoGeneration, getLeonardoGeneration, downloadLeonardoOutput, type StudioImage } from "./studio-leonardo";
+import { StudioError, leonardoBody, createLeonardoGeneration, recoverLeonardoGeneration, getLeonardoGeneration, downloadLeonardoOutput, type StudioImage } from "./studio-leonardo";
 import { renderStudio, validateRender } from "./studio-render";
 import { execFile } from "node:child_process";
 import { promisify } from "node:util";
@@ -218,8 +218,13 @@ export async function processStudioJobs() {
 export async function resumeStudioJob(sql: Sql,id:string) {
   const job=(await sql.query("SELECT * FROM studio_jobs WHERE id=$1",[uuid.parse(id)])).rows[0];
   if (!job) throw new StudioError(404,"Vazifa topilmadi.");
-  if (!job.generation_id) throw new StudioError(409,"Generatsiya ID si yo‘q. Hisob tarixini tekshirmasdan pullik so‘rov qayta yuborilmaydi.");
   if (!["failed","needs_review"].includes(job.status)) throw new StudioError(409,"Bu vazifani hozir qayta tekshirib bo‘lmaydi.");
+  if (!job.generation_id) {
+    if (job.kind !== "image" || !String(job.error).includes("generation ID qaytarmadi")) throw new StudioError(409,"Generatsiya ID si yo‘q. Hisob tarixini tekshirmasdan pullik so‘rov qayta yuborilmaydi.");
+    const shot=job.payload.project.shots.find((s:any)=>s.id===job.payload.request.shot_id);
+    const recovered=await recoverLeonardoGeneration(shot?.prompt,job.created_at);
+    await sql.query("UPDATE studio_jobs SET generation_id=$2,cost=COALESCE($3,cost) WHERE id=$1 AND generation_id IS NULL",[id,recovered.id,recovered.cost?JSON.stringify(recovered.cost):null]);
+  }
   return (await sql.query(`UPDATE studio_jobs SET status='provider_pending',error=NULL,poll_at=now() WHERE id=$1 RETURNING ${jobColumns}`,[id])).rows[0];
 }
 async function assetLink(sql:Sql,id:string) {
@@ -308,7 +313,7 @@ export async function processStudioCommand() {
     catch(e) {await c.query("ROLLBACK TO SAVEPOINT studio_command");receipt={ok:false,error:e instanceof StudioError?e.message:"Buyruq ma’lumotlarini tekshiring."};}
     await c.query("INSERT INTO studio_commands(command_id,operation,receipt) VALUES($1,$2,$3)",[command.command_id,command.operation,JSON.stringify(receipt)]);
     await c.query("COMMIT");
-    const logged=receipt.ok&&(command.operation==="project.create"||command.operation==="project.update")?{ok:true,result:{id:receipt.result.id,name:receipt.result.name,version:receipt.result.version,shot_count:receipt.result.shots.length,...(receipt.result.queued_job?{queued_job:receipt.result.queued_job}:{})}}:receipt.ok&&command.operation==="job.queue"?{ok:true,result:{id:receipt.result.id,project_id:receipt.result.project_id,kind:receipt.result.kind,status:receipt.result.status}}:receipt;
+    const logged=receipt.ok&&(command.operation==="project.create"||command.operation==="project.update")?{ok:true,result:{id:receipt.result.id,name:receipt.result.name,version:receipt.result.version,shot_count:receipt.result.shots.length,...(receipt.result.queued_job?{queued_job:receipt.result.queued_job}:{})}}:receipt.ok&&(command.operation==="job.queue"||command.operation==="job.resume")?{ok:true,result:{id:receipt.result.id,project_id:receipt.result.project_id,kind:receipt.result.kind,status:receipt.result.status}}:receipt;
     console.info("AI_STUDIO_RECEIPT",JSON.stringify({command_id:command.command_id,operation:command.operation,...logged}));
   } catch {await c.query("ROLLBACK").catch(()=>{});console.info("AI Studio command could not connect to database.");}
   finally {c.release();}

@@ -99,9 +99,22 @@ export async function createLeonardoGeneration(request: unknown) {
     body = {...internal.body, ...(controlnets.length ? {controlnets} : {})};
   }
   const data = await leonardo(path, body);
-  const id = data?.generationId || data?.sdGenerationJob?.generationId;
+  const receipt = data?.sdGenerationJob || data?.generate || data?.generation || data;
+  const id = data?.generationId || receipt?.generationId || receipt?.id;
   if (typeof id !== "string" || !/^[a-f0-9-]{36}$/i.test(id)) throw new StudioError(502, "Leonardo generation ID qaytarmadi. Hisob tarixini tekshiring.", true);
-  return { id, cost: providerCost(data) || providerCost(data.sdGenerationJob) };
+  return { id, cost: providerCost(data) || providerCost(receipt) };
+}
+// Read-only reconciliation of one lost receipt. Never creates a generation.
+export async function recoverLeonardoGeneration(prompt: string, createdAt: string | Date) {
+  const timestamp = new Date(createdAt).getTime();
+  if (!prompt || !Number.isFinite(timestamp)) throw new StudioError(409, "Generatsiya tarixini solishtirish uchun ma’lumot yetarli emas.");
+  const me = await leonardo("v1/me");
+  const userId = me?.user_details?.[0]?.user?.id;
+  if (typeof userId !== "string" || !/^[a-f0-9-]{36}$/i.test(userId)) throw new StudioError(502, "Leonardo hisob ID si olinmadi. Pullik so‘rov yuborilmadi.");
+  const history = await leonardo(`v1/generations/user/${encodeURIComponent(userId)}?offset=0&limit=50`);
+  const matches = Array.isArray(history?.generations) ? history.generations.filter((g: any) => g.prompt === prompt && g.public === false && typeof g.id === "string" && /^[a-f0-9-]{36}$/i.test(g.id) && Math.abs(new Date(g.createdAt).getTime() - timestamp) <= 5 * 60000) : [];
+  if (matches.length !== 1) throw new StudioError(409, `Leonardo tarixida ${matches.length} ta mos generatsiya topildi. ID avtomatik tanlanmadi; pullik so‘rov yuborilmadi.`);
+  return {id: matches[0].id as string, cost: providerCost(matches[0])};
 }
 export function generationResult(data: any, kind: "image" | "video") {
   const generation = data?.generations_by_pk || data?.generation || data;

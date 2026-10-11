@@ -6,7 +6,7 @@ import { mkdtemp, readFile, writeFile, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { studioProjectSchema, studioJobSchema, waterStoryTemplate, type StudioProject } from "../../../shared/ai-studio";
-import { leonardoBody, generationResult, providerCost, allowedLeonardoUrl, createLeonardoGeneration, StudioError } from "./studio-leonardo";
+import { leonardoBody, generationResult, providerCost, allowedLeonardoUrl, createLeonardoGeneration, recoverLeonardoGeneration, StudioError } from "./studio-leonardo";
 import { studioCaptions, renderStudio, validateRender } from "./studio-render";
 const projectId="bd728f8c-4046-4ad9-825a-56f02b4a16a0",assetId="58d23429-4b7b-430c-9e4e-d3628737318a";
 const project={...waterStoryTemplate(),id:projectId,version:1,created_at:"2026-10-11T00:00:00Z",updated_at:"2026-10-11T00:00:00Z"} as StudioProject;
@@ -62,6 +62,28 @@ test("paid Leonardo timeout never blindly retries or exposes provider credential
   const original=globalThis.fetch,key=process.env.LEONARDO_API_KEY;process.env.LEONARDO_API_KEY="private-test-key";let calls=0;
   globalThis.fetch=(async()=>{calls++;throw new Error("private-test-key");}) as typeof fetch;
   try{await assert.rejects(()=>createLeonardoGeneration({}),e=>e instanceof StudioError&&e.ambiguous&&!e.message.includes("private-test-key"));assert.equal(calls,1);}finally{globalThis.fetch=original;if(key===undefined)delete process.env.LEONARDO_API_KEY;else process.env.LEONARDO_API_KEY=key;}
+});
+test("v2 generation receipts retain nested IDs and dollar costs without another paid request",async()=>{
+  const original=globalThis.fetch,key=process.env.LEONARDO_API_KEY;process.env.LEONARDO_API_KEY="receipt-test";let calls=0;
+  try {
+    for (const envelope of [{generate:{generationId:projectId,cost:{amount:"0.012",unit:"DOLLARS"}}},{generation:{id:projectId,cost:{amount:"0.012",unit:"DOLLARS"}}},{id:projectId,cost:{amount:"0.012",unit:"DOLLARS"}}]) {
+      globalThis.fetch=(async()=>{calls++;return Response.json(envelope);}) as typeof fetch;
+      assert.deepEqual(await createLeonardoGeneration({model:"lucid-origin"}),{id:projectId,cost:{amount:0.012,unit:"USD"}});
+    }
+    assert.equal(calls,3);
+  } finally {globalThis.fetch=original;if(key===undefined)delete process.env.LEONARDO_API_KEY;else process.env.LEONARDO_API_KEY=key;}
+});
+test("lost receipt reconciliation uses only GET and rejects duplicate or unrelated generations",async()=>{
+  const original=globalThis.fetch,key=process.env.LEONARDO_API_KEY;process.env.LEONARDO_API_KEY="recovery-test";let calls=0;
+  const found={id:projectId,prompt:"private water scene",public:false,createdAt:"2026-10-11T17:32:04Z",cost:{amount:0.012,unit:"DOLLARS"}};
+  let generations=[found,{...found,id:assetId,prompt:"different scene"},{...found,id:assetId,createdAt:"2026-10-10T17:32:04Z"}];
+  globalThis.fetch=(async(url:any,init:any)=>{calls++;assert.equal(init.method,"GET");return Response.json(String(url).endsWith("/me")?{user_details:[{user:{id:assetId}}]}:{generations});}) as typeof fetch;
+  try {
+    assert.deepEqual(await recoverLeonardoGeneration(found.prompt,"2026-10-11T17:32:03Z"),{id:projectId,cost:{amount:0.012,unit:"USD"}});
+    generations=[found,{...found,id:assetId}];await assert.rejects(()=>recoverLeonardoGeneration(found.prompt,found.createdAt),/2 ta/);
+    generations=[{...found,public:true}];await assert.rejects(()=>recoverLeonardoGeneration(found.prompt,found.createdAt),/0 ta/);
+    assert.equal(calls,6);
+  } finally {globalThis.fetch=original;if(key===undefined)delete process.env.LEONARDO_API_KEY;else process.env.LEONARDO_API_KEY=key;}
 });
 test("provider rejection reports its endpoint and balance cause without leaking key, prompt or URL",async()=>{
   const nativeFetch=globalThis.fetch,key=process.env.LEONARDO_API_KEY;process.env.LEONARDO_API_KEY="private-error-test";let calls=0;
