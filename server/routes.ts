@@ -128,7 +128,7 @@ export async function registerRoutes(
 
   // Health check endpoint for keep-alive pings
   app.get("/api/health", (req, res) => {
-    res.json({ status: "ok", studio_version: 1, timestamp: new Date().toISOString() });
+    res.json({ status: "ok", studio_version: 2, timestamp: new Date().toISOString() });
   });
 
   // Public learning test archive. Payloads are intentionally excluded from the list response.

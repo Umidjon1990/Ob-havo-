@@ -20,7 +20,7 @@ const uuid = z.string().uuid();
 const columns = "name,brief,script,script_locked,style_bible,format,reference_asset_ids,sample_asset_id,audio_asset_id,music_asset_id,shots";
 const jobColumns = "id,project_id,kind,status,payload,generation_id,cost,result,error,created_at,completed_at";
 export function studioReadiness() {
-  return { version: 1, leonardo: !!process.env.LEONARDO_API_KEY?.trim(), elevenlabs: !!process.env.ELEVENLABS_API_KEY?.trim(), openai: !!(process.env.OPENAI_API_KEY || process.env.AI_INTEGRATIONS_OPENAI_API_KEY), command_bridge: true, video_model: "kling-2.6", image_model: "lucid-origin" };
+  return { version: 2, leonardo: !!process.env.LEONARDO_API_KEY?.trim(), elevenlabs: !!process.env.ELEVENLABS_API_KEY?.trim(), openai: !!(process.env.OPENAI_API_KEY || process.env.AI_INTEGRATIONS_OPENAI_API_KEY), command_bridge: true, video_model: "kling-2.6", image_model: "lucid-origin", image_models: ["lucid-origin", "lightning-xl"] };
 }
 export function projectAssetIds(p: StudioProjectInput) {
   return Array.from(new Set([...p.reference_asset_ids, p.sample_asset_id, p.audio_asset_id, p.music_asset_id, ...p.shots.flatMap(s => [s.image_asset_id,s.video_asset_id])].filter(Boolean) as string[]));
@@ -62,9 +62,9 @@ export async function updateStudioProject(sql: Sql, id: string, input: unknown) 
   const values = projectValues(b.project);
   return (await sql.query(`UPDATE studio_projects SET ${columns.split(",").map((key,i)=>`${key}=$${i+1}`).join(",")},version=version+1,updated_at=now() WHERE id=$12 RETURNING *`,[...values,id])).rows[0] as StudioProject;
 }
-async function loadProjectAssets(p: StudioProjectInput, extra: string[] = []) {
+async function loadProjectAssets(p: StudioProjectInput, extra: string[] = [], sql: Sql = pool) {
   const ids = Array.from(new Set([...projectAssetIds(p),...extra]));
-  const rows = ids.length ? (await pool.query("SELECT id,mime_type,data FROM media_assets WHERE id=ANY($1::uuid[])",[ids])).rows : [];
+  const rows = ids.length ? (await sql.query("SELECT id,mime_type,data FROM media_assets WHERE id=ANY($1::uuid[])",[ids])).rows : [];
   return new Map<string, StudioImage>(rows.map(a => [a.id,{mime_type:a.mime_type,data:a.data}]));
 }
 export async function queueStudioJob(sql: Sql, value: unknown): Promise<StudioJob> {
@@ -81,8 +81,8 @@ export async function queueStudioJob(sql: Sql, value: unknown): Promise<StudioJo
   if (input.kind === "plan" && !ready.openai) throw new StudioError(503,"OpenAI API kaliti sozlanmagan.");
   if (input.kind === "audio") audioInput.parse({ name:project.name,text:project.script,...input });
   if (input.kind === "image" || input.kind === "video" || input.kind === "render") {
-    const extra = input.kind === "image" ? [input.content_reference_asset_id,input.style_reference_asset_id].filter(Boolean) as string[] : [];
-    const assets = await loadProjectAssets(project,extra);
+    const extra = input.kind === "image" ? [input.character_reference_asset_id,input.content_reference_asset_id,input.style_reference_asset_id].filter(Boolean) as string[] : [];
+    const assets = await loadProjectAssets(project,extra,sql);
     if (input.kind === "render") validateRender(project,assets); else leonardoBody(input,project,assets);
   }
   const active = Number((await sql.query("SELECT count(*) AS count FROM studio_jobs WHERE status IN ('queued','running','provider_pending')")).rows[0].count);
@@ -122,6 +122,12 @@ async function saveOutputs(job: any, outputs: {name:string;mime_type:string;data
     }
     await c.query("UPDATE studio_jobs SET status='completed',result=$2,error=NULL,completed_at=now(),claimed_at=NULL WHERE id=$1",[job.id,JSON.stringify({assets,attached,...detail})]);
     await c.query("COMMIT");
+    // Owner-only runtime receipt: no source bytes, credentials or prompts.
+    try {
+      const links = await Promise.all(assets.map(a => assetLink(pool, a.id)));
+      const cost = (await pool.query("SELECT cost FROM studio_jobs WHERE id=$1", [job.id])).rows[0]?.cost || null;
+      console.info("AI_STUDIO_JOB_RESULT", JSON.stringify({id: job.id, project_id: job.project_id, status: "completed", generation_id: job.generation_id || null, cost, assets: assets.map((a,i) => ({...a,...links[i]}))}));
+    } catch { console.info("AI Studio result saved; owner receipt unavailable."); }
   } catch(e) { await c.query("ROLLBACK");throw e; } finally {c.release();}
 }
 async function planStudio(project: StudioProject) {
@@ -165,7 +171,7 @@ export async function processStudioJobs() {
     try {
       if (request.kind === "image" || request.kind === "video") {
         if (!job.generation_id) {
-          const extra=request.kind === "image" ? [request.content_reference_asset_id,request.style_reference_asset_id].filter(Boolean) as string[] : [];
+          const extra=request.kind === "image" ? [request.character_reference_asset_id,request.content_reference_asset_id,request.style_reference_asset_id].filter(Boolean) as string[] : [];
           const body=leonardoBody(request,project,await loadProjectAssets(project,extra));
           const generated=await createLeonardoGeneration(body);
           job.generation_id=generated.id;
@@ -204,6 +210,7 @@ export async function processStudioJobs() {
       const pending=job.generation_id && (!known || (e instanceof StudioError && [429,500,503].includes(e.status)));
       const status=pending?"provider_pending":job.generation_id || (e instanceof StudioError&&e.ambiguous) || (e instanceof AudioError&&[502,504].includes(e.status)) || (!known && job.kind!=="render")?"needs_review":"failed";
       await pool.query("UPDATE studio_jobs SET status=$2,error=$3,poll_at=now()+interval '60 seconds',claimed_at=NULL WHERE id=$1 AND claim_id=$4",[job.id,status,known?e.message:"Studio vazifasi tugamadi. Pullik generatsiya avtomatik takrorlanmadi.",job.claim_id]).catch(()=>{});
+      console.info("AI_STUDIO_JOB_RESULT",JSON.stringify({id:job.id,status,generation_id:job.generation_id||null,error:known?e.message:"Studio vazifasi tugamadi. Pullik generatsiya avtomatik takrorlanmadi."}));
     }
     console.info("AI Studio worker:",e instanceof Error?e.name:"Unknown");
   } finally {studioBusy=false;}
@@ -244,6 +251,25 @@ async function importStudioAsset(sql:Sql,input:unknown) {
   if(used+size>mediaLibraryLimit())throw new StudioError(413,"Media kutubxonasi to‘la.");
   return (await sql.query("INSERT INTO media_assets(name,mime_type,size,data) VALUES($1,$2,$3,$4) RETURNING id,name,mime_type,size,created_at",[b.name,b.mime_type,size,data])).rows[0];
 }
+async function queueImageTest(sql: Sql, input: unknown, commandId: string) {
+  const encoded = z.string().min(4).max(110000).regex(/^(?:[A-Za-z0-9+/]{4})*(?:[A-Za-z0-9+/]{2}==|[A-Za-z0-9+/]{3}=)?$/);
+  const inline = z.object({name:z.string().min(1).max(180),mime_type:z.enum(["image/jpeg","image/png"]),role:z.enum(["character","content","style"]),data_base64:encoded.optional(),data_env:z.enum(["MEDIA_STUDIO_REFERENCE_1","MEDIA_STUDIO_REFERENCE_2","MEDIA_STUDIO_REFERENCE_3"]).optional()}).strict().refine(r=>!!r.data_base64!==!!r.data_env,"Reference uchun bitta byte manbasi kerak.");
+  const b = z.object({project:studioProjectSchema,shot_id:z.string(),image_model:z.enum(["lucid-origin","lightning-xl"]),seed:z.number().int().min(0).max(2147483647).optional(),paid_authorized:z.literal(true),references:z.array(inline).min(1).max(3)}).strict().parse(input);
+  if (b.project.shots.length !== 1 || b.project.shots[0].id !== b.shot_id || new Set(b.references.map(r=>r.role)).size !== b.references.length || projectAssetIds(b.project).length) throw new StudioError(400,"Sinovda bitta kadr va har rol uchun bitta reference kerak.");
+  await sql.query("SELECT pg_advisory_xact_lock(761281)");
+  const used = Number((await sql.query("SELECT COALESCE(SUM(size),0) AS used FROM media_assets")).rows[0].used);
+  const decoded = b.references.map(ref=>{const data_base64=encoded.parse(ref.data_base64||(ref.data_env?process.env[ref.data_env]:undefined));return {...ref,data_base64,data:Buffer.from(data_base64,"base64")};});
+  if (decoded.some(ref=>ref.data.toString("base64")!==ref.data_base64 || !validStudioBytes(ref.mime_type,ref.data))) throw new StudioError(400,"Reference faylining ichki formati mos emas.");
+  if (used + decoded.reduce((n,r)=>n+r.data.length,0) + 50*1024*1024 > mediaLibraryLimit()) throw new StudioError(413,"Sinov uchun yetarli media joyi yo‘q.");
+  const assets:any[] = [], referenceIds:Record<string,string> = {};
+  for (const ref of decoded) {
+    const asset=(await sql.query("INSERT INTO media_assets(name,mime_type,size,data) VALUES($1,$2,$3,$4) RETURNING id,name,mime_type,size",[ref.name,ref.mime_type,ref.data.length,ref.data])).rows[0];
+    assets.push(asset);referenceIds[`${ref.role}_reference_asset_id`]=asset.id;
+  }
+  const project=await createStudioProject(sql,{...b.project,reference_asset_ids:assets.map(a=>a.id)});
+  const job=await queueStudioJob(sql,{kind:"image",project_id:project.id,shot_id:b.shot_id,image_model:b.image_model,seed:b.seed,quantity:1,paid_authorized:true,idempotency_key:commandId,...referenceIds});
+  return {project_id:project.id,job_id:job.id,status:job.status,reference_assets:assets};
+}
 async function executeStudioCommand(sql:Sql,command:z.infer<typeof studioCommandSchema>) {
   const d=command.data;
   switch(command.operation) {
@@ -254,6 +280,7 @@ async function executeStudioCommand(sql:Sql,command:z.infer<typeof studioCommand
     case "job.resume": return resumeStudioJob(sql,uuid.parse(d.id));
     case "asset.link": return assetLink(sql,uuid.parse(d.id));
     case "asset.import": return importStudioAsset(sql,d);
+    case "image.test": return queueImageTest(sql,d,command.command_id);
     case "job.read": return (await sql.query(`SELECT ${jobColumns} FROM studio_jobs ${d.id?"WHERE id=$1":d.project_id?"WHERE project_id=$1":""} ORDER BY created_at DESC LIMIT 50`,d.id?[uuid.parse(d.id)]:d.project_id?[uuid.parse(d.project_id)]:[])).rows;
   }
 }
@@ -262,7 +289,7 @@ async function executeStudioCommand(sql:Sql,command:z.infer<typeof studioCommand
 // commit together; redeploying cannot enqueue the same paid operation twice.
 export async function processStudioCommand() {
   const raw=process.env.MEDIA_STUDIO_COMMAND_JSON;
-  if (!raw || raw.length>60000) return;
+  if (!raw || Buffer.byteLength(raw,"utf8")>120000) return;
   let command:z.infer<typeof studioCommandSchema>;
   try {command=studioCommandSchema.parse(JSON.parse(raw));} catch {console.info("AI Studio command rejected: invalid input.");return;}
   const c=await pool.connect();

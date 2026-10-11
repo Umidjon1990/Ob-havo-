@@ -35,7 +35,7 @@ export type StudioProject = StudioProjectInput & { id: string; version: number; 
 const paid = { paid_authorized: z.literal(true), idempotency_key: z.string().regex(/^[a-zA-Z0-9_-]{8,120}$/) };
 const base = { project_id: z.string().uuid() };
 export const studioJobSchema = z.discriminatedUnion("kind", [
-  z.object({ ...base, ...paid, kind: z.literal("image"), shot_id: z.string(), mode: z.enum(["FAST", "ULTRA"]).default("FAST"), quantity: z.number().int().min(1).max(8).default(1), seed: z.number().int().min(0).max(2147483647).optional(), content_reference_asset_id: z.string().uuid().optional(), style_reference_asset_id: z.string().uuid().optional() }).strict(),
+  z.object({ ...base, ...paid, kind: z.literal("image"), shot_id: z.string(), image_model: z.enum(["lucid-origin", "lightning-xl"]).default("lucid-origin"), mode: z.enum(["FAST", "ULTRA"]).default("FAST"), quantity: z.number().int().min(1).max(8).default(1), seed: z.number().int().min(0).max(2147483647).optional(), character_reference_asset_id: z.string().uuid().optional(), content_reference_asset_id: z.string().uuid().optional(), style_reference_asset_id: z.string().uuid().optional() }).strict(),
   z.object({ ...base, ...paid, kind: z.literal("video"), shot_id: z.string(), duration: z.union([z.literal(5), z.literal(10)]).default(5) }).strict(),
   z.object({ ...base, ...paid, kind: z.literal("audio"), voice_id: z.string().regex(/^[a-zA-Z0-9_-]{1,100}$/), language: z.enum(["uz", "ar"]), model: z.enum(["eleven_v4", "eleven_v4_turbo"]).default("eleven_v4") }).strict(),
   z.object({ ...base, ...paid, kind: z.literal("plan") }).strict(),
@@ -46,7 +46,7 @@ export type StudioCost = { amount: number; unit: "USD" | "credits" } | null;
 export type StudioJob = { id: string; project_id: string; kind: StudioJobInput["kind"]; status: string; payload: Record<string, any>; generation_id: string | null; cost: StudioCost; result: Record<string, any> | null; error: string | null; created_at: string };
 export const studioCommandSchema = z.object({
   command_id: paid.idempotency_key,
-  operation: z.enum(["project.create", "project.update", "project.read", "job.queue", "job.read", "job.resume", "asset.link", "asset.import"]),
+  operation: z.enum(["project.create", "project.update", "project.read", "job.queue", "job.read", "job.resume", "asset.link", "asset.import", "image.test"]),
   data: z.record(z.unknown()),
 }).strict();
 

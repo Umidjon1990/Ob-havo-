@@ -16,6 +16,14 @@ their separate routes and tables. Studio migrations are additive and repeat safe
    References travel as BASE64 bytes, supported by the current v2 OpenAPI schema.
    This model does not expose a dedicated Character Reference control. Inspect
    faces, wardrobe and hands before approving a shot.
+   Leonardo Lightning XL is also selectable. It uses the documented v1 API,
+   model `b24e16ff-06e3-43eb-8d33-4416c2d75876`, Photography, Alchemy quality,
+   enhancement OFF and private results. Lightning image sizes are 720×1280,
+   1280×720 or 1024×1024, with at most four outputs. References upload through
+   init-image and the returned multipart S3 form, without forwarding API headers.
+   SDXL guidance uses Character 133/Mid, Content 100/Low and Style 67/High.
+   Only one Character Reference is supported; a second portrait can be Content
+   Reference, but this does not guarantee both identities in the output.
 4. Optionally animate an approved image through Leonardo's Kling 2.6 API, using
    a start frame, 5/10 seconds and generated audio OFF. This also uses the
    Leonardo API balance; account/model availability is verified by the provider.
@@ -83,6 +91,19 @@ new request its own ID; never reuse an ID for different instructions.
 | `job.resume` | `{ "id": "JOB_UUID" }`; polls an already recorded generation, never creates another one |
 | `asset.import` | `{ "name": "reference.png", "mime_type": "image/png", "url": "SIGNED_FILE_URL" }`; bounded import from approved OpenAI file storage hosts |
 | `asset.link` | `{ "id": "ASSET_UUID" }`; returns a signed download link valid for 15 minutes |
+| `image.test` | One-shot project, `shot_id`, `image_model`, optional `seed`, `paid_authorized: true`, and 1–3 inline references (`name`, `mime_type`, `role`: character/content/style, `data_base64`); atomically imports private references and queues exactly one output |
+
+The bridge accepts at most 120,000 UTF-8 bytes. Inline reference bytes are
+validated and remain in the private database; they never appear in receipts.
+Railway limits each variable to 32,768 characters. A reference can therefore
+use `data_env` instead of `data_base64`, naming only `MEDIA_STUDIO_REFERENCE_1`,
+`MEDIA_STUDIO_REFERENCE_2` or `MEDIA_STUDIO_REFERENCE_3`. Each holds bounded
+base64 bytes; arbitrary environment names, including API keys, are rejected.
+Clear these transport variables after the command has imported the files.
+Completion logs `AI_STUDIO_JOB_RESULT` contain only result IDs, recorded cost,
+metadata and a 15-minute owner download link. Generation requests are never
+retried after an ambiguous paid submission. A reference-upload failure occurs
+before any generation submission and has no paid-generation ambiguity.
 
 Example generation request, only after the owner has authorized the paid call:
 
@@ -94,6 +115,7 @@ Example generation request, only after the owner has authorized the paid call:
     "kind": "image",
     "project_id": "ACTUAL_PROJECT_UUID_FROM_RECEIPT",
     "shot_id": "offer",
+    "image_model": "lightning-xl",
     "mode": "FAST",
     "quantity": 1,
     "content_reference_asset_id": "ACTUAL_IMPORTED_ASSET_UUID",
@@ -135,6 +157,9 @@ dependency lives outside this repository; set `MEDIA_TEST_PGLITE_PATH` to its
 module. Production keys and database are never used for these tests.
 
 Official specifications:
+https://docs.leonardo.ai/docs/generate-images-using-image-to-image-guidance
+https://docs.leonardo.ai/docs/how-to-upload-an-image-using-a-presigned-url
+https://docs.leonardo.ai/v1.0/reference/creategeneration
 https://docs.leonardo.ai/docs/lucid-origin
 https://docs.leonardo.ai/reference/creategeneration
 https://docs.leonardo.ai/docs/kling-26

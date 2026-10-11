@@ -7,12 +7,13 @@ export type StudioImage = { mime_type: string; data: Buffer };
 export function leonardoBody(input: Extract<StudioJobInput, {kind: "image" | "video"}>, project: StudioProject, images: Map<string, StudioImage>) {
   const shot = project.shots.find(s => s.id === input.shot_id);
   if (!shot) throw new StudioError(404, "Kadr topilmadi.");
-  const reference = (id: string) => {
+  const source = (id: string) => {
     const a = images.get(id);
     if (!a || !["image/png", "image/jpeg"].includes(a.mime_type)) throw new StudioError(400, "Reference uchun JPG yoki PNG kerak.");
     if (a.data.length > 7 * 1024 * 1024) throw new StudioError(413, "Reference 7 MB dan kichik bo‘lsin.");
-    return { type: "BASE64", data: a.data.toString("base64") };
+    return a;
   };
+  const reference = (id: string) => ({ type: "BASE64", data: source(id).data.toString("base64") });
   const [width, height] = studioFormats[project.format];
   if (input.kind === "video") {
     if (!shot.approved || !shot.image_asset_id) throw new StudioError(400, "Avval tasdiqlangan kadr rasmini tanlang.");
@@ -20,6 +21,17 @@ export function leonardoBody(input: Extract<StudioJobInput, {kind: "image" | "vi
     return { model: "kling-2.6", public: false, parameters: { prompt: shot.video_prompt, duration: input.duration, width, height, quantity: 1, motion_has_audio: false, guidances: { start_frame: [{ image: reference(shot.image_asset_id) }] } } };
   }
   if (!shot.prompt) throw new StudioError(400, "Kadr uchun rasm prompti kerak.");
+  if (input.image_model === "lightning-xl") {
+    if (input.quantity > 4) throw new StudioError(400, "Lightning XL uchun bir kadrga ko‘pi bilan 4 rasm tanlang.");
+    const [w, h] = { "9:16": [720, 1280], "16:9": [1280, 720], "1:1": [1024, 1024] }[project.format];
+    const references = [
+      [input.character_reference_asset_id, 133, "Mid"],
+      [input.content_reference_asset_id, 100, "Low"],
+      [input.style_reference_asset_id, 67, "High"],
+    ].filter(([id]) => id).map(([id, preprocessorId, strengthType]) => ({ image: source(id as string), preprocessorId, strengthType }));
+    return { api_version: "v1", body: { modelId: "b24e16ff-06e3-43eb-8d33-4416c2d75876", public: false, prompt: shot.prompt, width: w, height: h, num_images: input.quantity, alchemy: true, presetStyle: "PHOTOGRAPHY", enhancePrompt: false, ...(input.seed !== undefined ? {seed: input.seed} : {}) }, references };
+  }
+  if (input.character_reference_asset_id) throw new StudioError(400, "Character Reference uchun Lightning XL modelini tanlang.");
   const guidances: Record<string, unknown> = {};
   if (input.content_reference_asset_id) guidances.content = [{ image: reference(input.content_reference_asset_id), strength: "HIGH" }];
   if (input.style_reference_asset_id) guidances.style = [{ image: reference(input.style_reference_asset_id), strength: "HIGH" }];
@@ -34,21 +46,45 @@ export function providerCost(data: any): StudioCost {
   }
   return typeof data?.apiCreditCost === "number" && Number.isFinite(data.apiCreditCost) && data.apiCreditCost >= 0 ? { amount: data.apiCreditCost, unit: "credits" } : null;
 }
-async function leonardo(path: string, body?: unknown) {
+async function leonardo(path: string, body?: unknown, billable = !!body) {
   const key = process.env.LEONARDO_API_KEY?.trim();
   if (!key) throw new StudioError(503, "Railway web xizmatiga LEONARDO_API_KEY qo‘shing.");
   let r: Response;
   try {
     r = await fetch(`https://cloud.leonardo.ai/api/rest/${path}`, { method: body ? "POST" : "GET", headers: { Authorization: `Bearer ${key}`, Accept: "application/json", ...(body ? {"Content-Type": "application/json"} : {}) }, ...(body ? {body: JSON.stringify(body)} : {}), signal: AbortSignal.timeout(60000) });
-  } catch { throw new StudioError(504, "Leonardo javobi olinmadi. Kredit sarflangan bo‘lishi mumkin; vazifani qayta yuborishdan oldin hisob tarixini tekshiring.", !!body); }
+  } catch { throw new StudioError(504, billable ? "Leonardo javobi olinmadi. Kredit sarflangan bo‘lishi mumkin; vazifani qayta yuborishdan oldin hisob tarixini tekshiring." : "Leonardo reference yuklash javobi olinmadi. Pullik generatsiya yuborilmadi.", billable); }
   if (!r.ok) {
     const messages: Record<number, string> = { 401: "Leonardo API kaliti yaroqsiz.", 403: "Leonardo kaliti yoki model ruxsatini tekshiring.", 402: "Leonardo API balansini tekshiring.", 429: "Leonardo so‘rov limiti. Keyinroq tekshiring." };
-    throw new StudioError(r.status, messages[r.status] || `Leonardo so‘rovi bajarilmadi (HTTP ${r.status}).`, !!body && r.status >= 500);
+    throw new StudioError(r.status, messages[r.status] || `Leonardo so‘rovi bajarilmadi (HTTP ${r.status}).`, billable && r.status >= 500);
   }
-  try { return await r.json(); } catch { throw new StudioError(502, "Leonardo javobi tushunarsiz. Hisob tarixini tekshiring.", !!body); }
+  try { return await r.json(); } catch { throw new StudioError(502, "Leonardo javobi tushunarsiz. Hisob tarixini tekshiring.", billable); }
 }
-export async function createLeonardoGeneration(body: unknown) {
-  const data = await leonardo("v2/generations", body);
+export async function uploadLeonardoReference(image: StudioImage) {
+  const response = await leonardo("v1/init-image", {extension: image.mime_type === "image/png" ? "png" : "jpg"}, false);
+  const upload = response?.uploadInitImage;
+  if (typeof upload?.id !== "string" || !/^[a-f0-9-]{36}$/i.test(upload.id) || typeof upload.url !== "string" || !allowedLeonardoUrl(upload.url)) throw new StudioError(502, "Leonardo reference yuklash manzili mos emas. Pullik generatsiya yuborilmadi.");
+  let fields: Record<string, unknown>;
+  try { fields = typeof upload.fields === "string" ? JSON.parse(upload.fields) : upload.fields; } catch { throw new StudioError(502, "Leonardo reference yuklash sozlamalari mos emas."); }
+  if (!fields || typeof fields !== "object" || Array.isArray(fields) || Object.keys(fields).length > 30 || Object.values(fields).some(v => typeof v !== "string")) throw new StudioError(502, "Leonardo reference yuklash sozlamalari mos emas.");
+  const form = new FormData();
+  for (const [name, value] of Object.entries(fields)) form.append(name, value as string);
+  form.append("file", new Blob([new Uint8Array(image.data)], {type: image.mime_type}), image.mime_type === "image/png" ? "reference.png" : "reference.jpg");
+  try {
+    const r = await fetch(upload.url, {method: "POST", body: form, redirect: "error", signal: AbortSignal.timeout(60000)});
+    if (!r.ok) throw new StudioError(502, `Leonardo reference yuklanmadi (HTTP ${r.status}). Pullik generatsiya yuborilmadi.`);
+  } catch (e) { if (e instanceof StudioError) throw e; throw new StudioError(504, "Leonardo reference yuklanmadi. Pullik generatsiya yuborilmadi."); }
+  return upload.id;
+}
+export async function createLeonardoGeneration(request: unknown) {
+  const internal = request as any;
+  let path = "v2/generations", body = request;
+  if (internal?.api_version === "v1") {
+    const controlnets = [];
+    for (const ref of internal.references) controlnets.push({initImageId: await uploadLeonardoReference(ref.image), initImageType: "UPLOADED", preprocessorId: ref.preprocessorId, strengthType: ref.strengthType});
+    path = "v1/generations";
+    body = {...internal.body, ...(controlnets.length ? {controlnets} : {})};
+  }
+  const data = await leonardo(path, body);
   const id = data?.generationId || data?.sdGenerationJob?.generationId;
   if (typeof id !== "string" || !/^[a-f0-9-]{36}$/i.test(id)) throw new StudioError(502, "Leonardo generation ID qaytarmadi. Hisob tarixini tekshiring.", true);
   return { id, cost: providerCost(data) || providerCost(data.sdGenerationJob) };

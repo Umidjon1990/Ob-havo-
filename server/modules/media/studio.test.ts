@@ -33,6 +33,30 @@ test("polling distinguishes pending images, motion outputs and unknown versus do
   assert.deepEqual(providerCost({cost:{amount:0.035,unit:"dollars"}}),{amount:0.035,unit:"USD"});assert.equal(providerCost({}),null);assert.equal(providerCost({cost:{amount:3}}),null);
   assert.equal(allowedLeonardoUrl("https://cdn.leonardo.ai/image.png"),true);assert.equal(allowedLeonardoUrl("https://cdn.leonardo.ai.attacker.test/a"),false);assert.equal(allowedLeonardoUrl("http://127.0.0.1/a"),false);
 });
+test("Lightning uploads binary private references without API credentials and submits exactly one v1 generation",async()=>{
+  const nativeFetch=globalThis.fetch,key=process.env.LEONARDO_API_KEY;process.env.LEONARDO_API_KEY="private-lightning-test";
+  const images=new Map([[assetId,{mime_type:"image/png",data:Buffer.from([137,80,78,71,13,10,26,10])}]]);
+  const request=studioJobSchema.parse({kind:"image",project_id:projectId,shot_id:"offer",image_model:"lightning-xl",quantity:1,seed:1777912760,idempotency_key:"lightning-test",paid_authorized:true,character_reference_asset_id:assetId,content_reference_asset_id:assetId,style_reference_asset_id:assetId});
+  const body=leonardoBody(request as any,project,images) as any;
+  assert.equal(body.body.width,720);assert.equal(body.body.height,1280);assert.equal(body.body.presetStyle,"PHOTOGRAPHY");assert.equal(body.body.alchemy,true);assert.equal(body.body.enhancePrompt,false);assert.equal(body.body.public,false);
+  assert.throws(()=>leonardoBody({...request,quantity:5} as any,project,images),/4 rasm/);
+  let uploads=0,generations=0;
+  globalThis.fetch=(async(url:any,init:any)=>{
+    if(String(url).endsWith("v1/init-image"))return Response.json({uploadInitImage:{id:assetId,url:"https://references.s3.us-east-1.amazonaws.com/",fields:JSON.stringify({key:"private-reference",policy:"signed-policy"})}});
+    if(String(url)==="https://references.s3.us-east-1.amazonaws.com/"){
+      uploads++;assert.equal(init.headers,undefined);assert.equal(init.redirect,"error");assert.ok(init.body instanceof FormData);assert.equal(init.body.get("policy"),"signed-policy");assert.ok(init.body.get("file") instanceof Blob);assert.equal((await init.body.get("file").arrayBuffer()).byteLength,8);return new Response(null,{status:204});
+    }
+    assert.equal(String(url),"https://cloud.leonardo.ai/api/rest/v1/generations");generations++;
+    const payload=JSON.parse(init.body);assert.equal(payload.num_images,1);assert.equal(payload.modelId,"b24e16ff-06e3-43eb-8d33-4416c2d75876");assert.equal(payload.references,undefined);assert.equal(payload.api_version,undefined);assert.equal(payload.controlnets.length,3);assert.deepEqual(payload.controlnets.map((r:any)=>r.preprocessorId),[133,100,67]);assert.equal(payload.controlnets[0].initImageType,"UPLOADED");assert.equal(payload.seed,1777912760);
+    return Response.json({sdGenerationJob:{generationId:projectId,apiCreditCost:25}});
+  }) as typeof fetch;
+  try {
+    assert.deepEqual(await createLeonardoGeneration(body),{id:projectId,cost:{amount:25,unit:"credits"}});assert.equal(uploads,3);assert.equal(generations,1);
+    globalThis.fetch=(async()=>{throw new Error("private-lightning-test");}) as typeof fetch;
+    await assert.rejects(()=>createLeonardoGeneration(body),e=>e instanceof StudioError&&!e.ambiguous&&!e.message.includes("private-lightning-test"));
+    assert.equal(generations,1);
+  } finally {globalThis.fetch=nativeFetch;if(key===undefined)delete process.env.LEONARDO_API_KEY;else process.env.LEONARDO_API_KEY=key;}
+});
 test("paid Leonardo timeout never blindly retries or exposes provider credentials",async()=>{
   const original=globalThis.fetch,key=process.env.LEONARDO_API_KEY;process.env.LEONARDO_API_KEY="private-test-key";let calls=0;
   globalThis.fetch=(async()=>{calls++;throw new Error("private-test-key");}) as typeof fetch;
@@ -100,5 +124,17 @@ test("durable studio API and Railway bridge survive replay, preserve script lock
     await query("UPDATE studio_jobs SET status='running',claimed_at=now()-interval '21 minutes' WHERE id=$1",[ambiguous.id]);await studio.processStudioJobs();assert.equal(creates,2);
     assert.equal((await query("SELECT status FROM studio_jobs WHERE id=$1",[ambiguous.id])).rows[0].status,"needs_review");
     assert.equal(studio.allowedStudioImportUrl("https://oaisdmntpr.blob.core.windows.net/test?sig=example"),true);assert.equal(studio.allowedStudioImportUrl("https://127.0.0.1/secret"),false);
+    const beforeAssets=Number((await query("SELECT count(*) AS count FROM media_assets")).rows[0].count);
+    const reference={name:"private-reference.png",mime_type:"image/png",data_base64:Buffer.from([137,80,78,71,13,10,26,10]).toString("base64")};
+    process.env.MEDIA_STUDIO_REFERENCE_1=reference.data_base64;
+    const data={project:{name:"Private one-shot test",shots:[{id:"offer",title:"Offer",prompt:"Father arrives and daughter offers water."}]},shot_id:"offer",image_model:"lightning-xl",paid_authorized:true,references:[{name:reference.name,mime_type:reference.mime_type,role:"character",data_env:"MEDIA_STUDIO_REFERENCE_1"},{...reference,role:"content"},{...reference,role:"style"}]};
+    process.env.MEDIA_STUDIO_COMMAND_JSON=JSON.stringify({command_id:"inline-image-test",operation:"image.test",data});await studio.processStudioCommand();await studio.processStudioCommand();
+    const receipt=(await query("SELECT receipt FROM studio_commands WHERE command_id=$1",["inline-image-test"])).rows[0].receipt;assert.equal(receipt.ok,true);assert.equal(receipt.result.reference_assets.length,3);
+    assert.equal(Number((await query("SELECT count(*) AS count FROM media_assets")).rows[0].count),beforeAssets+3);assert.equal(Number((await query("SELECT count(*) AS count FROM studio_projects")).rows[0].count),2);
+    const inlineJob=(await query("SELECT * FROM studio_jobs WHERE id=$1",[receipt.result.job_id])).rows[0];assert.equal(inlineJob.payload.request.quantity,1);assert.equal(inlineJob.payload.request.image_model,"lightning-xl");assert.ok(inlineJob.payload.request.character_reference_asset_id);assert.ok(!JSON.stringify(receipt).includes("data_base64"));assert.equal(creates,2);
+    process.env.MEDIA_STUDIO_COMMAND_JSON=JSON.stringify({command_id:"invalid-inline-test",operation:"image.test",data:{...data,references:[{...reference,role:"character",data_base64:Buffer.from("invalid png").toString("base64")}]}});await studio.processStudioCommand();
+    assert.equal((await query("SELECT receipt FROM studio_commands WHERE command_id=$1",["invalid-inline-test"])).rows[0].receipt.ok,false);assert.equal(Number((await query("SELECT count(*) AS count FROM media_assets")).rows[0].count),beforeAssets+3);assert.equal(creates,2);
+    process.env.MEDIA_STUDIO_COMMAND_JSON=JSON.stringify({command_id:"invalid-env-test",operation:"image.test",data:{...data,references:[{name:reference.name,mime_type:reference.mime_type,role:"character",data_env:"LEONARDO_API_KEY"}]}});await studio.processStudioCommand();
+    assert.equal((await query("SELECT receipt FROM studio_commands WHERE command_id=$1",["invalid-env-test"])).rows[0].receipt.ok,false);assert.equal(Number((await query("SELECT count(*) AS count FROM media_assets")).rows[0].count),beforeAssets+3);delete process.env.MEDIA_STUDIO_REFERENCE_1;
   }finally{globalThis.fetch=nativeFetch;pool.query=oldQuery;pool.connect=oldConnect;await new Promise<void>(resolve=>server.close(()=>resolve()));await db.close();delete process.env.MEDIA_STUDIO_COMMAND_JSON;}
 });
