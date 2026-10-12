@@ -68,7 +68,8 @@ import GrowthStudio from "./growth-studio";
 import ReelsStudio from "./reels-studio";
 import YouTubePlaylists, { YouTubePlaylistFields } from "./youtube-playlists";
 import AIStudio from "./ai-studio";
-import CarouselAudioStudio, { CarouselAudioFields } from "./carousel-audio";
+import { CarouselAudioFields } from "./carousel-audio";
+import CarouselStudio, { NativeCarouselFields, nativeCarouselDefaults } from "./carousel-native";
 import { carouselAudioReady } from "@shared/carousel-audio";
 type Section =
   | "carousel"
@@ -91,7 +92,7 @@ type Section =
 const nav = [
   ["studio", "AI Media Studio", Sparkles],
   ["reels", "Reels studiyasi", Video],
-  ["carousel", "Audioli karusel", Music2],
+  ["carousel", "Foto-karusel", Music2],
   ["growth", "Instagram agent", MessageSquare],
   ["overview", "Umumiy ko‘rinish", LayoutDashboard],
   ["learning", "Haftalik testlar", BookOpen],
@@ -262,6 +263,7 @@ function PostCard({
         <div className="media-post-meta">
           <span className="media-chip">{formats[p.format]}</span>
           {p.variants.carousel_audio && <span className="media-chip">{carouselAudioReady(p)?"Musiqali · tayyor":"Musiqali · tayyorlash kerak"}</span>}
+          {p.variants.carousel_native && <span className="media-chip">Foto-karusel · Instagramda yakunlash</span>}
           <span className={`media-chip ${status}`}>
             {deliveryLabels[status] || "Qoralama"}
           </span>
@@ -281,10 +283,10 @@ function PostCard({
           <Button secondary small onClick={onEdit}>
             {active.length ? "Ko‘rish" : "Tahrirlash"}
           </Button>
-          <Button small onClick={onSchedule}>
-            <Clock size={12} /> Rejalash
+          <Button small onClick={p.variants.carousel_native ? onAudio : onSchedule}>
+            <Clock size={12} /> {p.variants.carousel_native ? "Paketni olish" : "Rejalash"}
           </Button>
-          {p.format === "carousel" && <Button secondary small onClick={onAudio}><Music2 size={12}/> Musiqa qo‘shish</Button>}
+          {p.format === "carousel" && <Button secondary small onClick={onAudio}><Music2 size={12}/> Karuselni ochish</Button>}
           <button
             aria-label="Post nusxasini yaratish"
             className="media-icon-button"
@@ -424,7 +426,7 @@ export default function MediaAdmin() {
   const descriptions: Record<Section, string> = {
     studio: "Loyiha → reference → Lucid Origin → video → ovoz → montaj.",
     reels: "Instagram reklama videolari, cover, klon ovoz va kalit so‘zli Direct.",
-    carousel: "Rasm slaydlari → MP3 musiqa → tayyor videoli karusel → nashr jadvali.",
+    carousel: "Asl rasmlar va caption → Instagram ilovasida bitta umumiy musiqa.",
     growth: "Auditoriya bilan muloqot, natijalar va sifat nazorati.",
     overview: "Barcha ishlaringiz bir joyda. Navbatdagi kontentdan boshlaymiz.",
     posts: "G‘oyadan tayyor postgacha. Har bir platformaga mos matn va media.",
@@ -870,7 +872,7 @@ export default function MediaAdmin() {
               />
             )}
             {section === "growth" && <GrowthStudio data={data} onSaved={refresh} />}
-            {section === "carousel" && <CarouselAudioStudio data={data} onSaved={refresh}
+            {section === "carousel" && <CarouselStudio data={data} onSaved={refresh} onEdit={p=>setEditPost(p)}
               initialPostId={carouselPostId} onSchedule={p=>setSchedule([p])}
               onNew={()=>{setNewPostFormat("carousel");setEditPost(null);}}/>}
             {section === "reels" && <ReelsStudio data={data} onSaved={refresh} />}
@@ -1442,7 +1444,7 @@ function PostEditor({
     [format, setFormat] = useState(post?.format || defaultFormat),
     [selected, setSelected] = useState<string[]>(post?.asset_ids || []),
     [notes, setNotes] = useState(post?.production_notes || ""),
-    [variants, setVariants] = useState(post?.variants || {}),
+    [variants, setVariants] = useState(post?.variants || (defaultFormat === "carousel" ? {carousel_native:nativeCarouselDefaults} : {})),
     [variant, setVariant] = useState<"telegram" | "instagram" | "youtube">(
       "telegram",
     );
@@ -1502,7 +1504,8 @@ function PostEditor({
               onChange={(e) => {
                 setFormat(e.target.value as typeof format);
                 if (!["video", "stickman"].includes(e.target.value)) setVariants({ ...variants, youtube_playlist: undefined });
-                if (e.target.value !== "carousel") setVariants(v=>({...v,carousel_audio:undefined,carousel_audio_output:undefined}));
+                if (e.target.value !== "carousel") setVariants(v=>({...v,carousel_audio:undefined,carousel_audio_output:undefined,carousel_native:undefined}));
+                else if (format !== "carousel") setVariants(v=>({...v,carousel_native:nativeCarouselDefaults,carousel_audio:undefined,carousel_audio_output:undefined}));
               }}
             >
               {Object.entries(formats).map(([v, l]) => (
@@ -1683,9 +1686,17 @@ function PostEditor({
             ))}
           </div>
           {format === "carousel" && <>
-            <CarouselAudioFields assets={assets} value={variants.carousel_audio} disabled={locked}
-              onChange={audio=>setVariants({...variants,carousel_audio:audio})}/>
-            <p className="media-subtle">Saqlagach “Audioli karusel” bo‘limida musiqali slaydlarni tayyorlab, oldindan ko‘rishingiz mumkin.</p>
+            <Field label="Karusel tayyorlash usuli"><select className="media-input" value={variants.carousel_native ? "photo" : "video"} disabled={locked}
+              onChange={e=>setVariants(v=>({...v,carousel_native:e.target.value === "photo" ? nativeCarouselDefaults : undefined,
+                carousel_audio:undefined,carousel_audio_output:undefined}))}>
+              <option value="photo">Instagram foto-karusel · umumiy musiqa ilovada</option>
+              <option value="video">Musiqali video slaydlar · kesma har slaydda qayta boshlanadi</option>
+            </select></Field>
+            {variants.carousel_native ? <NativeCarouselFields value={variants.carousel_native} disabled={locked}
+              onChange={settings=>setVariants({...variants,carousel_native:settings})}/> :
+              <CarouselAudioFields assets={assets} value={variants.carousel_audio} disabled={locked}
+                onChange={audio=>setVariants({...variants,carousel_audio:audio})}/>}
+            <p className="media-subtle">Foto-karusel rasmlari alohida saqlanadi; umumiy musiqani va nashrni Instagram ilovasida yakunlaysiz.</p>
           </>}
           <Field
             label="Ssenariy va montaj ko‘rsatmalari"

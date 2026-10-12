@@ -3,6 +3,7 @@ import { assetSignature, seal, unseal } from "./security";
 import type { MediaPost } from "../../../shared/media";
 import { PublishError } from "./publish-error";
 import { attachYouTubePlaylist, ownedYouTubePlaylist, playlistWriteGranted } from "./youtube-playlists";
+import { nativeCarouselPublicationMessage } from "../../../shared/carousel-native";
 export { PublishError } from "./publish-error";
 type Account = {
   id: string;
@@ -238,6 +239,7 @@ export async function publish(
     };
   }
   if (account.platform === "instagram") {
+    if (post.variants.carousel_native) throw new PublishError(nativeCarouselPublicationMessage);
     if (!state.container_id) {
       let payload: Record<string, string> = { caption };
       if (assets.length > 1) {

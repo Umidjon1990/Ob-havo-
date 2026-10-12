@@ -1,6 +1,22 @@
 # Audioli karusel
 
+## Instagram foto-karusel — asosiy yo‘l
+
+Foydalanuvchining aniqlashtirilgan talabi: asl rasmlar yon tomonga suriladi, barcha rasmlar uchun **bitta umumiy musiqa** Instagram ilovasida ijro etiladi. Video slaydlardagi qayta boshlanuvchi kesma bu talabning o‘rnini bosmaydi.
+
+Media Agent → **Foto-karusel** standart holatda shu yo‘lni ochadi. **Yangi foto-karusel** orqali 2–10 asl JPG/PNG, sarlavha va caption saqlanadi. Musiqa nomi/havolasi va kesma boshlanishi eslatma sifatida saqlanadi. **Foto-karusel paketini olish** asl rasm baytlarini 01, 02, ... tartibida ZIP ga joylaydi; CAPTION.txt, MUSIQA.txt va QOLLANMA.txt ham qo‘shiladi. Rasmlar videoga aylantirilmaydi va ularga audio biriktirilgan deb ko‘rsatilmaydi.
+
+Paketni telefoningizda oching; Instagram ilovasida rasmlarni tartib bilan tanlang, captionni qo‘ying va **Musiqa qo‘shish** orqali bitta trek tanlab nashrni yakunlang. Native audio tanlash va ushbu nashrni yakunlash qo‘lda bajariladi. Bunday paket Instagram avtomatik jadvaliga qo‘yilmaydi; scheduler va provider bu yo‘lni bloklaydi. `variants.carousel_native` faqat tayyorlash eslatmasi, nashr natijasi emas.
+
+Admin himoyasidagi `PUT /api/media/posts/:id/carousel-native` `{settings, updated_at}` bilan eslatmani saqlaydi; faol nashr/render bo‘lsa tahrir bloklanadi. `GET /api/media/posts/:id/carousel-native/package` asl rasmlarni yuklab beradi. Jami 100 MB cheklovi, vaqtinchalik ZIP cleanup va captionning 2200 belgi cheklovi saqlanadi. Eski video slaydlar alohida tanlov sifatida qoladi.
+
+Instagram musiqa cheklovi bo‘yicha tekshirilgan manbalar (2026-10-12):
+- Meta: https://about.fb.com/news/2023/08/music-and-collabs-on-instagram/ — ilovada foto-karuselga umumiy musiqa.
+- Buffer rasmiy yordam markazi: https://support.buffer.com/en-us/articles/adding-music-stickers-and-other-effects-to-instagram-and-tiktok-posts-G5QrWfQL4k — Posts/Stories musiqa uchun notification orqali ilovada yakunlash; Reels musiqa imkoniyati alohida.
+
 ## Foydalanish
+
+Quyidagi yo‘l **Musiqali video slaydlar** tanloviga tegishli.
 
 1. Media Agent → **Audioli karusel**. JPG/PNG rasmlarni va MP3 musiqani yuklang.
 2. **Yangi karusel** orqali sarlavha, caption va 2–10 ta manba rasmni kerakli tartibda tanlab saqlang. Mavzu yoki til cheklovi yo‘q.

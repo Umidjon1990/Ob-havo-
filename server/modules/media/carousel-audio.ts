@@ -12,6 +12,7 @@ const uuid = z.string().uuid();
 const activeKinds = "('explainer','reels_audio','reels_render','carousel_audio')";
 export async function checkCarouselAudioAssets(post: any) {
   if (!post.variants.carousel_audio) return;
+  if (post.variants.carousel_native) throw new AudioError(422, "Foto-karusel va video slaydlar uchun bitta usulni tanlang.");
   const audio = carouselAudioSchema.parse(post.variants.carousel_audio);
   if (post.format !== "carousel" || post.asset_ids.length < 2 || post.asset_ids.length > 10
     || new Set(post.asset_ids).size !== post.asset_ids.length)
@@ -56,7 +57,8 @@ export function registerCarouselAudioRoutes(app: Express, route: any) {
       await client.query("BEGIN");
       const post = await editable(client, id, input.updated_at);
       if (await activeJob(client, id)) throw new AudioError(409, "Karusel tayyorlanmoqda. Tugashini kuting.");
-      const variants = {...post.variants, carousel_audio: input.audio || undefined};
+      const variants = {...post.variants, carousel_audio: input.audio || undefined,
+        ...(input.audio ? {carousel_native: undefined} : {})};
       const next = preserveCarouselAudioOutput({...post, variants}, post);
       await checkCarouselAudioAssets(next);
       const saved = (await client.query("UPDATE media_posts SET variants=$2,updated_at=now() WHERE id=$1 RETURNING updated_at", [id, JSON.stringify(next.variants)])).rows[0];
@@ -71,6 +73,7 @@ export function registerCarouselAudioRoutes(app: Express, route: any) {
     try {
       await client.query("BEGIN");
       const post = await editable(client, id, input.updated_at);
+      if (post.variants.carousel_native) throw new AudioError(422, "Foto-karusel uchun paketni yuklab oling va umumiy musiqani Instagram ilovasida qo‘shing.");
       const active = await activeJob(client, id);
       if (active) {
         const own = (await client.query("SELECT kind FROM media_jobs WHERE id=$1", [active.id])).rows[0];

@@ -2,6 +2,7 @@ import { z } from "zod";
 import { explainerPlanSchema } from "./explainer";
 import { reelPackageSchema, reelPublicationError } from "./reels";
 import { carouselAudioSchema, carouselAudioOutputSchema, carouselAudioReady } from "./carousel-audio";
+import { carouselNativeSchema, nativeCarouselPublicationMessage } from "./carousel-native";
 export const platformSchema = z.enum(["telegram", "instagram", "youtube"]);
 export const formatSchema = z.enum([
   "text",
@@ -18,6 +19,7 @@ export const postSchema = z.object({
   asset_ids: z.array(z.string().uuid()).max(10).default([]),
   variants: z
     .object({
+      carousel_native: carouselNativeSchema.optional(),
       carousel_audio: carouselAudioSchema.optional(),
       carousel_audio_output: carouselAudioOutputSchema.optional(),
       reels: reelPackageSchema.optional(),
@@ -149,6 +151,7 @@ export function validatePublication(
   platform: string,
   mimes: string[],
 ) {
+  if (post.variants.carousel_native && platform === "instagram") return nativeCarouselPublicationMessage;
   if (post.variants.reels) {
     const error = reelPublicationError(post.variants.reels, platform, post.asset_ids, post.variants.instagram_cover_id);
     if (error) return error;

@@ -165,6 +165,33 @@ test("authenticated API renders real audio slides, blocks premature publishing a
     assert.equal((await request(path)).data.ready,false);assert.equal((await schedule()).status,400);
     await assert.rejects(()=>renderCarouselAudio(images.map(data=>({mime_type:"image/png",data})),music,{...changed,start_seconds:4}),/kesmasi fayldan uzun/);
     await assert.rejects(()=>renderCarouselAudio(images.map(data=>({mime_type:"image/png",data})),Buffer.from("broken mp3"),changed),/MP3 faylini/);
+
+    // Native photo music is completed in Instagram. The package must not be
+    // silently scheduled as a video carousel or reported as a published post.
+    post=(await query("SELECT * FROM media_posts WHERE id=$1",[post.id])).rows[0];
+    const nativePath=`/api/media/posts/${post.id}/carousel-native`;
+    const nativeSettings={music_title:"One common Instagram track",music_url:"",start_seconds:0};
+    assert.equal((await nativeFetch(origin+nativePath+"/package")).status,401);
+    assert.equal((await request(nativePath,"PUT",{settings:nativeSettings,updated_at:post.updated_at},{Origin:"https://evil.test"})).status,403);
+    assert.equal((await request(nativePath,"PUT",{settings:nativeSettings,updated_at:"2000-01-01T00:00:00.000Z"})).status,409);
+    const nativeSaved=await request(nativePath,"PUT",{settings:nativeSettings,updated_at:post.updated_at});assert.equal(nativeSaved.status,200);
+    post=(await query("SELECT * FROM media_posts WHERE id=$1",[post.id])).rows[0];
+    assert.equal(post.variants.carousel_audio,undefined);assert.equal(post.variants.carousel_audio_output,undefined);
+    assert.equal(post.variants.carousel_native.music_title,nativeSettings.music_title);
+    const blocked=await schedule();assert.equal(blocked.status,400);assert.match(blocked.data.error,/Instagram ilovasida/);
+    assert.equal((await request(path+"/render","POST",{updated_at:post.updated_at})).status,422);
+    const {publish}=await import("./providers");
+    await assert.rejects(()=>publish(post,{id:account.id,platform:"instagram",external_id:"ig-local",credentials:null},[],{},async()=>{}),/Instagram ilovasida/);
+    const download=await fetch(origin+nativePath+"/package",{headers:{Authorization:"Bearer carousel-test-session"}});
+    assert.equal(download.status,200);assert.match(download.headers.get("content-disposition")!,/instagram-foto-karusel.zip/);
+    const zipPath=join(dir,"native-api.zip");await writeFile(zipPath,Buffer.from(await download.arrayBuffer()));
+    const files=(await run("unzip",["-Z1",zipPath])).stdout;
+    assert.ok(files.includes("01-slayd.png")&&files.includes("02-slayd.png")&&!files.includes(".mp4"));
+    const original=(await run("unzip",["-p",zipPath,"01-slayd.png"],{encoding:"buffer"})).stdout;
+    assert.deepEqual(original,images[0]);
+    assert.equal((await query("SELECT count(*)::int AS n FROM media_jobs WHERE kind='carousel_audio'")).rows[0].n,1);
+    const legacy=await request(path,"PUT",{audio:changed,updated_at:post.updated_at});assert.equal(legacy.status,200);
+    post=(await query("SELECT * FROM media_posts WHERE id=$1",[post.id])).rows[0];assert.equal(post.variants.carousel_native,undefined);
   } finally {
     globalThis.fetch=nativeFetch;pool.query=oldQuery;pool.connect=oldConnect;
     await new Promise<void>(r=>server.close(()=>r()));await db.close();await rm(dir,{recursive:true,force:true});

@@ -35,6 +35,7 @@ import { registerReelRoutes, checkReelAssets } from "./reels";
 import { registerStudioRoutes } from "./studio";
 import { registerCarouselAudioRoutes, checkCarouselAudioAssets } from "./carousel-audio";
 import { preserveCarouselAudioOutput } from "../../../shared/carousel-audio";
+import { registerNativeCarouselRoutes, checkNativeCarouselAssets } from "./carousel-native";
 const uuid = z.string().uuid();
 let generatingAudio = false;
 const route =
@@ -107,6 +108,7 @@ export function registerMediaRoutes(app: Express) {
   registerExplainerRoutes(app, route);
   registerReelRoutes(app, route);
   registerCarouselAudioRoutes(app, route);
+  registerNativeCarouselRoutes(app, route);
   app.get("/api/media/audio/catalog", route(async (_req, res) => res.json(await audioCatalog())));
   app.post("/api/media/audio/generate", route(async (req, res) => {
     const input = audioInput.parse(req.body);
@@ -294,6 +296,7 @@ export function registerMediaRoutes(app: Express) {
       await checkYouTubePlaylistAccount(p);
       if(p.variants.reels) await checkReelAssets(p.variants.reels,p.variants.instagram_cover_id);
       await checkCarouselAudioAssets(p);
+      await checkNativeCarouselAssets(p);
       const r = await pool.query(
         "INSERT INTO media_posts(title,caption,format,asset_ids,variants,production_notes) VALUES($1,$2,$3,$4,$5,$6) RETURNING *",
         [
@@ -323,6 +326,7 @@ export function registerMediaRoutes(app: Express) {
       await checkYouTubePlaylistAccount(p);
       if(p.variants.reels) await checkReelAssets(p.variants.reels,p.variants.instagram_cover_id);
       await checkCarouselAudioAssets(p);
+      await checkNativeCarouselAssets(p);
       const client = await pool.connect();
       try {
         await client.query("BEGIN");
