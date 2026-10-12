@@ -1,4 +1,5 @@
 import { automaticQuality } from "./quality";
+import { processCarouselAudio } from "./carousel-audio";
 import { processInteractions, processInsights } from "./growth";
 import { processExplainer } from "./explainer";
 import { processMscCommand } from "./explainer-command";
@@ -245,6 +246,7 @@ export async function startMediaWorker() {
   await processMscPreviewAudioCommand();
   void processMscCommand().catch(()=>console.info("MSC command could not connect to database."));
   const timer = setInterval(() => {
+    void processCarouselAudio();
     void processStudioJobs();
     void processInteractions();
     void processInsights();
@@ -256,6 +258,7 @@ export async function startMediaWorker() {
     void processReelJobs();
   }, 15000);
   timer.unref();
+  void processCarouselAudio();
   void processStudioJobs();
   void processDelivery();
   void processGeneration();

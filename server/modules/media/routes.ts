@@ -33,6 +33,8 @@ import { registerGrowthRoutes } from "./growth";
 import { registerQualityRoutes } from "./quality";
 import { registerReelRoutes, checkReelAssets } from "./reels";
 import { registerStudioRoutes } from "./studio";
+import { registerCarouselAudioRoutes, checkCarouselAudioAssets } from "./carousel-audio";
+import { preserveCarouselAudioOutput } from "../../../shared/carousel-audio";
 const uuid = z.string().uuid();
 let generatingAudio = false;
 const route =
@@ -104,6 +106,7 @@ export function registerMediaRoutes(app: Express) {
   registerQualityRoutes(app, route);
   registerExplainerRoutes(app, route);
   registerReelRoutes(app, route);
+  registerCarouselAudioRoutes(app, route);
   app.get("/api/media/audio/catalog", route(async (_req, res) => res.json(await audioCatalog())));
   app.post("/api/media/audio/generate", route(async (req, res) => {
     const input = audioInput.parse(req.body);
@@ -280,7 +283,7 @@ export function registerMediaRoutes(app: Express) {
   app.post(
     "/api/media/posts",
     route(async (req, res) => {
-      const p = postSchema.parse(req.body);
+      const p = preserveCarouselAudioOutput(postSchema.parse(req.body));
       await checkAssets(p.asset_ids);
       for (const platform of ["telegram", "instagram", "youtube"] as const) {
         const ids = p.variants[`${platform}_asset_ids`];
@@ -290,6 +293,7 @@ export function registerMediaRoutes(app: Express) {
       await checkYouTubeCover(p);
       await checkYouTubePlaylistAccount(p);
       if(p.variants.reels) await checkReelAssets(p.variants.reels,p.variants.instagram_cover_id);
+      await checkCarouselAudioAssets(p);
       const r = await pool.query(
         "INSERT INTO media_posts(title,caption,format,asset_ids,variants,production_notes) VALUES($1,$2,$3,$4,$5,$6) RETURNING *",
         [
@@ -307,8 +311,8 @@ export function registerMediaRoutes(app: Express) {
   app.patch(
     "/api/media/posts/:id",
     route(async (req, res) => {
-      const id = uuid.parse(req.params.id),
-        p = postSchema.parse(req.body);
+      const id = uuid.parse(req.params.id);
+      let p = postSchema.parse(req.body);
       await checkAssets(p.asset_ids);
       for (const platform of ["telegram", "instagram", "youtube"] as const) {
         const ids = p.variants[`${platform}_asset_ids`];
@@ -318,11 +322,12 @@ export function registerMediaRoutes(app: Express) {
       await checkYouTubeCover(p);
       await checkYouTubePlaylistAccount(p);
       if(p.variants.reels) await checkReelAssets(p.variants.reels,p.variants.instagram_cover_id);
+      await checkCarouselAudioAssets(p);
       const client = await pool.connect();
       try {
         await client.query("BEGIN");
         const found = await client.query(
-          "SELECT id FROM media_posts WHERE id=$1 FOR UPDATE",
+          "SELECT * FROM media_posts WHERE id=$1 FOR UPDATE",
           [id],
         );
         if (!found.rowCount) {
@@ -334,7 +339,7 @@ export function registerMediaRoutes(app: Express) {
           "SELECT 1 FROM media_deliveries WHERE post_id=$1 AND status<>'cancelled' LIMIT 1",
           [id],
         );
-        if (locked.rowCount || (await client.query("SELECT 1 FROM media_jobs WHERE kind IN ('explainer','reels_audio','reels_render') AND status IN ('queued','running') AND payload->>'post_id'=$1",[id])).rowCount) {
+        if (locked.rowCount || (await client.query("SELECT 1 FROM media_jobs WHERE kind IN ('explainer','reels_audio','reels_render','carousel_audio') AND status IN ('queued','running') AND payload->>'post_id'=$1",[id])).rowCount) {
           await client.query("ROLLBACK");
           res
             .status(409)
@@ -344,6 +349,7 @@ export function registerMediaRoutes(app: Express) {
             });
           return;
         }
+        p = preserveCarouselAudioOutput(p, found.rows[0]);
         const r = await client.query(
           "UPDATE media_posts SET title=$2,caption=$3,format=$4,asset_ids=$5,variants=$6,production_notes=$7,updated_at=now() WHERE id=$1 RETURNING *",
           [
@@ -371,7 +377,7 @@ export function registerMediaRoutes(app: Express) {
     route(async (req, res) => {
       const id = uuid.parse(req.params.id);
       const r = await pool.query(
-        "DELETE FROM media_posts WHERE id=$1 AND NOT EXISTS(SELECT 1 FROM media_deliveries WHERE post_id=$1 AND status<>'cancelled') AND NOT EXISTS(SELECT 1 FROM media_jobs WHERE kind IN ('explainer','reels_audio','reels_render') AND status IN ('queued','running') AND payload->>'post_id'=$1::text) RETURNING id",
+        "DELETE FROM media_posts WHERE id=$1 AND NOT EXISTS(SELECT 1 FROM media_deliveries WHERE post_id=$1 AND status<>'cancelled') AND NOT EXISTS(SELECT 1 FROM media_jobs WHERE kind IN ('explainer','reels_audio','reels_render','carousel_audio') AND status IN ('queued','running') AND payload->>'post_id'=$1::text) RETURNING id",
         [id],
       );
       if (!r.rowCount) {

@@ -35,6 +35,7 @@ import {
   Lock,
   ArrowUp,
   ArrowDown,
+  Music2,
 } from "lucide-react";
 import {
   Dialog,
@@ -67,7 +68,10 @@ import GrowthStudio from "./growth-studio";
 import ReelsStudio from "./reels-studio";
 import YouTubePlaylists, { YouTubePlaylistFields } from "./youtube-playlists";
 import AIStudio from "./ai-studio";
+import CarouselAudioStudio, { CarouselAudioFields } from "./carousel-audio";
+import { carouselAudioReady } from "@shared/carousel-audio";
 type Section =
+  | "carousel"
   | "studio"
   | "reels"
   | "growth"
@@ -87,6 +91,7 @@ type Section =
 const nav = [
   ["studio", "AI Media Studio", Sparkles],
   ["reels", "Reels studiyasi", Video],
+  ["carousel", "Audioli karusel", Music2],
   ["growth", "Instagram agent", MessageSquare],
   ["overview", "Umumiy ko‘rinish", LayoutDashboard],
   ["learning", "Haftalik testlar", BookOpen],
@@ -236,12 +241,14 @@ function PostCard({
   onEdit,
   onSchedule,
   onCopy,
+  onAudio,
 }: {
   p: MediaPost;
   data: MediaData;
   onEdit: () => void;
   onSchedule: () => void;
   onCopy: () => void;
+  onAudio: () => void;
 }) {
   const active = p.deliveries.filter((d) => d.status !== "cancelled");
   const status = active.length
@@ -254,6 +261,7 @@ function PostCard({
       <div className="media-post-body">
         <div className="media-post-meta">
           <span className="media-chip">{formats[p.format]}</span>
+          {p.variants.carousel_audio && <span className="media-chip">{carouselAudioReady(p)?"Musiqali · tayyor":"Musiqali · tayyorlash kerak"}</span>}
           <span className={`media-chip ${status}`}>
             {deliveryLabels[status] || "Qoralama"}
           </span>
@@ -276,6 +284,7 @@ function PostCard({
           <Button small onClick={onSchedule}>
             <Clock size={12} /> Rejalash
           </Button>
+          {p.format === "carousel" && <Button secondary small onClick={onAudio}><Music2 size={12}/> Musiqa qo‘shish</Button>}
           <button
             aria-label="Post nusxasini yaratish"
             className="media-icon-button"
@@ -302,6 +311,8 @@ export default function MediaAdmin() {
     [busy, setBusy] = useState(false),
     [search, setSearch] = useState("");
   const [editPost, setEditPost] = useState<MediaPost | null | undefined>(),
+    [newPostFormat, setNewPostFormat] = useState<"video"|"carousel">("video"),
+    [carouselPostId, setCarouselPostId] = useState(""),
     [schedule, setSchedule] = useState<MediaPost[] | null>(null),
     [campaign, setCampaign] = useState(false),
     [account, setAccount] = useState(false),
@@ -413,6 +424,7 @@ export default function MediaAdmin() {
   const descriptions: Record<Section, string> = {
     studio: "Loyiha → reference → Lucid Origin → video → ovoz → montaj.",
     reels: "Instagram reklama videolari, cover, klon ovoz va kalit so‘zli Direct.",
+    carousel: "Rasm slaydlari → MP3 musiqa → tayyor videoli karusel → nashr jadvali.",
     growth: "Auditoriya bilan muloqot, natijalar va sifat nazorati.",
     overview: "Barcha ishlaringiz bir joyda. Navbatdagi kontentdan boshlaymiz.",
     posts: "G‘oyadan tayyor postgacha. Har bir platformaga mos matn va media.",
@@ -788,7 +800,7 @@ export default function MediaAdmin() {
                   .map((j) => (
                     <div className="media-alert" key={j.id}>
                       {j.status === "running" || j.status === "queued"
-                        ? `AI reja tayyorlanmoqda. ${j.result?.post_ids?.length || 0} ta qoralama saqlandi.`
+                        ? j.kind === "carousel_audio" ? "Musiqali karusel slaydlari tayyorlanmoqda…" : `AI reja tayyorlanmoqda. ${j.result?.post_ids?.length || 0} ta qoralama saqlandi.`
                         : j.error}
                     </div>
                   ))}
@@ -807,6 +819,7 @@ export default function MediaAdmin() {
                         onEdit={() => setEditPost(p)}
                         onSchedule={() => setSchedule([p])}
                         onCopy={() => void copyPost(p)}
+                        onAudio={() => {setCarouselPostId(p.id);go("carousel");}}
                       />
                     ))}
                 </div>
@@ -857,6 +870,9 @@ export default function MediaAdmin() {
               />
             )}
             {section === "growth" && <GrowthStudio data={data} onSaved={refresh} />}
+            {section === "carousel" && <CarouselAudioStudio data={data} onSaved={refresh}
+              initialPostId={carouselPostId} onSchedule={p=>setSchedule([p])}
+              onNew={()=>{setNewPostFormat("carousel");setEditPost(null);}}/>}
             {section === "reels" && <ReelsStudio data={data} onSaved={refresh} />}
             {section === "playlists" && <YouTubePlaylists accounts={data.accounts} />}
             {section === "audio" && <AudioStudio onSaved={refresh} />}
@@ -1214,18 +1230,21 @@ export default function MediaAdmin() {
       {data && editPost !== undefined && (
         <PostEditor
           post={editPost}
+          defaultFormat={newPostFormat}
           assets={data.assets}
           accounts={data.accounts}
           busy={busy}
-          onClose={() => setEditPost(undefined)}
+          onClose={() => {setEditPost(undefined);setNewPostFormat("video");}}
           onSave={async (body) => {
-            await mediaApi(
+            const saved = await mediaApi<MediaPost>(
               editPost ? `/posts/${editPost.id}` : "/posts",
               editPost ? "PATCH" : "POST",
               body,
             );
             await refresh();
             setEditPost(undefined);
+            setNewPostFormat("video");
+            if(saved.format === "carousel"){setCarouselPostId(saved.id);go("carousel");}
             setSuccess("Kontent saqlandi.");
           }}
           onDelete={
@@ -1402,6 +1421,7 @@ function FormShell({
 }
 function PostEditor({
   post,
+  defaultFormat = "video",
   assets,
   accounts,
   onClose,
@@ -1409,6 +1429,7 @@ function PostEditor({
   onDelete,
 }: {
   post: MediaPost | null;
+  defaultFormat?: "video"|"carousel";
   assets: MediaAsset[];
   accounts: MediaAccount[];
   busy: boolean;
@@ -1418,7 +1439,7 @@ function PostEditor({
 }) {
   const [title, setTitle] = useState(post?.title || ""),
     [caption, setCaption] = useState(post?.caption || ""),
-    [format, setFormat] = useState(post?.format || "video"),
+    [format, setFormat] = useState(post?.format || defaultFormat),
     [selected, setSelected] = useState<string[]>(post?.asset_ids || []),
     [notes, setNotes] = useState(post?.production_notes || ""),
     [variants, setVariants] = useState(post?.variants || {}),
@@ -1481,6 +1502,7 @@ function PostEditor({
               onChange={(e) => {
                 setFormat(e.target.value as typeof format);
                 if (!["video", "stickman"].includes(e.target.value)) setVariants({ ...variants, youtube_playlist: undefined });
+                if (e.target.value !== "carousel") setVariants(v=>({...v,carousel_audio:undefined,carousel_audio_output:undefined}));
               }}
             >
               {Object.entries(formats).map(([v, l]) => (
@@ -1660,6 +1682,11 @@ function PostEditor({
               </div>
             ))}
           </div>
+          {format === "carousel" && <>
+            <CarouselAudioFields assets={assets} value={variants.carousel_audio} disabled={locked}
+              onChange={audio=>setVariants({...variants,carousel_audio:audio})}/>
+            <p className="media-subtle">Saqlagach “Audioli karusel” bo‘limida musiqali slaydlarni tayyorlab, oldindan ko‘rishingiz mumkin.</p>
+          </>}
           <Field
             label="Ssenariy va montaj ko‘rsatmalari"
             hint="Higgsfield / HyperFrames, ovoz, kadrlar, pop-up, animatsiya va SFX rejasi."
@@ -1778,7 +1805,8 @@ function ScheduleModal({
         )}
         <div className="media-alert media-success">
           Media fayllar tayyor va biriktirilgan bo‘lishi kerak. Reels/Shorts
-          uchun MP4; Instagram karuseli uchun 2–10 ta JPG.
+          uchun MP4; Instagram karuseli uchun 2–10 ta JPG yoki MP4.
+          Musiqali karuselni avval “Audioli karusel” bo‘limida tayyorlang.
         </div>
       </FormShell>
     </Modal>

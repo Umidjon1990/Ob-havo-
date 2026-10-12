@@ -1,6 +1,7 @@
 import { z } from "zod";
 import { explainerPlanSchema } from "./explainer";
 import { reelPackageSchema, reelPublicationError } from "./reels";
+import { carouselAudioSchema, carouselAudioOutputSchema, carouselAudioReady } from "./carousel-audio";
 export const platformSchema = z.enum(["telegram", "instagram", "youtube"]);
 export const formatSchema = z.enum([
   "text",
@@ -17,6 +18,8 @@ export const postSchema = z.object({
   asset_ids: z.array(z.string().uuid()).max(10).default([]),
   variants: z
     .object({
+      carousel_audio: carouselAudioSchema.optional(),
+      carousel_audio_output: carouselAudioOutputSchema.optional(),
       reels: reelPackageSchema.optional(),
       explainer: explainerPlanSchema.optional(),
       explainer_audio_id: z.string().uuid().optional(),
@@ -177,12 +180,16 @@ export function validatePublication(
   )
     return "Matnli post uchun Telegram va bo‘sh bo‘lmagan matn kerak.";
   if (
+    post.format === "carousel" && post.variants.carousel_audio
+    && (mimes.length < 2 || mimes.some(m => m !== "video/mp4"))
+  ) return "Audioli karusel hali tayyor emas. Avval musiqali slaydlarni tayyorlang.";
+  if (
     post.format === "carousel" &&
     (mimes.length < 2 ||
       mimes.length > 10 ||
-      mimes.some((m) => m !== "image/jpeg"))
+      mimes.some((m) => !["image/jpeg", "video/mp4"].includes(m)))
   )
-    return "Karuselga 2–10 ta JPG rasm kerak.";
+    return "Karuselga 2–10 ta JPG yoki MP4 slayd kerak.";
   if (
     post.format === "image" &&
     (mimes.length !== 1 || !["image/jpeg", "image/png"].includes(mimes[0]))
@@ -213,5 +220,10 @@ export function suggestedDates(month: string, count: number, now = new Date()) {
 }
 
 export function platformPost<T extends {asset_ids: string[]; variants: Record<string, any>}>(post:T, platform:string):T {
-  return {...post,...(platform==="telegram"&&post.variants.telegram_format==="article"?{format:"article"}:{}),asset_ids:post.variants[`${platform}_asset_ids`] ?? post.asset_ids};
+  const audio = (post as T & {format?:string}).format === "carousel" && post.variants.carousel_audio
+    && ["instagram", "telegram"].includes(platform);
+  const assets = audio ? (carouselAudioReady(post as T & {format:string})
+    ? post.variants.carousel_audio_output.asset_ids : [])
+    : post.variants[`${platform}_asset_ids`] ?? post.asset_ids;
+  return {...post,...(platform==="telegram"&&post.variants.telegram_format==="article"?{format:"article"}:{}),asset_ids:assets};
 }

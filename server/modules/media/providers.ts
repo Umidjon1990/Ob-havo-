@@ -209,8 +209,9 @@ export async function publish(
         {
           ...common,
           media: assets.map((a, i) => ({
-            type: "photo",
+            type: a.mime_type.startsWith("video/") ? "video" : "photo",
             media: publicAsset(a.id),
+            ...(a.mime_type.startsWith("video/") ? { supports_streaming: true } : {}),
             ...(i === 0 ? { caption } : {}),
           })),
         },
@@ -242,12 +243,23 @@ export async function publish(
       if (assets.length > 1) {
         state.children = state.children || [];
         for (let i = state.children.length; i < assets.length; i++) {
+          const video = assets[i].mime_type.startsWith("video/");
           const r = await ig(account, `${account.external_id}/media`, {
-            image_url: publicAsset(assets[i].id),
+            ...(video ? {video_url: publicAsset(assets[i].id), media_type:"VIDEO"} : {image_url: publicAsset(assets[i].id)}),
             is_carousel_item: "true",
           });
           state.children.push(r.id);
           await save(state);
+        }
+        // Video children must finish processing before their parent is created.
+        // Saved IDs are reused on retry, so an IN_PROGRESS slide is never uploaded twice.
+        for (let i = 0; i < assets.length; i++) {
+          if (!assets[i].mime_type.startsWith("video/")) continue;
+          const child = await ig(account, `${state.children[i]}?fields=status_code`);
+          if (child.status_code === "IN_PROGRESS")
+            throw new PublishError("Instagram karusel slaydini tayyorlamoqda.", true);
+          if (child.status_code !== "FINISHED")
+            throw new PublishError("Instagram karusel slaydini qabul qilmadi. Videoni tekshiring.");
         }
         payload = {
           ...payload,

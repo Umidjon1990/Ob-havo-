@@ -46,7 +46,7 @@ export async function schedulePublications(
       throw new ScheduleError("Post topilmadi.", 404);
     for (const post of posts) {
       if(post.variants.reels) await checkReelAssets(post.variants.reels,post.variants.instagram_cover_id);
-      if ((await client.query("SELECT 1 FROM media_jobs WHERE kind IN ('explainer','reels_audio','reels_render') AND status IN ('queued','running') AND payload->>'post_id'=$1",[post.id])).rowCount) throw new ScheduleError(`${post.title}: video tayyorlanishini kuting.`,409);
+      if ((await client.query("SELECT 1 FROM media_jobs WHERE kind IN ('explainer','reels_audio','reels_render','carousel_audio') AND status IN ('queued','running') AND payload->>'post_id'=$1",[post.id])).rowCount) throw new ScheduleError(`${post.title}: media tayyorlanishini kuting.`,409);
       for (const a of accounts) {
         if (a.platform === "youtube" && post.variants.youtube_playlist && post.variants.youtube_playlist.account_id !== a.id)
           throw new ScheduleError(`${post.title}: playlist va YouTube hisobi mos emas.`);
