@@ -39,7 +39,7 @@ function PhotoCarouselStudio({data, onSaved, onNew, onEdit, initialPostId}: {
   useEffect(() => {if (initialPostId && posts.some(p => p.id === initialPostId)) setId(initialPostId);}, [initialPostId]);
   useEffect(() => {
     setSettings(carouselNativeSchema.parse(post?.variants.carousel_native || {})); setSlide(0); setError(""); setMessage("");
-  }, [id]);
+  }, [id, JSON.stringify(post?.variants.carousel_native), JSON.stringify(post?.asset_ids)]);
   const locked = !!post?.deliveries.some(d => d.status !== "cancelled")
     || data.jobs.some(j => j.payload?.post_id === id && ["queued", "running"].includes(j.status));
   const dirty = !!post && JSON.stringify(settings) !== JSON.stringify(carouselNativeSchema.parse(post.variants.carousel_native || {}));

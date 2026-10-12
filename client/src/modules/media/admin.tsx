@@ -1633,7 +1633,9 @@ function PostEditor({
             </small>
             <div className="max-h-40 overflow-auto">
               {assets
-                .filter((a) => a.mime_type !== "audio/mpeg" || format === "article")
+                .filter((a) => format === "carousel" && variants.carousel_native
+                  ? ["image/jpeg", "image/png"].includes(a.mime_type)
+                  : a.mime_type !== "audio/mpeg" || format === "article")
                 .map((a) => (
                   <label className="media-check" key={a.id}>
                     <input
