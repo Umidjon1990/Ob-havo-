@@ -240,9 +240,12 @@ test(
         ).r.status,
         409,
       );
-      await pool.query(
-        "UPDATE media_deliveries SET scheduled_at=now()-interval '1 second'",
-      );
+      const scheduled = (await pool.query(
+        "SELECT * FROM media_deliveries WHERE post_id=$1", [p.id],
+      )).rows[0];
+      const sendNow = `/api/media/deliveries/${scheduled.id}/send-now`;
+      const requests = await Promise.all([request(sendNow, "POST"), request(sendNow, "POST")]);
+      assert.deepEqual(requests.map(({r}) => r.status).sort(), [202, 409]);
       const { processDelivery } = await import("./worker");
       await Promise.all([processDelivery(), processDelivery()]);
       const published = (
@@ -251,6 +254,9 @@ test(
         ])
       ).rows[0];
       assert.equal(published.status, "published");
+      assert.equal(published.send_now_requested, false);
+      assert.equal(new Date(published.scheduled_at).getTime(), new Date(scheduled.scheduled_at).getTime());
+      assert.equal((await request(sendNow, "POST")).r.status, 409);
       assert.equal(sends, 1);
       await processDelivery();
       assert.equal(sends, 1);

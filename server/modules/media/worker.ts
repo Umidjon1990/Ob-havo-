@@ -27,11 +27,11 @@ export async function processDelivery() {
   publicationBusy = true;
   try {
     await pool.query(
-      "UPDATE media_deliveries SET status='needs_review',error='Jarayon uzildi. Platformada nashr bo‘lganini tekshiring.' WHERE status='publishing' AND claimed_at<now()-interval '10 minutes'",
+      "UPDATE media_deliveries SET status='needs_review',send_now_requested=false,error='Jarayon uzildi. Platformada nashr bo‘lganini tekshiring.' WHERE status='publishing' AND claimed_at<now()-interval '10 minutes'",
     );
     const claim = randomUUID();
     const q = await pool.query(
-      `UPDATE media_deliveries SET status='publishing',claim_id=$1,claimed_at=now(),attempts=attempts+1 WHERE id=(SELECT id FROM media_deliveries WHERE status='scheduled' AND scheduled_at<=now() AND next_attempt_at<=now() ORDER BY scheduled_at FOR UPDATE SKIP LOCKED LIMIT 1) RETURNING *`,
+      `UPDATE media_deliveries SET status='publishing',claim_id=$1,claimed_at=now(),attempts=attempts+1 WHERE id=(SELECT id FROM media_deliveries WHERE status='scheduled' AND (scheduled_at<=now() OR send_now_requested) AND next_attempt_at<=now() ORDER BY send_now_requested DESC, scheduled_at FOR UPDATE SKIP LOCKED LIMIT 1) RETURNING *`,
       [claim],
     );
     const d = q.rows[0];
@@ -86,7 +86,7 @@ export async function processDelivery() {
         },
       );
       await pool.query(
-        "UPDATE media_deliveries SET status='published',external_id=$2,external_url=$3,published_at=now(),error=$5 WHERE id=$1 AND claim_id=$4",
+        "UPDATE media_deliveries SET status='published',send_now_requested=false,external_id=$2,external_url=$3,published_at=now(),error=$5 WHERE id=$1 AND claim_id=$4",
         [
           d.id,
           result.external_id,
@@ -100,14 +100,16 @@ export async function processDelivery() {
       // Unknown failures may follow a successful provider request. Never retry blindly.
       const ambiguous = !known || e.ambiguous;
       const retry = known && e.retryable && !ambiguous && d.attempts < 12;
+      const restoreSchedule = !ambiguous && d.send_now_requested && new Date(d.scheduled_at).getTime() > Date.now();
       await pool.query(
-        "UPDATE media_deliveries SET status=$2,error=$3,next_attempt_at=now()+($4::int*interval '1 second') WHERE id=$1 AND claim_id=$5",
+        "UPDATE media_deliveries SET status=$2,send_now_requested=false,error=$3,next_attempt_at=CASE WHEN $6 THEN scheduled_at ELSE now()+($4::int*interval '1 second') END WHERE id=$1 AND claim_id=$5",
         [
           d.id,
-          ambiguous ? "needs_review" : retry ? "scheduled" : "failed",
-          known ? e.message : "Natija noaniq. Platformada tekshiring.",
+          ambiguous ? "needs_review" : retry || restoreSchedule ? "scheduled" : "failed",
+          restoreSchedule ? `Hozir yuborilmadi. Asl nashr vaqti saqlandi. ${e instanceof PublishError ? e.message : ""}` : known ? e.message : "Natija noaniq. Platformada tekshiring.",
           Math.min(900, 30 * 2 ** Math.min(d.attempts, 5)),
           claim,
+          restoreSchedule,
         ],
       );
     }

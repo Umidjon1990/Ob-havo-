@@ -438,7 +438,7 @@ export function registerMediaRoutes(app: Express) {
     "/api/media/deliveries/:id/cancel",
     route(async (req, res) => {
       const r = await pool.query(
-        "UPDATE media_deliveries SET status='cancelled' WHERE id=$1 AND status IN ('scheduled','failed') RETURNING id",
+        "UPDATE media_deliveries SET status='cancelled',send_now_requested=false WHERE id=$1 AND status IN ('scheduled','failed') RETURNING id",
         [uuid.parse(req.params.id)],
       );
       if (!r.rowCount) {
@@ -451,6 +451,27 @@ export function registerMediaRoutes(app: Express) {
         return;
       }
       res.json({ ok: true });
+    }),
+  );
+  app.post(
+    "/api/media/deliveries/:id/send-now",
+    route(async (req, res) => {
+      const r = await pool.query(
+        `UPDATE media_deliveries d
+          SET send_now_requested=true,next_attempt_at=now(),error=NULL
+          FROM media_accounts a
+          WHERE d.id=$1 AND a.id=d.account_id AND a.platform='telegram'
+            AND a.enabled AND a.verified_at IS NOT NULL
+            AND d.status='scheduled' AND d.scheduled_at>now()
+            AND NOT d.send_now_requested
+          RETURNING d.id`,
+        [uuid.parse(req.params.id)],
+      );
+      if (!r.rowCount) {
+        res.status(409).json({ error: "Bu Telegram posti hozir yuborishga tayyor emas yoki yuborish boshlangan." });
+        return;
+      }
+      res.status(202).json({ ok: true });
     }),
   );
   app.post(

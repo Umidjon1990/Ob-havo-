@@ -70,7 +70,7 @@ export async function schedulePublications(
     for (const item of items)
       for (const account of accounts)
         await client.query(
-          `INSERT INTO media_deliveries(post_id,account_id,scheduled_at) VALUES($1,$2,$3) ON CONFLICT(post_id,account_id) DO UPDATE SET status='scheduled',scheduled_at=EXCLUDED.scheduled_at,next_attempt_at=now(),attempts=0,claim_id=NULL,claimed_at=NULL,error=NULL,provider_state='{}'`,
+          `INSERT INTO media_deliveries(post_id,account_id,scheduled_at) VALUES($1,$2,$3) ON CONFLICT(post_id,account_id) DO UPDATE SET status='scheduled',scheduled_at=EXCLUDED.scheduled_at,next_attempt_at=now(),attempts=0,claim_id=NULL,claimed_at=NULL,error=NULL,provider_state='{}',send_now_requested=false`,
           [item.post_id, account.id, item.scheduled_at],
         );
     await client.query("COMMIT");

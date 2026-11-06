@@ -32,6 +32,7 @@ export async function ensureMediaTables(sql: Pool | Client) {
       error TEXT, published_at TIMESTAMPTZ, created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
       UNIQUE(post_id, account_id)
     );
+    ALTER TABLE media_deliveries ADD COLUMN IF NOT EXISTS send_now_requested BOOLEAN NOT NULL DEFAULT false;
     CREATE INDEX IF NOT EXISTS media_deliveries_due ON media_deliveries (status, scheduled_at, next_attempt_at);
     CREATE TABLE IF NOT EXISTS media_rules (
       id UUID PRIMARY KEY DEFAULT gen_random_uuid(), seed_key TEXT UNIQUE,

@@ -56,6 +56,7 @@ import {
 import {
   deliveryLabels,
   type MediaPost,
+  type MediaDelivery,
   type MediaAccount,
   type MediaAsset,
   type MediaRule,
@@ -849,6 +850,12 @@ export default function MediaAdmin() {
                     () => mediaApi(`/deliveries/${id}/${action}`, "POST"),
                     "Nashr holati yangilandi.",
                   )
+                }
+                onSendNow={(d) =>
+                  setConfirm({
+                    text: `«${d.post.title}» postini hozir «${d.account_name}» kanaliga yuborasizmi? Nashr tasdiqlansa, eski vaqtda qayta yuborilmaydi.`,
+                    action: () => mediaApi(`/deliveries/${d.id}/send-now`, "POST"),
+                  })
                 }
                 onResolve={(id) =>
                   setConfirm({
@@ -2177,6 +2184,7 @@ function Calendar({
   posts,
   onOpen,
   onAction,
+  onSendNow,
   onResolve,
   onPublished,
   busy,
@@ -2184,6 +2192,7 @@ function Calendar({
   posts: MediaPost[];
   onOpen: (p: MediaPost) => void;
   onAction: (id: string, action: string) => void;
+  onSendNow: (delivery: MediaDelivery & { post: MediaPost }) => void;
   onResolve: (id: string) => void;
   onPublished: (id: string) => void;
   busy: boolean;
@@ -2305,7 +2314,7 @@ function Calendar({
                 </p>
                 <div className="media-actions mt-2">
                   <span className={`media-chip ${d.status}`}>
-                    {deliveryLabels[d.status]}
+                    {d.status === "scheduled" && d.send_now_requested ? "Hozir yuborish navbatida" : deliveryLabels[d.status]}
                   </span>
                   {d.external_url && (
                     <a
@@ -2321,6 +2330,12 @@ function Calendar({
                 {d.error && <p className="media-subtle mt-2">{d.error}</p>}
               </div>
               <div className="media-actions items-center">
+                {d.platform === "telegram" && d.status === "scheduled" &&
+                  !d.send_now_requested && new Date(d.scheduled_at).getTime() > Date.now() && (
+                    <Button small disabled={busy} onClick={() => onSendNow(d)}>
+                      Hozir yuborish
+                    </Button>
+                  )}
                 {["scheduled", "failed"].includes(d.status) && (
                   <Button
                     small
