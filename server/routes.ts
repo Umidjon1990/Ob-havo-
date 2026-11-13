@@ -16,6 +16,7 @@ import {
   type LearningTestPayload,
 } from "./lib/learning-docx";
 import { createLearningTestPdf, createLearningTestsPdf } from "./lib/learning-pdf";
+import { registerMiniTestApi } from "./lib/platform-mini";
 import { regions } from "../client/src/data/regions";
 import { vocabulary } from "../client/src/data/vocabulary";
 
@@ -104,6 +105,10 @@ export async function registerRoutes(
 ): Promise<Server> {
   
   registerMediaRoutes(app);
+  registerMiniTestApi(app, {
+    list: (limit) => storage.listMiniTests(limit),
+    get: (id) => storage.getLearningTest(id),
+  });
   // Durable, revocable admin sessions. Keep the legacy bearer response compatible.
   app.post("/api/admin/login", async (req, res) => {
     try {

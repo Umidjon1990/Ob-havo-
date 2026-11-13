@@ -108,6 +108,7 @@ export interface IStorage {
   getLearningTests(filters?: LearningTestFilters): Promise<LearningTestSummary[]>;
   getLearningTest(id: string): Promise<LearningTest | undefined>;
   getLearningTestsByIds(ids: string[]): Promise<LearningTest[]>;
+  listMiniTests(limit: number): Promise<Array<Pick<LearningTest, "id" | "contentType" | "titleAr" | "titleUz" | "testDate" | "level" | "createdAt"> & { hasAudio: boolean }>>;
   createLearningTest(test: InsertLearningTest): Promise<LearningTest>;
   updateLearningTestAudio(id: string, audioBase64: string, audioMimeType: string): Promise<void>;
 }
@@ -512,6 +513,23 @@ export class DatabaseStorage implements IStorage {
   async getLearningTest(id: string): Promise<LearningTest | undefined> {
     const [test] = await db.select().from(learningTests).where(eq(learningTests.id, id)).limit(1);
     return test;
+  }
+
+  async listMiniTests(limit: number) {
+    return await db
+      .select({
+        id: learningTests.id,
+        contentType: learningTests.contentType,
+        titleAr: learningTests.titleAr,
+        titleUz: learningTests.titleUz,
+        testDate: learningTests.testDate,
+        level: learningTests.level,
+        createdAt: learningTests.createdAt,
+        hasAudio: sql<boolean>`${learningTests.audioBase64} IS NOT NULL`,
+      })
+      .from(learningTests)
+      .orderBy(desc(learningTests.testDate), desc(learningTests.createdAt))
+      .limit(Math.min(Math.max(limit, 1), 1000));
   }
 
   async getLearningTestsByIds(ids: string[]): Promise<LearningTest[]> {
