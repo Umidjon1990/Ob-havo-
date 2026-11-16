@@ -8,6 +8,7 @@ import { z } from 'zod';
 import { pool } from '../../db';
 import { openai } from '../../lib/openai';
 import { platformPost,validatePublication } from '../../../shared/media';
+import { hydrateAssets } from "./asset-store";
 const run=promisify(execFile);
 export type Check={level:'pass'|'warning'|'error'|'manual';label:string;detail:string};
 export function probeChecks(mime:string,probe:any,platform:string):Check[]{
@@ -43,7 +44,7 @@ export function registerQualityRoutes(app:Express,route:any){
       dir=await mkdtemp(join(tmpdir(),'media-quality-'));
       for(let i=0;i<assets.length;i++){
         const a=assets[i],file=join(dir,`asset-${i}`);
-        const binary=(await pool.query("SELECT data FROM media_assets WHERE id=$1",[a.id])).rows[0];
+        const binary=(await hydrateAssets((await pool.query("SELECT data,storage_key FROM media_assets WHERE id=$1",[a.id])).rows))[0];
         if(!binary){checks.push({level:"error",label:a.name,detail:"Fayl topilmadi."});continue;}
         await writeFile(file,binary.data);
         try{

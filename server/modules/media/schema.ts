@@ -16,6 +16,8 @@ export async function ensureMediaTables(sql: Pool | Client) {
       mime_type TEXT NOT NULL, size INTEGER NOT NULL, data BYTEA NOT NULL,
       created_at TIMESTAMPTZ NOT NULL DEFAULT now()
     );
+    ALTER TABLE media_assets ADD COLUMN IF NOT EXISTS storage_key TEXT;
+    ALTER TABLE media_assets ALTER COLUMN data DROP NOT NULL;
     CREATE TABLE IF NOT EXISTS media_posts (
       id UUID PRIMARY KEY DEFAULT gen_random_uuid(), title TEXT NOT NULL,
       caption TEXT NOT NULL DEFAULT '', format TEXT NOT NULL DEFAULT 'text',

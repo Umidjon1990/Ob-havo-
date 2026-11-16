@@ -8,6 +8,7 @@ import { z } from "zod";
 import { pool } from "../../db";
 import { AudioError } from "./audio";
 import { carouselNativeSchema } from "../../../shared/carousel-native";
+import { hydrateAssets } from "./asset-store";
 
 export async function checkNativeCarouselAssets(post: any) {
   if (!post.variants.carousel_native) return;
@@ -94,7 +95,7 @@ export function registerNativeCarouselRoutes(app: Express, route: any) {
     if (!post) throw new AudioError(404, "Karusel topilmadi.");
     if (!post.variants.carousel_native) throw new AudioError(422, "Avval foto-karusel va musiqa eslatmasini saqlang.");
     await checkNativeCarouselAssets(post);
-    const assets = (await pool.query("SELECT id,mime_type,data FROM media_assets WHERE id=ANY($1::uuid[])", [post.asset_ids])).rows;
+    const assets = (await hydrateAssets((await pool.query("SELECT id,mime_type,data,storage_key FROM media_assets WHERE id=ANY($1::uuid[])", [post.asset_ids])).rows));
     const archive = await packNativeCarousel(post, assets);
     res.download(archive.path, "instagram-foto-karusel.zip", err => {
       void rm(archive.dir, {recursive: true, force: true});

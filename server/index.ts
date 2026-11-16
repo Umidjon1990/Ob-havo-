@@ -57,6 +57,9 @@ app.use((req, res, next) => {
   const { pool } = await import("./db");
   const { ensureMediaTables } = await import("./modules/media/schema");
   await ensureMediaTables(pool);
+  // Media fayllarini bazadan bucket'ga asta-sekin ko'chirish (bucket sozlangan bo'lsa).
+  const { startAssetMigration } = await import("./modules/media/asset-store");
+  if (process.env.DISABLE_SCHEDULERS !== "true") void startAssetMigration();
   // Start weather update schedule
   const { startWeatherUpdateSchedule } = await import("./lib/weather");
   if (process.env.DISABLE_SCHEDULERS !== "true") startWeatherUpdateSchedule();

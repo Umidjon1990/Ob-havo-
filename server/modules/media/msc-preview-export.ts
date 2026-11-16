@@ -9,6 +9,7 @@ import { explainerPlanSchema } from '../../../shared/explainer';
 import { assetSignature } from './security';
 import { appBaseUrl } from './providers';
 import { mediaLibraryLimit } from './storage-quota';
+import { hydrateAssets } from "./asset-store";
 
 const run = promisify(execFile);
 export const MSC_PREVIEW_EXPORT_KIND = 'msc_preview_export';
@@ -65,7 +66,7 @@ async function collectSavedPreview(c: any, cancellation: any): Promise<ExportInp
   const assetCache = new Map<string, any>();
   async function asset(id: unknown, mime: string[]) {
     if (typeof id !== 'string' || !z.string().uuid().safeParse(id).success) return null;
-    if (!assetCache.has(id)) assetCache.set(id, (await c.query('SELECT id,mime_type,size,data FROM media_assets WHERE id=$1', [id])).rows[0] || null);
+    if (!assetCache.has(id)) assetCache.set(id, (await hydrateAssets((await c.query('SELECT id,mime_type,size,data,storage_key FROM media_assets WHERE id=$1', [id])).rows))[0] || null);
     const found = assetCache.get(id);
     return found && mime.includes(found.mime_type) ? found : null;
   }

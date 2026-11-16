@@ -20,6 +20,7 @@ import {
   validatePublication,
 } from "../../../shared/media";
 import { publish, PublishError } from "./providers";
+import { hydrateAssets } from "./asset-store";
 let publicationBusy = false,
   generationBusy = false;
 export async function processDelivery() {
@@ -50,12 +51,12 @@ export async function processDelivery() {
           "Post yoki hisob tayyor emas. Ulanishni tekshiring.",
         );
       p = platformPost(p, a.platform);
-      const found = (
+      const found = (await hydrateAssets((
         await pool.query(
-          "SELECT id,mime_type,size,data FROM media_assets WHERE id=ANY($1::uuid[])",
+          "SELECT id,mime_type,size,data,storage_key FROM media_assets WHERE id=ANY($1::uuid[])",
           [p.asset_ids],
         )
-      ).rows;
+      ).rows));
       const assets = p.asset_ids.map((id: string) =>
         found.find((v) => v.id === id),
       );
