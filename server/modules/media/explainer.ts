@@ -14,6 +14,7 @@ import { generateAudio, audioCatalog, AudioError } from "./audio";
 import { renderExplainer } from "./explainer-render";
 import { loadMscPackage, chooseMscVoice, startMscPackage, checkpointCanResume } from "./explainer-package";
 import { queueMscPublication } from "./explainer-publication";
+import { hydrateAssets } from "./asset-store";
 const uuid=z.string().uuid();
 let rendering=false;
 export function registerExplainerRoutes(app:Express, route:any) {
@@ -25,7 +26,7 @@ export function registerExplainerRoutes(app:Express, route:any) {
     try {
       for(const p of posts){
         const code=p.variants.explainer.lesson_code;
-        const video=(await pool.query("SELECT data FROM media_assets WHERE id=$1 AND mime_type='video/mp4'",[p.variants.explainer_video_id])).rows[0];
+        const video=(await hydrateAssets((await pool.query("SELECT data,storage_key FROM media_assets WHERE id=$1 AND mime_type='video/mp4'",[p.variants.explainer_video_id])).rows))[0];
         if(!video)throw new AudioError(409,"Yakuniy video topilmadi. ZIP yaratilmadi.");
         await writeFile(join(dir,code+'.mp4'),video.data);
         await writeFile(join(dir,code+'.json'),JSON.stringify(p.variants,null,2));
@@ -145,14 +146,14 @@ export async function processExplainer() {
     const usedBefore=Number((await pool.query("SELECT COALESCE(SUM(size),0) AS used FROM media_assets")).rows[0].used);
     if(usedBefore>mediaLibraryLimit()-100*1024*1024)throw new AudioError(413,"Video va sahna ovozlari uchun kamida 100 MB bo‘sh joy kerak. Audio yaratilmadi.");
     const ids=Array.from(new Set(plan.scenes.flatMap(s=>s.image_id?[s.image_id]:[])));
-    const assets=(await pool.query("SELECT id,mime_type,data FROM media_assets WHERE id=ANY($1::uuid[])",[ids])).rows;
+    const assets=(await hydrateAssets((await pool.query("SELECT id,mime_type,data,storage_key FROM media_assets WHERE id=ANY($1::uuid[])",[ids])).rows));
     if(ids.some(id=>!assets.some(a=>a.id===id))) throw new AudioError(422,"Video rasmi o‘chirilgan yoki topilmadi.");
-    const music=plan.music_id ? (await pool.query("SELECT data FROM media_assets WHERE id=$1 AND mime_type='audio/mpeg'",[plan.music_id])).rows[0]?.data : undefined;
+    const music=plan.music_id ? (await hydrateAssets((await pool.query("SELECT data,storage_key FROM media_assets WHERE id=$1 AND mime_type='audio/mpeg'",[plan.music_id])).rows))[0]?.data : undefined;
     if(plan.music_id&&!music) throw new AudioError(422,"Fon musiqasi topilmadi.");
     const checkpoint:{scene:number;audio_id:string}[]=job.result?.audio_scenes||[];
     const result=await renderExplainer(plan,new Map(assets.map(a=>[a.id,a])),async(text,index)=>{
       const saved=checkpoint.find(a=>a.scene===index);
-      if(saved){const a=(await pool.query("SELECT data FROM media_assets WHERE id=$1 AND mime_type='audio/mpeg'",[saved.audio_id])).rows[0];if(!a)throw new AudioError(409,"Saqlangan sahna ovozi topilmadi. Avtomatik qayta yaratilmaydi.");return a.data;}
+      if(saved){const a=(await hydrateAssets((await pool.query("SELECT data,storage_key FROM media_assets WHERE id=$1 AND mime_type='audio/mpeg'",[saved.audio_id])).rows))[0];if(!a)throw new AudioError(409,"Saqlangan sahna ovozi topilmadi. Avtomatik qayta yaratilmaydi.");return a.data;}
       // Record an unresolved provider call before sending it; never silently retry it.
       await pool.query("UPDATE media_jobs SET result=$2 WHERE id=$1",[job.id,JSON.stringify({audio_scenes:checkpoint,pending_scene:index})]);
       const audio=await generateAudio({name:plan.title,text,voice_id:job.payload.voice_id,language:"uz",model:"eleven_v4"});

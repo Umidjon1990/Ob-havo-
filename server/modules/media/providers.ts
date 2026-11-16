@@ -4,6 +4,7 @@ import type { MediaPost } from "../../../shared/media";
 import { PublishError } from "./publish-error";
 import { attachYouTubePlaylist, ownedYouTubePlaylist, playlistWriteGranted } from "./youtube-playlists";
 import { nativeCarouselPublicationMessage } from "../../../shared/carousel-native";
+import { hydrateAssets } from "./asset-store";
 export { PublishError } from "./publish-error";
 type Account = {
   id: string;
@@ -325,7 +326,7 @@ export async function publish(
     await ownedYouTubePlaylist(token, playlist.playlist_id, account.external_id);
   }
   const cover: Asset | undefined = post.variants.youtube_cover_id
-    ? (await pool.query("SELECT id,mime_type,size,data FROM media_assets WHERE id=$1", [post.variants.youtube_cover_id])).rows[0]
+    ? (await hydrateAssets((await pool.query("SELECT id,mime_type,size,data,storage_key FROM media_assets WHERE id=$1", [post.variants.youtube_cover_id])).rows))[0]
     : undefined;
   if (post.variants.youtube_cover_id && (!cover || !["image/jpeg", "image/png"].includes(cover.mime_type) || cover.size > 50 * 1024 * 1024))
     throw new PublishError("YouTube muqovasi topilmadi yoki JPG/PNG formati noto‘g‘ri.");

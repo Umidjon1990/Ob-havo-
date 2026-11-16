@@ -36,6 +36,7 @@ import { registerStudioRoutes } from "./studio";
 import { registerCarouselAudioRoutes, checkCarouselAudioAssets } from "./carousel-audio";
 import { preserveCarouselAudioOutput } from "../../../shared/carousel-audio";
 import { registerNativeCarouselRoutes, checkNativeCarouselAssets } from "./carousel-native";
+import { hydrateAssets, removeStoredAsset } from "./asset-store";
 const uuid = z.string().uuid();
 let generatingAudio = false;
 const route =
@@ -229,7 +230,7 @@ export function registerMediaRoutes(app: Express) {
     route(async (req, res) => {
       const id = uuid.parse(req.params.id);
       const r = await pool.query(
-        "DELETE FROM media_assets a WHERE id=$1 AND NOT EXISTS(SELECT 1 FROM media_posts p WHERE p.asset_ids ? a.id::text OR p.variants::text LIKE '%'||a.id::text||'%') AND NOT EXISTS(SELECT 1 FROM media_jobs j WHERE j.result::text LIKE '%'||a.id::text||'%' OR j.payload::text LIKE '%'||a.id::text||'%') AND NOT EXISTS(SELECT 1 FROM studio_projects s WHERE s.reference_asset_ids ? a.id::text OR s.shots::text LIKE '%'||a.id::text||'%' OR s.sample_asset_id=a.id OR s.audio_asset_id=a.id OR s.music_asset_id=a.id) AND NOT EXISTS(SELECT 1 FROM studio_jobs j WHERE j.result::text LIKE '%'||a.id::text||'%' OR j.payload::text LIKE '%'||a.id::text||'%') RETURNING id",
+        "DELETE FROM media_assets a WHERE id=$1 AND NOT EXISTS(SELECT 1 FROM media_posts p WHERE p.asset_ids ? a.id::text OR p.variants::text LIKE '%'||a.id::text||'%') AND NOT EXISTS(SELECT 1 FROM media_jobs j WHERE j.result::text LIKE '%'||a.id::text||'%' OR j.payload::text LIKE '%'||a.id::text||'%') AND NOT EXISTS(SELECT 1 FROM studio_projects s WHERE s.reference_asset_ids ? a.id::text OR s.shots::text LIKE '%'||a.id::text||'%' OR s.sample_asset_id=a.id OR s.audio_asset_id=a.id OR s.music_asset_id=a.id) AND NOT EXISTS(SELECT 1 FROM studio_jobs j WHERE j.result::text LIKE '%'||a.id::text||'%' OR j.payload::text LIKE '%'||a.id::text||'%') RETURNING id,storage_key",
         [id],
       );
       if (!r.rowCount) {
@@ -241,6 +242,7 @@ export function registerMediaRoutes(app: Express) {
           });
         return;
       }
+      await removeStoredAsset(r.rows[0]?.storage_key);
       res.json({ ok: true });
     }),
   );
@@ -969,12 +971,12 @@ async function checkYouTubeCover(p: z.infer<typeof postSchema>) {
     throw new z.ZodError([{ code: "custom", path: ["variants", "youtube_cover_id"], message: "YouTube muqovasi uchun 50 MB gacha JPG yoki PNG va video formati kerak." }]);
 }
 async function serveAsset(req: Request, res: Response, id: string, download = false) {
-  const a = (
+  const a = (await hydrateAssets((
     await pool.query(
-      "SELECT name,mime_type,size,data FROM media_assets WHERE id=$1",
+      "SELECT name,mime_type,size,data,storage_key FROM media_assets WHERE id=$1",
       [id],
     )
-  ).rows[0];
+  ).rows))[0];
   if (!a) {
     res.status(404).end();
     return;

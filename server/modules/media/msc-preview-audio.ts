@@ -10,6 +10,7 @@ import { explainerPlanSchema, type ExplainerPlan } from '../../../shared/explain
 import { generateAudio } from './audio';
 import { mediaLibraryLimit } from './storage-quota';
 import { packagePreviewExport, previewSignedUrl } from './msc-preview-export';
+import { hydrateAssets } from "./asset-store";
 
 const run = promisify(execFile);
 const REVISION = '8d76f90c8c77acfa88b3227f54aa1e311e7c16e54724bcc5db2091ad71f34edb';
@@ -134,7 +135,7 @@ async function previewArchive(c: any, jobs: any[]) {
     for (let scene = 0; scene < plan.scenes.length; scene++) {
       const saved = checkpoint.find(a => a.scene === scene);
       if (!saved || saved.text_sha256 !== hash(plan.scenes[scene].narration) || saved.voice_id !== VOICE || saved.model !== 'eleven_v4' || saved.language !== 'uz') throw Error('Preview archive is missing the reviewed audio checkpoint');
-      const audio = (await c.query("SELECT id,size,data FROM media_assets WHERE id=$1 AND mime_type='audio/mpeg'", [saved.audio_id])).rows[0];
+      const audio = (await hydrateAssets((await c.query("SELECT id,size,data,storage_key FROM media_assets WHERE id=$1 AND mime_type='audio/mpeg'", [saved.audio_id])).rows))[0];
       if (!audio) throw Error('Saved preview audio was removed; it is not recreated automatically');
       bytes += audio.size; if (bytes > MAX_PACKAGE) throw Error('Preview audio package exceeds 100 MB');
       const path = `imported/${code}/audio/scene_${String(scene).padStart(2, '0')}.mp3`;

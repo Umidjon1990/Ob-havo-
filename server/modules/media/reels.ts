@@ -9,6 +9,7 @@ import { qomusReel, qomusCaption } from "../../../shared/reels-qomus";
 import { generateAudio, AudioError } from "./audio";
 import { renderReel, probeReel } from "./reels-render";
 import { syncReelAutomations } from "./reel-automations";
+import { hydrateAssets } from "./asset-store";
 const uuid = z.string().uuid();
 const quota = mediaLibraryLimit();
 export const audioFingerprint = (script: string, voice: string) => createHash("sha256").update(JSON.stringify([script,voice,"eleven_v4","uz"])).digest("hex");
@@ -30,7 +31,7 @@ export async function checkReelAssets(reel: z.infer<typeof reelPackageSchema>, c
   if(Array.from(expected).some(([id,mimes])=>!assets.some(a=>a.id===id&&mimes.includes(a.mime_type))))
     throw new AudioError(422,"Reelsdagi audio, video yoki sahna rasmi topilmadi yoxud formati mos emas.");
   if(reel.reviewed&&reel.video_id) {
-    const video=(await pool.query("SELECT data FROM media_assets WHERE id=$1",[reel.video_id])).rows[0];
+    const video=(await hydrateAssets((await pool.query("SELECT data,storage_key FROM media_assets WHERE id=$1",[reel.video_id])).rows))[0];
     const info=await probeReel(video.data);
     if(info.duration<40||info.duration>60.1||info.width<1080||info.height<1920||Math.abs(info.width/info.height-9/16)>.02)
       throw new AudioError(422,"Reels 40–60 soniya, 9:16 va kamida 1080×1920 bo‘lsin.");
@@ -106,7 +107,7 @@ export async function processReelJobs() {
         if(job.kind==='reels_audio') output={audio:await generateAudio({name:"Reels ovozi",text:reel.script,voice_id:reel.voice_id,language:"uz",model:"eleven_v4"})};
         else {
           const ids=[reel.audio_id,reel.intro_id,reel.music_id,...reel.scenes.map(s=>s.image_id)].filter(Boolean) as string[];
-          const assets=(await pool.query("SELECT id,mime_type,data FROM media_assets WHERE id=ANY($1::uuid[])",[ids])).rows;
+          const assets=(await hydrateAssets((await pool.query("SELECT id,mime_type,data,storage_key FROM media_assets WHERE id=ANY($1::uuid[])",[ids])).rows));
           output=await renderReel(reel,new Map(assets.map(a=>[a.id,a])));
         }
         const client=await pool.connect();

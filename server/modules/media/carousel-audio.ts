@@ -7,6 +7,7 @@ import { AudioError } from "./audio";
 import { mediaLibraryLimit } from "./storage-quota";
 import { renderCarouselAudio } from "./carousel-audio-render";
 import { carouselAudioSchema, carouselAudioKey, carouselAudioReady, preserveCarouselAudioOutput } from "../../../shared/carousel-audio";
+import { hydrateAssets } from "./asset-store";
 
 const uuid = z.string().uuid();
 const activeKinds = "('explainer','reels_audio','reels_render','carousel_audio')";
@@ -113,7 +114,7 @@ export async function processCarouselAudio() {
     pulse = setInterval(() => void beat().catch(() => {}), 20000); pulse.unref();
     const audio = carouselAudioSchema.parse(job.payload.audio);
     const ids: string[] = job.payload.source_asset_ids;
-    const assets = (await pool.query("SELECT id,mime_type,data FROM media_assets WHERE id=ANY($1::uuid[])", [[...ids, audio.music_id]])).rows;
+    const assets = (await hydrateAssets((await pool.query("SELECT id,mime_type,data,storage_key FROM media_assets WHERE id=ANY($1::uuid[])", [[...ids, audio.music_id]])).rows));
     const images = ids.map(id => assets.find(a => a.id === id));
     const music = assets.find(a => a.id === audio.music_id && a.mime_type === "audio/mpeg");
     if (!music || images.some(a => !a)) throw new AudioError(422, "Rasm yoki musiqa fayli topilmadi.");

@@ -15,6 +15,7 @@ import { promisify } from "node:util";
 import { mkdtemp, writeFile, readFile, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { hydrateAssets } from "./asset-store";
 type Sql = Pool | PoolClient;
 const uuid = z.string().uuid();
 const columns = "name,brief,script,script_locked,style_bible,format,reference_asset_ids,sample_asset_id,audio_asset_id,music_asset_id,shots";
@@ -64,7 +65,7 @@ export async function updateStudioProject(sql: Sql, id: string, input: unknown) 
 }
 async function loadProjectAssets(p: StudioProjectInput, extra: string[] = [], sql: Sql = pool) {
   const ids = Array.from(new Set([...projectAssetIds(p),...extra]));
-  const rows = ids.length ? (await sql.query("SELECT id,mime_type,data FROM media_assets WHERE id=ANY($1::uuid[])",[ids])).rows : [];
+  const rows = ids.length ? (await hydrateAssets((await sql.query("SELECT id,mime_type,data,storage_key FROM media_assets WHERE id=ANY($1::uuid[])",[ids])).rows)) : [];
   return new Map<string, StudioImage>(rows.map(a => [a.id,{mime_type:a.mime_type,data:a.data}]));
 }
 export async function queueStudioJob(sql: Sql, value: unknown): Promise<StudioJob> {
@@ -134,7 +135,7 @@ async function planStudio(project: StudioProject) {
   const { openai } = await import("../../lib/openai");
   const content: any[] = [{type:"text",text:JSON.stringify({brief:project.brief,approved_script:project.script,script_locked:project.script_locked,style_bible:project.style_bible,format:project.format})}];
   if (project.sample_asset_id) {
-    const sample = (await pool.query("SELECT data FROM media_assets WHERE id=$1",[project.sample_asset_id])).rows[0];
+    const sample = (await hydrateAssets((await pool.query("SELECT data,storage_key FROM media_assets WHERE id=$1",[project.sample_asset_id])).rows))[0];
     if (!sample) throw new StudioError(400,"Namuna video topilmadi.");
     const dir = await mkdtemp(join(tmpdir(),"studio-analysis-"));
     try {
